@@ -1,7 +1,8 @@
 # Code owners for Cinzal
 #
-# Every pull request automatically requests review from the owners of the
-# paths it touches. Rules are last-match-wins, so the catch-all comes first
+# Every pull request that is ready for review automatically requests review
+# from the owners of the paths it touches; a draft requests it on the moment
+# it is marked ready. Rules are last-match-wins, so the catch-all comes first
 # and the specific cases below it.
 #
 # The specific rules are redundant today — every path resolves to the same
