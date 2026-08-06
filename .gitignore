@@ -1,0 +1,43 @@
+# Local Claude Code settings — per-machine permissions, never shared
+.claude/settings.local.json
+
+# Compiled binaries
+/bin/
+/cinzal
+/simulate
+/replay
+*.exe
+*.dll
+*.so
+*.dylib
+
+# Test and coverage output
+*.test
+*.out
+coverage.*
+/testdata/tmp/
+
+# Go workspace files (per-machine)
+go.work
+go.work.sum
+
+# Environment and secrets
+.env
+.env.*
+!.env.example
+
+# Simulation harness output (cmd/simulate sweeps)
+/sweeps/
+/*.csv
+
+# Editors and OS
+.DS_Store
+Thumbs.db
+*.swp
+*~
+.idea/
+.vscode/
+
+# NOTE: generated code is deliberately NOT ignored.
+# `templ generate` and `sqlc generate` output is committed, and CI asserts
+# it is current — see docs/project/cinzal-implementation-plan.md, M0.
