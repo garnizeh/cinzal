@@ -1,0 +1,56 @@
+# Code owners for Cinzal
+#
+# Every pull request that is ready for review automatically requests review
+# from the owners of the paths it touches; a draft requests it on the moment
+# it is marked ready. Rules are last-match-wins, so the catch-all comes first
+# and the specific cases below it.
+#
+# The specific rules are redundant today — every path resolves to the same
+# owner. They are here as documentation: this is the list of places where a
+# mistake is expensive, and it should stay accurate as contributors arrive.
+# See docs/project/cinzal-implementation-plan.md for what each one protects.
+
+# Default owner for everything in the repository.
+*                                   @garnizeh
+
+# ---------------------------------------------------------------------------
+# The fog boundary — the game's core security property (RFC-001 §3, §9).
+#
+# The client must never hold the full match state. All state reaching a player
+# passes through Project(). A change here can leak hidden information without
+# breaking a single test that was not written to catch it, and the fog suite
+# is deliberately negative: it asserts hidden facts are ABSENT.
+# ---------------------------------------------------------------------------
+/internal/rules/                    @garnizeh
+/internal/view/                     @garnizeh
+/internal/render/                   @garnizeh
+
+# ---------------------------------------------------------------------------
+# The enforcement machinery (RFC-001 §5, §15.1).
+#
+# CI is what makes the fog boundary and the purity of `rules` real rather than
+# conventional: the import checks, the debug-tag isolation, the determinism
+# assertions. Weakening a gate here silently weakens every guarantee that
+# depends on it.
+# ---------------------------------------------------------------------------
+/.github/                           @garnizeh
+/Makefile                           @garnizeh
+
+# ---------------------------------------------------------------------------
+# The specifications.
+#
+# The GDD is authoritative on rules, the RFC on architecture. Both are
+# changelogged, and entries record why a decision was made — which is the part
+# that matters when someone revisits it. Changes to game rules or architecture
+# belong here first and in code second.
+# ---------------------------------------------------------------------------
+/docs/project/                      @garnizeh
+
+# ---------------------------------------------------------------------------
+# Database schema and migrations.
+#
+# Migrations run at process start behind an advisory lock and are effectively
+# irreversible once deployed. The order log is irreplaceable: there is no state
+# table to fall back on (RFC-001 §18).
+# ---------------------------------------------------------------------------
+/internal/store/migrations/         @garnizeh
