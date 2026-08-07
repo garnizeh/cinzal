@@ -1,0 +1,71 @@
+name: Exit demonstration
+description: Proof that a milestone met one of its exit criteria. Not a task.
+labels: ["exit-demonstration"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Closing every task in a milestone is **not** the same as meeting its exit criteria.
+
+        Several criteria are demonstrations that something *fails* — a pull request adding
+        `import "time"` to `internal/rules` must be rejected by CI. That can only be shown by
+        breaking it on purpose. If the demonstration is not tracked, nobody performs it, and
+        the milestone closes with gates that were never tested against what they exist to stop.
+
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Milestone
+      options:
+        - M0 — Foundations
+        - M1 — Rules core
+        - M2 — Bots and simulation
+        - M3 — Persistence
+        - M4 — Round lifecycle
+        - M5 — Playable web
+        - M6 — Async
+        - M7 — Onboarding
+        - M8 — Launch hardening
+    validations:
+      required: true
+
+  - type: textarea
+    id: criterion
+    attributes:
+      label: The exit criterion
+      description: Quote it from the roadmap.
+    validations:
+      required: true
+
+  - type: dropdown
+    id: kind
+    attributes:
+      label: Kind of demonstration
+      options:
+        - Positive — something must succeed
+        - Negative — something must be rejected
+        - Measurement — a number must land in a stated band
+    validations:
+      required: true
+
+  - type: textarea
+    id: method
+    attributes:
+      label: How it will be demonstrated
+      description: The concrete steps. For a negative demonstration, say exactly what will be broken and which gate must catch it.
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected result
+      description: What counts as passing. For a measurement, the band and the threshold that would force action.
+    validations:
+      required: true
+
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence
+      description: Filled in when performed — the run link, the failing check, the CSV, the numbers.

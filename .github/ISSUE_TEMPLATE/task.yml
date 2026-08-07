@@ -1,0 +1,93 @@
+name: Task
+description: Work that produces code or documentation. One task = one pull request = one commit on main.
+labels: ["task"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Sizing test:** can this land as one pull request that leaves `main` green by itself?
+        If not, split it. If it is three lines, fold it into its neighbour.
+
+        If you cannot fill in the spec anchor below, this is probably not a task —
+        it is a **decision**. File it as one instead.
+
+  - type: dropdown
+    id: milestone
+    attributes:
+      label: Milestone
+      options:
+        - M0 — Foundations
+        - M1 — Rules core
+        - M2 — Bots and simulation
+        - M3 — Persistence
+        - M4 — Round lifecycle
+        - M5 — Playable web
+        - M6 — Async
+        - M7 — Onboarding
+        - M8 — Launch hardening
+        - Out of band
+    validations:
+      required: true
+
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      description: Mirrors CODEOWNERS.
+      options:
+        - rules
+        - fog
+        - ci
+        - store
+        - web
+        - render
+        - bots
+        - mail
+        - auth
+        - docs
+    validations:
+      required: true
+
+  - type: input
+    id: spec-anchor
+    attributes:
+      label: Spec anchor
+      description: The GDD or RFC section this implements. The documents are the authority; a task that cannot cite one is inventing a requirement.
+      placeholder: "RFC-001 §6.4 — RNG consumption table"
+    validations:
+      required: true
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What
+      description: What changes, and why it is needed now.
+    validations:
+      required: true
+
+  - type: textarea
+    id: acceptance
+    attributes:
+      label: Acceptance criterion
+      description: Demonstrable, not aspirational. "Implement Resolve" is not one; "a 15-round replay reproduces byte-identically on two machines" is.
+    validations:
+      required: true
+
+  - type: input
+    id: blocked-by
+    attributes:
+      label: Blocked by
+      description: Decisions and predecessor tasks. Leave empty if none.
+      placeholder: "#12 (D1), #14"
+
+  - type: checkboxes
+    id: obligations
+    attributes:
+      label: Standing obligations that may apply
+      description: Check the ones this task triggers. Each prevents a failure that is otherwise silent.
+      options:
+        - label: Adds a field to `PlayerView` — needs a negative fog test
+        - label: Can disclose a player's position — needs a row in the RFC §9.1 authorised-writer table
+        - label: Consumes randomness — needs a row in the RFC §6.4 table and an index-count assertion, including truncation cases
+        - label: Changes a game rule or architectural decision — the GDD or RFC changes first, with a changelog entry
+        - label: Introduces a number the design calls tunable — it is a `Config` field, never a constant

@@ -59,7 +59,9 @@ See the [implementation roadmap](docs/project/cinzal-implementation-plan.md) for
 
 ## Contributing
 
-Changes land on `main` through pull requests. `main` is protected against direct pushes.
+Start with [CONTRIBUTING.md](CONTRIBUTING.md) — it covers how work is organised, what every issue must carry, and the four CI gates that are not style checks.
+
+Changes land on `main` through pull requests. `main` is protected against direct pushes, and open decisions are tracked in [`docs/decisions/`](docs/decisions/).
 
 ## Licence
 

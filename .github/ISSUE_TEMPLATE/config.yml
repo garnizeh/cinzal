@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Read the roadmap first
+    url: https://github.com/garnizeh/cinzal/blob/main/docs/project/cinzal-implementation-plan.md
+    about: What is being built, in what order, and which decisions are still open. Most "should we do X?" questions are already answered here — or logged as an open decision in §3.
+  - name: The working agreement
+    url: https://github.com/garnizeh/cinzal/blob/main/CONTRIBUTING.md
+    about: How work is organised, what every issue must carry, and the four CI gates that are not style checks.
