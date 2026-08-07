@@ -54,14 +54,37 @@ command -v go >/dev/null 2>&1 || fail "the go toolchain is not on PATH"
 # 1. Only doc.go compiles under the production configuration.
 # ---------------------------------------------------------------------------
 
-prod_files="$(cd "$ROOT" && go list -f '{{join .GoFiles " "}}' ./internal/debug)" \
-    || fail "could not list the production files of internal/debug"
-[ -n "$prod_files" ] || fail "internal/debug has no files in the production configuration — nothing was inspected"
+# The whole tree, not just the top package: a subpackage such as
+# internal/debug/godview is a separate package that ./internal/debug does not
+# match, and an untagged file inside it would never be looked at.
+#
+# A fully tagged package does not appear at all under the production
+# configuration - go list simply omits it. So the rule is: internal/debug may
+# appear, carrying exactly doc.go, and nothing else may appear at all.
+prod_pkgs="$(cd "$ROOT" && go list -f '{{.ImportPath}}|{{join .GoFiles " "}}' ./internal/debug/...)" \
+    || fail "could not list internal/debug/... in the production configuration"
+[ -n "$prod_pkgs" ] || fail "go list ./internal/debug/... reported nothing — nothing was inspected"
 
-if [ "$prod_files" != "$EXEMPT_FILE" ]; then
+untagged=""
+saw_root=0
+while IFS= read -r line; do
+    [ -n "$line" ] || continue
+    pkg="${line%%|*}"
+    files="${line#*|}"
+    if [ "$pkg" = "$DEBUG_PKG" ]; then
+        saw_root=1
+        [ "$files" = "$EXEMPT_FILE" ] || untagged="$untagged  $pkg: $files"$'\n'
+    else
+        untagged="$untagged  $pkg: $files"$'\n'
+    fi
+done <<< "$prod_pkgs"
+
+[ "$saw_root" = "1" ] || fail "$DEBUG_PKG did not appear in the production configuration — nothing was inspected"
+
+if [ -n "$untagged" ]; then
     echo "check-debug-isolation: files without //go:build debug compile into production." >&2
-    echo "                       internal/debug production files: $prod_files" >&2
-    echo "                       expected exactly: $EXEMPT_FILE" >&2
+    printf '%s' "$untagged" >&2
+    echo "                       Only $DEBUG_PKG may appear, carrying exactly $EXEMPT_FILE." >&2
     echo "" >&2
     echo "                       RFC-001 §15.1: debug code is not compiled into the" >&2
     echo "                       production binary. Add the build constraint - the panel" >&2
@@ -100,14 +123,30 @@ debug_deps="$(cd "$ROOT" && go list -deps -tags debug ./cmd/...)" \
     || fail "could not list the debug dependencies of ./cmd/..."
 [ -n "$debug_deps" ] || fail "go list -deps -tags debug ./cmd/... reported nothing — nothing was inspected"
 
-if printf '%s\n' "$prod_deps" | grep -qx "$DEBUG_PKG"; then
+# Matched with `case` rather than piped into grep, for two reasons that both
+# bite silently. `grep -q` exits at the first match, so printf takes SIGPIPE and
+# exits 141; under `pipefail` the pipeline is then non-zero, the `if` body is
+# skipped, and a DETECTED leak reports OK - fail-open, and inverted. And the
+# import path is full of dots, which a basic regex treats as "any character".
+# Prefix matching also covers subpackages, which an exact match would miss.
+reaches() { # $1 = newline-separated package list
+    local dep
+    while IFS= read -r dep; do
+        case "$dep" in
+            "$DEBUG_PKG"|"$DEBUG_PKG"/*) return 0 ;;
+        esac
+    done <<< "$1"
+    return 1
+}
+
+if reaches "$prod_deps"; then
     echo "check-debug-isolation: internal/debug is reachable from a production binary." >&2
     echo "                       Something in ./cmd/... imports it without a build" >&2
     echo "                       constraint. RFC-001 §15.1 - this is the unrecoverable one." >&2
     exit 1
 fi
 
-if printf '%s\n' "$debug_deps" | grep -qx "$DEBUG_PKG"; then
+if reaches "$debug_deps"; then
     echo "check-debug-isolation: OK — internal/debug is reachable under -tags debug and absent from production"
 else
     echo "check-debug-isolation: OK — no untagged files in internal/debug"

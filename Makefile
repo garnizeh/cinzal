@@ -62,7 +62,7 @@ purity:
 fog:
 	./scripts/check-fog-boundary.sh
 
-## debug     assert debug tooling cannot reach a production binary
+## debug-isolation  assert debug tooling cannot reach a production binary
 debug-isolation:
 	./scripts/check-debug-isolation.sh
 
