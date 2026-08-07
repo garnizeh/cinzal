@@ -81,13 +81,15 @@ Direct pushes to `main` are blocked, force-pushes and deletions are blocked, and
 
 ### A green CodeRabbit check does not mean it reviewed
 
-CodeRabbit runs on the free OSS tier, which has short per-developer limits. It will often reply **"Review limit reached"** and skip the pull request entirely — **and its status check reports success anyway.** Green on a skipped review is indistinguishable from green on a clean one.
+CodeRabbit runs on the free OSS tier, which has short per-developer limits. It will often reply **"Review limit reached"** and skip a review attempt — **and its status check reports success anyway.** Green on a skipped review is indistinguishable from green on a clean one.
 
 On this project that has been the common case, not the exception. So:
 
-- **Read the comment, not the check.** If it says the limit was reached, no review happened.
-- **Wait for the reset** — usually 20 to 35 minutes — and trigger it with a `@coderabbitai review` comment.
-- **Merge only once a real review has landed.** If waiting is genuinely not an option, say so in the pull request description, so the commit message on `main` records that the change went in unreviewed rather than implying it did not.
+- **Read the comments, not the check.** The check tells you nothing about whether a review happened.
+- **"Limit reached" means *that attempt* was skipped, not that the pull request is unreviewed.** Both happen. A pull request can carry a full review of its first commit and then hit the limit on the incremental review of a later one — so look at whether a review exists and *which commits it covered*, rather than reading the most recent message as a verdict on the whole pull request.
+- **Retry after the refill time the message reports**, with a `@coderabbitai review` comment. It is usually 20 to 35 minutes. When the message gives no time at all, the free allowance is exhausted for longer and there is nothing to do but wait.
+- **Note that CodeRabbit reviews incrementally** and will not re-review a commit it has already seen. Its own message says the manual command "is applicable only when automatic reviews are paused" — so if an incremental review was missed, the reliable way to get one is a new commit once the allowance is back, not repeating the command.
+- **Merge only once a real review has landed.** If waiting is genuinely not an option, say so in the pull request description, so the commit message on `main` records what went in unreviewed rather than implying it did not.
 
 This is the same failure the CI gates in M0 are written to avoid — a check that passes by not running. It is worth recognising in a bot as readily as in our own tooling.
 
