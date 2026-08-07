@@ -8,7 +8,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```
 docs/project/cinzal-gdd.md              — Game Design Document (v2.8)
-docs/project/cinzal-architecture-rfc.md — Architecture RFC-001 (r11)
+docs/project/cinzal-architecture-rfc.md — Architecture RFC-001 (r12)
 ```
 
 There is no `go.mod`, no source tree, no build/lint/test tooling. When implementation starts, build the `internal/`, `cmd/`, and `wasm/` layout specified in the RFC (§5) rather than inventing a different structure — the package boundaries described there (especially the `rules` / `render` / `web` import restrictions) are load-bearing for the game's core security property (see below), not arbitrary organization.
@@ -32,7 +32,7 @@ When implementing anything in this codebase, ask first: does this leak state pas
 
 ## Planned architecture (once code exists)
 
-- **Language/stack:** Go 1.23+, `templ` for typed templates, HTMX 2.x + SSE for interactivity, `sqlc` + `goose` + `pgx/v5` against Postgres 16. Zero hand-written JavaScript in v1. WASM (client-side rules) and rich map interaction are explicitly deferred to RFC-002 (RFC §4, §10).
+- **Language/stack:** Go 1.26.5, `templ` for typed templates, HTMX 2.x + SSE for interactivity, `sqlc` + `goose` + `pgx/v5` against Postgres 16. Zero hand-written JavaScript in v1. WASM (client-side rules) and rich map interaction are explicitly deferred to RFC-002 (RFC §4, §10).
 - **State model:** event sourcing, no snapshots. `state = fold(Resolve, initial(seed, cfg), orderLog)`. The order log is the only source of truth; `events`/`match_summary` tables are derived/rebuildable caches, never authority (RFC §7.1–7.3).
 - **Determinism:** `seed + order log` must reproduce a match exactly, forever. Four known hazards to avoid in Go specifically: ranging over maps in resolution, floating point, ambient `time.Now()`, and any concurrency inside `Resolve` (RFC §6.3). All RNG draws go through a single seeded `*RNG` with a documented consumption table (RFC §6.4) — conditional/early-terminated draws must stay lazy or replays desync.
 - **Round tick:** advanced by either full submission or a deadline sweeper, both funneling through one `Tick()` guarded by `SELECT ... FOR UPDATE` — no broker, no queue (RFC §8). Bot orders are generated inside the tick, never submitted ahead of time.
