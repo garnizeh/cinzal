@@ -88,6 +88,32 @@ CodeRabbit runs on the free OSS tier and frequently skips a pull request with "R
 
 Wait for the review rather than merging without one, and if a merge genuinely cannot wait, say so in the pull request description so the commit on `main` records what went in unreviewed.
 
+### The review flow, and what each outcome means
+
+```text
+open PR ──▶ auto-review ──▶ findings ──▶ you push a fix ──▶ auto incremental review
+                 │                              │                      │
+          quota exhausted?               threads resolve          ✅ Addressed
+          "limit reached"                (some automatically)      (no new review)
+                 │                              │                      │
+          wait, then                     resolve the rest ──────▶ merge when CLEAN
+          @coderabbitai review              manually
+```
+
+| Situation | What to do |
+|---|---|
+| Quota was available on push | The automatic review fires on its own. **Do not trigger manually** — the command is for when automatic reviews are paused. |
+| `"Review limit reached"` | Wait the stated refill (20–45 min), then `@coderabbitai review`. When no time is given, the allowance is out for longer. |
+| Manual trigger → `"Already reviewed"` | It ran. Look for the `✅ Addressed` markers; do not keep retrying. |
+| You pushed a fix and see no new review | Expected when the fix was clean. Check the finding comments' `updated_at`, not the reviews list. |
+| Merge blocked, `BLOCKED`, threads pending | `main` requires conversation resolution. Some threads auto-resolve when your diff makes them outdated; **the rest must be resolved explicitly**, and they will not resolve themselves. |
+| You disagree with a finding | Reply on the thread with the reasoning. CodeRabbit answers, and **it concedes when it is wrong** — it did on a suggestion to introduce a `game.State`, which would have inverted D01. |
+| Replying to a thread returns 404 | The thread went outdated after your push. Post a pull-request-level comment instead; the reasoning still needs to be on the record. |
+
+**Verify findings before applying them.** They are usually right and have caught real defects here — an unaccounted `.XTestImports` hole, a fog oracle in the draft endpoint, two false claims in the RFC. But one suggestion would have broken the architecture it was reviewing. Check each against the specs before acting, and when a finding is right about the problem and wrong about the fix, say so rather than adopting it.
+
+**Findings often reach further than the file they land on.** Twice here, the correct fix was in a spec section or an unrelated issue that had inherited the same wrong sentence — a gate specification in issue #9 would have rejected the engine on its first commit. When a finding exposes a wrong statement, grep for it.
+
 ### Gates fail closed
 
 Every check in this project reports **failure** when it cannot run — missing tool, empty `go list` output, unreadable config. This is not defensive habit: `go list` over a package set that does not exist yet returns nothing, `grep` over nothing succeeds, and a gate built the obvious way reports green having inspected zero packages.
