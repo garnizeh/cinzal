@@ -152,7 +152,7 @@ done <<< "$pkgs"
 aliased="$(cd "$ROOT" && grep -rnE '^[[:space:]]*(import[[:space:]]+)?(\.|[A-Za-z_][A-Za-z0-9_]*)[[:space:]]+"fmt"' \
     --include='*.go' internal/rules 2>/dev/null \
     | grep -v '_test\.go:' \
-    | grep -vE ':[[:space:]]*import[[:space:]]+"fmt"[[:space:]]*$' || true)"
+    | grep -vE ':[[:space:]]*import[[:space:]]+"fmt"([[:space:]]|$)' || true)"
 if [ -n "$aliased" ]; then
     violations="$violations$(printf '%s\n' "$aliased" | sed 's/^/  aliased or dot import of fmt: /')"$'\n'
 fi
