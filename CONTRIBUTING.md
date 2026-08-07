@@ -112,17 +112,29 @@ These come from the roadmap's cross-cutting workstreams. Each one exists because
 
 ## Local development
 
-Nothing to build yet. When M0 lands, this section will carry the real commands. The intended shape, from RFC §4 and the roadmap:
+`make help` lists everything. The ones you will use:
 
-```
-make dev       # go build -tags debug
-make prod      # go build           (debug routes do not exist)
+```text
+make check     # everything CI runs — start here
 make test      # go test -race ./...
-make lint
+make lint      # go vet + golangci-lint
+make dev       # build with the debug tag; the debug panel exists in this binary
+make prod      # build without it; debug routes do not exist in this binary
 make generate  # templ + sqlc
+make packages  # assert the package graph matches scripts/packages.txt
 ```
 
-Requirements will be Go 1.26.5, Postgres 16, and `templ`, `sqlc` and `goose` as tools. No Node, no frontend build step, no Docker required for the rules engine — `internal/rules` is pure and its tests do no I/O at all.
+**`make check` runs exactly what CI runs**, because the workflow calls these targets rather than restating the commands. A CI failure reproduces locally with one command, and there is one definition to keep correct rather than two that drift.
+
+### Requirements
+
+**Go 1.26.5.** RFC §4 names it and §6.3 explains why the project cares: the design is staked on `seed + order log` reproducing a match exactly, and *"which Go built it"* should never be a candidate explanation for a determinism mismatch. Note that `go.mod` can only express a **floor** — no directive pins a version from inside it — so the exact version is enforced in CI.
+
+`golangci-lint` for `make lint`. `templ` and `sqlc` for `make generate`; both are no-ops until M5 and M3 respectively, so you can skip them until then. Postgres 16 arrives with M3.
+
+No Node, no frontend build step, and no Docker for the rules engine — `internal/rules` is pure and its tests do no I/O at all.
+
+**A missing tool fails the target rather than skipping it.** That is deliberate, and it is the same principle as the CI gates below: a check that did not run looks exactly like one that passed.
 
 ## The CI gates
 
