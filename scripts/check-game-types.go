@@ -14,20 +14,32 @@
 // `interface` an ordinary technical one, so a grep flags them inside string
 // literals and comments: `const msg = "any of these stances"` would fail a gate
 // it does not violate. Biasing toward false positives is right when the cost is
-// a rename of something odd; it is wrong when the false positives land on
-// ordinary prose in the package that holds the game's vocabulary.
+// a rename of something odd; it is wrong when they land on ordinary prose in the
+// package that holds the game's vocabulary.
 //
-// Walking the syntax tree removes the question entirely: literals and comments
-// are not type expressions, so they are never examined.
+// WHY ONLY TYPE EXPRESSIONS ARE WALKED.
 //
-// The rule enforced is STRONGER than D01's wording, deliberately. D01 says "no
-// any, no interface{}, no unconstrained type parameter". An interface WITH
-// methods is the same smuggling channel — a rules type can implement it and be
-// stored in a game field — so every interface type is rejected, not only the
-// empty one.
+// `any` is a predeclared alias rather than a keyword, so it is a legal name for
+// a field, parameter or variable — and both the declaration and every later use
+// of such a name must be left alone. `type Event struct { any string }` declares
+// no dynamic container at all.
+//
+// Rather than resolve identifiers, this walks only the places a type can be
+// written and descends the type expressions found there. That makes the
+// distinction structural: a name is never in a type position, so it is never
+// reached. Comments and string literals are not type expressions either, so the
+// grep's false positives cannot occur by construction.
+//
+// THE RULE IS STRONGER THAN D01'S WORDING, DELIBERATELY.
+//
+// D01 says "no any, no interface{}, no unconstrained type parameter". An
+// interface WITH methods is the same smuggling channel — a rules type can
+// implement it and be stored in a game field — so every interface type is
+// rejected, not only the empty one, and type parameters are rejected whether
+// constrained or not.
 //
 // THIS CHECK FAILS CLOSED. A parse error, an unreadable directory, or a package
-// with no files each exit non-zero rather than reporting success.
+// with no non-test files each exit non-zero rather than reporting success.
 //
 // Run: go run scripts/check-game-types.go
 package main
@@ -73,8 +85,6 @@ func main() {
 		}
 		path := filepath.Join(dir, name)
 
-		// Comments are parsed but never walked: only type expressions are
-		// examined, so a comment or a string literal cannot produce a finding.
 		file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
 		if err != nil {
 			fatal("could not parse %s: %v", filepath.Join(target, name), err)
@@ -83,13 +93,16 @@ func main() {
 
 		ast.Inspect(file, func(n ast.Node) bool {
 			switch node := n.(type) {
-			case *ast.InterfaceType:
-				findings = append(findings, finding{fset.Position(node.Pos()), "an interface type"})
-			case *ast.Ident:
-				if node.Name == "any" {
-					findings = append(findings, finding{fset.Position(node.Pos()), "the any alias"})
-				}
+			case *ast.Field:
+				walkType(fset, node.Type, &findings)
+			case *ast.ValueSpec:
+				walkType(fset, node.Type, &findings)
+			case *ast.TypeAssertExpr:
+				walkType(fset, node.Type, &findings)
+			case *ast.CompositeLit:
+				walkType(fset, node.Type, &findings)
 			case *ast.TypeSpec:
+				walkType(fset, node.Type, &findings)
 				if node.TypeParams != nil {
 					findings = append(findings, finding{fset.Position(node.TypeParams.Pos()), "a type parameter"})
 				}
@@ -127,6 +140,58 @@ func main() {
 	}
 
 	fmt.Printf("check-game-types: OK - %d file(s) in %s, no dynamic containers\n", inspected, target)
+}
+
+// walkType descends a type expression, reporting the any alias and every
+// interface type it contains. It is called only on nodes that hold a type, so a
+// field or variable NAMED `any` is never reached: a name is not a type
+// expression.
+func walkType(fset *token.FileSet, expr ast.Expr, findings *[]finding) {
+	if expr == nil {
+		return
+	}
+	switch t := expr.(type) {
+	case *ast.Ident:
+		if t.Name == "any" {
+			*findings = append(*findings, finding{fset.Position(t.Pos()), "the any alias"})
+		}
+	case *ast.InterfaceType:
+		*findings = append(*findings, finding{fset.Position(t.Pos()), "an interface type"})
+	case *ast.ParenExpr:
+		walkType(fset, t.X, findings)
+	case *ast.StarExpr:
+		walkType(fset, t.X, findings)
+	case *ast.Ellipsis:
+		walkType(fset, t.Elt, findings)
+	case *ast.ArrayType:
+		walkType(fset, t.Elt, findings)
+	case *ast.MapType:
+		walkType(fset, t.Key, findings)
+		walkType(fset, t.Value, findings)
+	case *ast.ChanType:
+		walkType(fset, t.Value, findings)
+	case *ast.IndexExpr: // generic instantiation with one argument
+		walkType(fset, t.Index, findings)
+	case *ast.IndexListExpr: // generic instantiation with several
+		for _, idx := range t.Indices {
+			walkType(fset, idx, findings)
+		}
+	case *ast.StructType:
+		if t.Fields != nil {
+			for _, f := range t.Fields.List {
+				walkType(fset, f.Type, findings)
+			}
+		}
+	case *ast.FuncType:
+		for _, list := range []*ast.FieldList{t.Params, t.Results} {
+			if list == nil {
+				continue
+			}
+			for _, f := range list.List {
+				walkType(fset, f.Type, findings)
+			}
+		}
+	}
 }
 
 func fatal(format string, args ...any) {
