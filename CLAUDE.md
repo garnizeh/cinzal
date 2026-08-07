@@ -4,14 +4,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-**No code exists yet.** This repo currently contains only design documentation:
+**Milestone M0 is in progress: the package skeleton exists, nothing is implemented.** Every `internal/` package is a `doc.go` and no more.
 
-```
-docs/project/cinzal-gdd.md              — Game Design Document (v2.8)
-docs/project/cinzal-architecture-rfc.md — Architecture RFC-001 (r12)
+```text
+docs/project/cinzal-gdd.md                  — Game Design Document (v2.8)
+docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r12)
+docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
+docs/decisions/                             — Decision log; D1 and D2 are decided, D3–D22 are open
 ```
 
-There is no `go.mod`, no source tree, no build/lint/test tooling. When implementation starts, build the `internal/`, `cmd/`, and `wasm/` layout specified in the RFC (§5) rather than inventing a different structure — the package boundaries described there (especially the `rules` / `render` / `web` import restrictions) are load-bearing for the game's core security property (see below), not arbitrary organization.
+`go.mod`, the `Makefile` and `scripts/check-packages.sh` exist. The four CI gates do **not** yet — they are issues #9 through #12, and until #13 lands nothing is a required status check. Run `make check` before pushing; it runs what CI will run.
+
+The package layout is fixed by [D01](docs/decisions/D01-package-layout.md) and is not negotiable by convenience:
+
+- `internal/game` is a **leaf** holding the shared vocabulary — `PlayerView`, `Order`, `Config`, `Event`, IDs. It imports nothing, and declares no `any`, `interface{}` or unconstrained type parameter.
+- `internal/rules` owns the match state and imports only the standard library plus `internal/game`.
+- **`internal/render` and `internal/web` must never directly import `internal/rules`.** Everything they need arrives through `internal/match` as `game` types.
+
+There is no `game.State` and there must never be one.
 
 Treat the two docs as the spec. **The RFC is authoritative on architecture; the GDD is authoritative on rules.** Both are heavily changelogged at the top of each file — read the changelog before assuming a section is current, since later entries correct earlier ones (e.g. GDD mechanics have moved through v0.9 → v2.8, and several early designs — ghost paths, warehouse supply limits, seat-order tie-breaks — were deliberately cut). If GDD and RFC ever seem to disagree, the RFC's own changelog explains which GDD revision it's paired with ("Companion doc" header).
 
@@ -30,7 +40,7 @@ A digital strategy game (2–5 players) with **simultaneous, secret orders** on 
 
 When implementing anything in this codebase, ask first: does this leak state past the fog boundary? The RFC's fog test suite is explicitly *negative* — it asserts hidden facts are *absent*, not just unused (RFC §16.3) — and that's the standard to hold new code to.
 
-## Planned architecture (once code exists)
+## Planned architecture (specified, not yet implemented)
 
 - **Language/stack:** Go 1.26.5, `templ` for typed templates, HTMX 2.x + SSE for interactivity, `sqlc` + `goose` + `pgx/v5` against Postgres 16. Zero hand-written JavaScript in v1. WASM (client-side rules) and rich map interaction are explicitly deferred to RFC-002 (RFC §4, §10).
 - **State model:** event sourcing, no snapshots. `state = fold(Resolve, initial(seed, cfg), orderLog)`. The order log is the only source of truth; `events`/`match_summary` tables are derived/rebuildable caches, never authority (RFC §7.1–7.3).
@@ -52,3 +62,60 @@ Key sections likely to matter most when implementing:
 - §14–15 — event/incident decks, confrontation resolution, order legality
 - §21 — the full randomness inventory (pairs with RFC §6.4's RNG consumption table — keep both in sync)
 - §22 — telemetry/metrics the simulation harness (RFC §16.4) is built to answer
+
+## How work lands here
+
+Full detail in [CONTRIBUTING.md](CONTRIBUTING.md). The parts an agent gets wrong without being told:
+
+**Everything goes through a pull request.** `main` is protected against direct pushes for the maintainer too, squash-only with linear history, and **every review conversation must be resolved** before merge. One task is one pull request is one commit — sized so `git bisect` lands on something coherent when the determinism check eventually fires.
+
+**Your pull request description becomes the commit message.** `main` squashes with the PR title as subject and the PR body as body. Write it for whoever reads `git log` in a year.
+
+**Work is tracked as three different things**, not one: *decisions* produce a written document in `docs/decisions/` and block the tasks that depend on them; *tasks* produce code; *exit demonstrations* prove a milestone met its criteria, and several can only be shown by breaking something on purpose. A task that cannot cite a GDD or RFC section is not a task — it is a decision, and it should be filed as one.
+
+### Verifying that CodeRabbit actually reviewed
+
+CodeRabbit runs on the free OSS tier and frequently skips a pull request with "Review limit reached" — **and its status check reports success anyway.** This has been the common case on this repository, not the exception.
+
+**The reliable signal is a `✅ Addressed in commit <sha>` marker on its finding comments, or a finding you still have to answer.** Nothing else. Three separate misreadings, all made in this repository, produced that sentence:
+
+| Looks like a verdict | Actually means |
+|---|---|
+| Green status check | Nothing. It is green on a skipped review too. |
+| "Review limit reached" | *That attempt* was skipped. An earlier review may already cover earlier commits. |
+| **No review record on your latest commit** | Nothing. A **clean incremental review posts no review at all** — CodeRabbit edits its existing finding comments instead. Absence does not distinguish "not reviewed" from "reviewed and clean". |
+| `@coderabbitai review` → "Already reviewed" | The review ran. This is an answer, not a refusal. |
+
+Wait for the review rather than merging without one, and if a merge genuinely cannot wait, say so in the pull request description so the commit on `main` records what went in unreviewed.
+
+### The review flow, and what each outcome means
+
+```text
+open PR ──▶ auto-review ──▶ findings ──▶ you push a fix ──▶ auto incremental review
+                 │                              │                      │
+          quota exhausted?               threads resolve          ✅ Addressed
+          "limit reached"                (some automatically)      (no new review)
+                 │                              │                      │
+          wait, then                     resolve the rest ──────▶ merge when CLEAN
+          @coderabbitai review              manually
+```
+
+| Situation | What to do |
+|---|---|
+| Quota was available on push | The automatic review fires on its own. **Do not trigger manually** — the command is for when automatic reviews are paused. |
+| `"Review limit reached"` | Wait the stated refill (20–45 min), then `@coderabbitai review`. When no time is given, the allowance is out for longer. |
+| Manual trigger → `"Already reviewed"` | It ran. Look for the `✅ Addressed` markers; do not keep retrying. |
+| You pushed a fix and see no new review | Expected when the fix was clean. Check the finding comments' `updated_at`, not the reviews list. |
+| Merge blocked, `BLOCKED`, threads pending | `main` requires conversation resolution. Some threads auto-resolve when your diff makes them outdated; **the rest must be resolved explicitly**, and they will not resolve themselves. |
+| You disagree with a finding | Reply on the thread with the reasoning. CodeRabbit answers, and **it concedes when it is wrong** — it did on a suggestion to introduce a `game.State`, which would have inverted D01. |
+| Replying to a thread returns 404 | The thread went outdated after your push. Post a pull-request-level comment instead; the reasoning still needs to be on the record. |
+
+**Verify findings before applying them.** They are usually right and have caught real defects here — an unaccounted `.XTestImports` hole, a fog oracle in the draft endpoint, two false claims in the RFC. But one suggestion would have broken the architecture it was reviewing. Check each against the specs before acting, and when a finding is right about the problem and wrong about the fix, say so rather than adopting it.
+
+**Findings often reach further than the file they land on.** Twice here, the correct fix was in a spec section or an unrelated issue that had inherited the same wrong sentence — a gate specification in issue #9 would have rejected the engine on its first commit. When a finding exposes a wrong statement, grep for it.
+
+### Gates fail closed
+
+Every check in this project reports **failure** when it cannot run — missing tool, empty `go list` output, unreadable config. This is not defensive habit: `go list` over a package set that does not exist yet returns nothing, `grep` over nothing succeeds, and a gate built the obvious way reports green having inspected zero packages.
+
+That is the same failure as a review bot reporting success on a review it skipped, and this repository has now watched both happen. **A gate that passes when it cannot run is worse than no gate, because it looks like protection.** Hold new checks to it, and never "fix" a noisy gate by letting it skip.
