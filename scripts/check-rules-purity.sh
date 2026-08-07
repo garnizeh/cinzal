@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+#
+# Asserts that internal/rules performs no I/O, reads no clock, and draws no
+# ambient randomness — RFC-001 §6.1, which requires this be "enforced by a CI
+# check, not by convention".
+#
+# WHY THIS CHECKS DIRECT IMPORTS AND NOT TRANSITIVE ONES.
+#
+# The property is "this code cannot call time.Now() or open a file", and in Go
+# you cannot reference a name from a package you do not import directly. A
+# direct-import check is therefore exactly congruent with the property, not a
+# weaker proxy for it.
+#
+# A transitive check is also unworkable, which settles it independently: `fmt`
+# depends transitively on both `os` and `time`, so forbidding those in the
+# transitive set would reject the standard library's formatting package and
+# every package that uses it.
+#
+# WHY TEST IMPORTS ARE EXCLUDED.
+#
+# `testing` itself imports `os`, `time` and `flag`. A test using it does not
+# make Resolve impure — the property is about the shipped package. This is the
+# opposite choice from the fog gate, which DOES cover test imports, because
+# there the risk is a fixture built in a test and read elsewhere.
+#
+# WHAT THIS GATE DOES NOT COVER.
+#
+# RFC-001 §6.3 names four determinism hazards. This gate closes two of them
+# outright — ambient time and ambient randomness. The other two, map iteration
+# order and floating point, are not expressible as import rules and are covered
+# by tests and review. `math` is therefore allowed, and "no float64 enters
+# rules" is not enforced here.
+#
+# THIS CHECK FAILS CLOSED. Every path that cannot complete the inspection exits
+# non-zero rather than falling through to success.
+
+set -euo pipefail
+
+MODULE="github.com/garnizeh/cinzal"
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# The only non-stdlib import internal/rules may have. Project returns a
+# game.PlayerView and Resolve takes a game.Order, so this is unavoidable rather
+# than a loosening — and it costs nothing, because internal/game imports nothing
+# outside the standard library and check-packages.sh verifies that separately.
+ALLOWED_MODULE_IMPORT="$MODULE/internal/game"
+
+# Exact stdlib packages that break purity if imported directly.
+FORBIDDEN_EXACT="
+time
+math/rand
+math/rand/v2
+crypto/rand
+os
+syscall
+context
+io/ioutil
+database/sql
+plugin
+runtime/debug
+"
+
+# Whole trees, matched by prefix.
+FORBIDDEN_PREFIX="
+os/
+net
+net/
+log
+log/
+database/
+"
+
+fail() { echo "check-rules-purity: FAIL: $*" >&2; exit 1; }
+
+command -v go >/dev/null 2>&1 || fail "the go toolchain is not on PATH"
+
+pkgs="$(cd "$ROOT" && go list ./internal/rules/...)" \
+    || fail "go list ./internal/rules/... did not succeed"
+[ -n "$pkgs" ] || fail "go list ./internal/rules/... reported no packages — nothing was inspected"
+
+violations=""
+
+while IFS= read -r pkg; do
+    [ -n "$pkg" ] || continue
+    imports="$(cd "$ROOT" && go list -f '{{join .Imports "\n"}}' "$pkg")" \
+        || fail "could not list the imports of $pkg"
+
+    while IFS= read -r imp; do
+        [ -n "$imp" ] || continue
+
+        # Anything with a dot in its first path segment is outside the standard
+        # library. Only internal/game is permitted, and internal/rules packages
+        # may of course import each other.
+        case "$imp" in
+            "$ALLOWED_MODULE_IMPORT") continue ;;
+            "$MODULE"/internal/rules|"$MODULE"/internal/rules/*) continue ;;
+        esac
+        first="${imp%%/*}"
+        case "$first" in
+            *.*) violations="$violations  $pkg -> $imp  (outside the standard library)"$'\n'; continue ;;
+        esac
+
+        for f in $FORBIDDEN_EXACT; do
+            [ "$imp" = "$f" ] && violations="$violations  $pkg -> $imp"$'\n'
+        done
+        for f in $FORBIDDEN_PREFIX; do
+            case "$imp" in "$f"*) violations="$violations  $pkg -> $imp"$'\n' ;; esac
+        done
+    done <<< "$imports"
+done <<< "$pkgs"
+
+if [ -n "$violations" ]; then
+    echo "check-rules-purity: internal/rules must stay pure — no I/O, no clock, no ambient randomness." >&2
+    echo "                    RFC-001 §6.1. The offending direct imports:" >&2
+    printf '%s' "$violations" >&2
+    echo "" >&2
+    echo "                    If you need one of these, the answer is almost certainly to move" >&2
+    echo "                    the work to internal/match, not to weaken this gate." >&2
+    exit 1
+fi
+
+echo "check-rules-purity: OK — $(printf '%s\n' "$pkgs" | wc -l | tr -d ' ') packages, no forbidden direct imports"
