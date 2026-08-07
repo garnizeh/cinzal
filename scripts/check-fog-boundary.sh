@@ -86,44 +86,13 @@ while IFS= read -r pkg; do
 done <<< "$pkgs"
 
 # The import rule proves render and web cannot NAME the match state. It does not
-# by itself stop a state VALUE travelling inside a type they can name, so D01
-# also forbids dynamic containers in internal/game. Since game imports nothing,
-# closing that channel makes smuggling impossible rather than merely unlikely.
-#
-# The rule enforced here is STRONGER than D01's wording and simpler to check:
-# no `any` and no `interface` at all, in any form. D01 says "no any, no
-# interface{}, no unconstrained type parameter", but an interface WITH methods is
-# the same channel - a rules type can implement it and be stored in a game field.
-# Forbidding the keyword outright also sidesteps `interface /* c */ {}` and
-# declarations split across lines, because a keyword match needs no shape.
-#
-# Comment lines are stripped so that internal/game/doc.go, which states this rule
-# in prose, does not trip it. A mention in a TRAILING or block comment still
-# fails - a deliberate false positive, costing a rewording, where the alternative
-# risks the property.
-game_files="$(cd "$ROOT" && find internal/game -name '*.go' -type f)" \
-    || fail "could not enumerate the Go files of internal/game"
-[ -n "$game_files" ] || fail "internal/game has no Go files — nothing was inspected"
-
-# grep exits 1 for "no matches", which is the passing case, and 2 or more for a
-# real error. The scan and the comment filter are run as SEPARATE steps on
-# purpose: under `pipefail` a pipeline reports the rightmost non-zero status, so
-# a scan failing with 2 would be masked by the filter reporting 1, and the error
-# would read as "nothing found".
-set +e
-game_raw="$(cd "$ROOT" && grep -rn --include='*.go' -E '\bany\b|\binterface\b' internal/game)"
-scan_status=$?
-set -e
-if [ "$scan_status" -gt 1 ]; then
-    fail "could not scan internal/game for dynamic containers (grep exit $scan_status)"
-fi
-
-game_dyn=""
-if [ -n "$game_raw" ]; then
-    game_dyn="$(printf '%s\n' "$game_raw" | grep -vE ':[0-9]+:[[:space:]]*//' || true)"
-fi
-if [ -n "$game_dyn" ]; then
-    violations="$violations$(printf '%s\n' "$game_dyn" | sed 's|^|  internal/game must declare no any and no interface: |')"$'\n'
+# stop a state VALUE travelling inside a type they can name, so D01 also forbids
+# dynamic containers in internal/game. That check needs to distinguish a type
+# expression from an identically spelled word in a comment or a string literal -
+# `any` is ordinary English - so it is a parser rather than a pattern. See
+# scripts/check-game-types.go for why, and for the rule it enforces.
+if ! (cd "$ROOT" && go run scripts/check-game-types.go); then
+    fail "internal/game declares a dynamic container (see above)"
 fi
 
 if [ -n "$violations" ]; then
