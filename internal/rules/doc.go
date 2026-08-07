@@ -2,10 +2,15 @@
 // two functions the whole design rests on: Resolve, the round pipeline, and
 // Project, the fog boundary.
 //
-// This package is pure. It imports nothing but the standard library, and from
-// the standard library it does not import time, math/rand, os, net/..., or
-// anything that performs I/O. This is enforced by a CI gate, not by convention
-// (RFC-001 §6.1).
+// This package is pure. It imports the standard library and internal/game, and
+// nothing else; from the standard library it does not import time, math/rand,
+// os, net/..., or anything that performs I/O. This is enforced by a CI gate,
+// not by convention (RFC-001 §6.1).
+//
+// The internal/game dependency is unavoidable rather than a loosening: Project
+// returns a game.PlayerView and Resolve takes a game.Order and a game.Config.
+// It costs nothing, because game itself imports nothing outside the standard
+// library, so the purity property transits it unchanged.
 //
 // The purity is not tidiness. RFC-001 §6.3 requires that seed plus the order
 // log reproduce a match exactly, forever, and names four ways Go breaks that:

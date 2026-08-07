@@ -1,9 +1,10 @@
 // Package gen generates the match map: an undirected graph satisfying every
 // constraint in GDD §6, plus a deterministic 2D layout.
 //
-// It is part of the pure rules core and carries the same import restrictions:
-// no I/O, no clock, no ambient randomness. All draws go through the seeded RNG
-// threaded in by the caller.
+// It is part of the pure rules core and carries the same import restrictions as
+// internal/rules: the standard library and internal/game only, and from the
+// standard library nothing that performs I/O, tells the time, or generates
+// randomness. All draws go through the seeded RNG threaded in by the caller.
 //
 // The layout is generated here rather than at render time, and that is
 // deliberate. GDD §7.1 gives a Rumoured node a position on the map but no
