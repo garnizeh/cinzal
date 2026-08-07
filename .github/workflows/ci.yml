@@ -28,6 +28,7 @@ env:
   GOLANGCI_LINT_VERSION: v2.11.4
   TEMPL_VERSION: v0.3.1001
   SQLC_VERSION: v1.28.0
+  GITLEAKS_VERSION: 8.30.1
 
 jobs:
   check:
@@ -36,6 +37,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # The secret scan reads history, not just the working tree: a
+          # credential committed and later removed is still leaked. The default
+          # shallow clone would hide exactly those commits.
+          fetch-depth: 0
           # The steps below run repository-controlled code - Makefile targets,
           # module downloads, three third-party tools. Without this, checkout
           # leaves the job token in .git/config where any of them can read it.
@@ -72,6 +77,12 @@ jobs:
           go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
           go install "github.com/a-h/templ/cmd/templ@${TEMPL_VERSION}"
           go install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
+
+          # gitleaks ships binaries rather than a go-installable command.
+          # Pinned by version and installed into a directory already on PATH.
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz" \
+            | tar -xz -C "$(go env GOPATH)/bin" gitleaks
+          gitleaks version
 
       # One definition, two callers: the Makefile is the definition and this
       # workflow is a caller, so `make check` reproduces a CI failure locally.

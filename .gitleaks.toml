@@ -1,0 +1,55 @@
+# gitleaks configuration.
+#
+# WHY THIS GATE EXISTS AT ALL, GIVEN GITHUB SECRET SCANNING IS ENABLED.
+#
+# GitHub's secret scanning and push protection are on for this repository, and
+# they cover PROVIDER patterns - AWS keys, GitHub tokens, Stripe keys. Non-
+# provider patterns, meaning generic high-entropy strings and connection
+# strings, are part of a paid tier and could not be enabled here: the API
+# accepts the setting and silently leaves it disabled.
+#
+# That leaves exactly the two shapes this project actually handles exposed
+# (RFC-001 §18):
+#
+#   SESSION_KEY   a random blob with no provider format at all
+#   DATABASE_URL  postgres://user:password@host/db, a credential in a URL
+#
+# As a required check this is also STRONGER than the paid alternative: GitHub
+# alerts after the push, a required check blocks the merge.
+#
+# WHY THERE IS A CUSTOM RULE RATHER THAN JUST THE DEFAULTS.
+#
+# Measured rather than assumed, and the answer was not the comfortable one. The
+# default ruleset catches a 64-character hex blob - the SESSION_KEY shape - and
+# does NOT catch postgres://user:password@host/db. Shipping this gate on
+# defaults alone would have left it decorative for half of what it exists for,
+# which is the failure this milestone keeps meeting: a check that looks like
+# protection.
+
+[extend]
+useDefault = true
+
+[[rules]]
+id = "connection-string-with-credentials"
+description = "Connection string with an embedded credential (DATABASE_URL and friends)"
+# scheme://user:password@host — the credential is what makes it a finding, so a
+# bare postgres://localhost/cinzal in a comment or an example is not one.
+regex = '''(?i)\b(postgres|postgresql|mysql|mariadb|mongodb(\+srv)?|redis|rediss|amqp|amqps|ftp|ftps|https?|smtp|smtps)://[^\s:/?#@]+:[^\s:/?#@]+@[^\s/?#]+'''
+tags = ["credential", "connection-string", "rfc-001-18"]
+
+[rules.allowlist]
+# Placeholders that are documentation rather than credentials. Deliberately
+# narrow: the point is to name the specific words we use in examples, not to
+# excuse anything that looks like a template.
+#
+# regexTarget = "match" is required: the default target is the captured secret,
+# and these patterns describe the surrounding URL rather than the secret itself.
+regexTarget = "match"
+regexes = [
+  '''://[^\s:@]+:(password|pass|secret|changeme|placeholder|xxx+|\*+|<[^>]+>|\$\{[^}]+\})@''',
+]
+
+# NOTE for when golden replay fixtures arrive (RFC-001 §16.1): those carry a
+# 32-byte seed, committed deliberately, and generic entropy rules will flag
+# them. The answer is a path-scoped allowlist here or a .gitleaksignore entry,
+# never loosening the entropy rules themselves.
