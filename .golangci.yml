@@ -1,0 +1,34 @@
+# golangci-lint v2 configuration.
+#
+# Deliberately close to the defaults. This project's real invariants — the fog
+# boundary, the purity of internal/rules, determinism — are not expressible as
+# lint rules and are enforced by dedicated CI gates instead. A large linter
+# configuration here would add noise without adding a single guarantee that matters.
+#
+# Run with `make lint`.
+
+version: "2"
+
+linters:
+  default: standard
+  enable:
+    # Errors that are silently ignored are the bug class most likely to hide a
+    # rule quietly not firing (RFC-001 §6.6: "most of these are silent when
+    # wrong").
+    - errcheck
+
+    # Resolution must never range over a map (RFC-001 §6.3). copyloopvar and
+    # the vet suite catch adjacent iteration mistakes; the map-ordering rule
+    # itself is not lintable and is covered by tests and review.
+    - copyloopvar
+
+    # Unused code in a package graph that is currently all doc.go would
+    # otherwise accumulate unnoticed.
+    - unused
+    - ineffassign
+    - staticcheck
+    - govet
+
+formatters:
+  enable:
+    - gofmt

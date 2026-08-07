@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+env:
+  # RFC-001 §4 names this version, and §6.3 explains why the project cares:
+  # the design is staked on `seed + order log` reproducing a match exactly, and
+  # "which Go built it" should never be a candidate explanation for a
+  # determinism mismatch.
+  #
+  # go.mod cannot express a pin — its `go` directive is a floor that a newer
+  # toolchain satisfies, and a `toolchain` directive equal to it is rejected as
+  # redundant. This workflow is therefore the only place the exact version is
+  # enforced, which is why GOTOOLCHAIN is set as well as go-version: without it
+  # a newer toolchain on the runner would silently take over.
+  GO_VERSION: "1.26.5"
+  GOTOOLCHAIN: go1.26.5
+
+  # Pinned so a tool release cannot change what CI asserts without a reviewed
+  # commit. These are build tools and stay out of go.mod deliberately — a tool
+  # dependency would drag its own graph into the module, and RFC-001 §4 keeps
+  # the runtime footprint deliberately small.
+  GOLANGCI_LINT_VERSION: v2.11.4
+  TEMPL_VERSION: v0.3.1001
+  SQLC_VERSION: v1.28.0
+
+jobs:
+  check:
+    name: check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-go@v5
+        with:
+          go-version: ${{ env.GO_VERSION }}
+          check-latest: false
+
+      # The pin is worthless if it silently fails to apply, and setup-go
+      # resolving a different version would look identical to success.
+      - name: Assert the pinned Go version is the one in use
+        run: |
+          set -euo pipefail
+          actual="$(go env GOVERSION)"
+          expected="go${GO_VERSION}"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Go version pin did not apply: expected $expected, got $actual"
+            exit 1
+          fi
+          echo "Go $actual"
+
+      - name: Install pinned tools
+        run: |
+          set -euo pipefail
+          go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
+          go install "github.com/a-h/templ/cmd/templ@${TEMPL_VERSION}"
+          go install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
+
+      # One definition, two callers: the Makefile is the definition and this
+      # workflow is a caller, so `make check` reproduces a CI failure locally.
+      # Each gate in #9-#12 appends itself to the `check` target rather than to
+      # this file.
+      - name: make check
+        run: make check
+
+      - name: make generate-check
+        run: make generate-check

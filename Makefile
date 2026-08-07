@@ -14,7 +14,7 @@ CMD     := ./cmd/...
 BIN     := bin
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test lint generate packages check clean
+.PHONY: help dev prod test lint generate generate-check packages check clean
 
 ## help      list these targets
 help:
@@ -54,6 +54,24 @@ generate: require-templ require-sqlc
 packages:
 	./scripts/check-packages.sh
 
+# Paths holding generated output. EMPTY UNTIL M3 AND M5 — templ output arrives
+# with the templates, sqlc output with the schema. Each milestone appends here.
+GENERATED :=
+
+## generate-check  assert the committed generated code matches what the tools produce
+generate-check: generate
+	@if [ -z "$(GENERATED)" ]; then \
+		printf 'generate-check: no generated paths declared yet — nothing to compare (M3, M5)\n'; \
+		printf '                this check is VACUOUS, not passing. See the GENERATED variable.\n'; \
+	elif [ -n "$$(git status --porcelain -- $(GENERATED))" ]; then \
+		printf 'generate-check: committed generated code does not match the tools output.\n' >&2; \
+		printf '                run `make generate` and commit the result.\n\n' >&2; \
+		git status --porcelain -- $(GENERATED) >&2; \
+		exit 1; \
+	else \
+		printf 'generate-check: OK — %s unchanged\n' '$(GENERATED)'; \
+	fi
+
 ## check     everything CI runs — reproduce a CI failure locally with this
 #
 # EVERY GATE ADDS ITSELF HERE. The four gates of M0 do not exist yet and are
@@ -64,7 +82,7 @@ packages:
 #
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
-check: packages lint test prod dev
+check: packages lint test prod dev generate-check
 
 ## clean     remove build output
 clean:
