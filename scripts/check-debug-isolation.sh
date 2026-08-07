@@ -20,6 +20,12 @@
 #         someone adds godview.go and forgets the //go:build debug line. The
 #         toolchain answers it exactly - an untagged file shows up in GoFiles.
 #
+#   LIVE  Every other file under internal/debug carries a constraint that cannot
+#         be satisfied without the debug tag. This is NOT the same question as
+#         the one above: go list answers for the active GOOS and tag set only, so
+#         a `//go:build windows` file is invisible on a Linux runner and ships in
+#         a Windows production build.
+#
 #   LIVE  doc.go declares nothing. It is exempt from the build tag only because
 #         it holds a package clause and comments; the moment it holds code, the
 #         exemption becomes the hole.
@@ -94,7 +100,21 @@ if [ -n "$untagged" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 2. doc.go declares nothing, so its exemption is not a hole.
+# 2. Every other file carries a constraint that needs the debug tag.
+#
+# The check above is exact only for the ACTIVE GOOS, GOARCH and tag set, because
+# that is all `go list` reports. A file constrained `//go:build windows` is
+# omitted on a Linux runner and compiled into a Windows production binary - so
+# this asks the other question: not what compiles here, but what could compile
+# anywhere. See scripts/check-debug-tags.go.
+# ---------------------------------------------------------------------------
+
+if ! (cd "$ROOT" && go run scripts/check-debug-tags.go); then
+    fail "a file under internal/debug can be built without the debug tag (see above)"
+fi
+
+# ---------------------------------------------------------------------------
+# 3. doc.go declares nothing, so its exemption is not a hole.
 # ---------------------------------------------------------------------------
 
 doc_path="$ROOT/internal/debug/$EXEMPT_FILE"
@@ -112,7 +132,7 @@ if [ -n "$doc_code" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 3. internal/debug is absent from the production dependency graph.
+# 4. internal/debug is absent from the production dependency graph.
 # ---------------------------------------------------------------------------
 
 prod_deps="$(cd "$ROOT" && go list -deps ./cmd/...)" \
