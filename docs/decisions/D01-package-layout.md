@@ -67,13 +67,15 @@ internal/render/   imports game ONLY
 internal/web/      imports game and match, never rules
 ```
 
-`Project` becomes `func Project(s State, seat game.SeatID) game.PlayerView` — the only function in the codebase with a foot on both sides.
+`Project` is the only function in the codebase with a foot on both sides. Written inside `rules`, its signature reads `func Project(s State, seat game.SeatID) game.PlayerView` — where `State` is `rules.State`, the match state, named without a qualifier only because the declaration is in that package. **There is no `game.State` and there must never be one:** the whole point of the split is that the match state has no name outside `rules`.
 
 ### The CI rule
 
 > **No package under `internal/render/...` or `internal/web/...` may directly import `internal/rules` or any package beneath it.**
 
-Checked over both `.Imports` and `.TestImports`.
+Checked over **`.Imports`, `.TestImports` and `.XTestImports`** — all three.
+
+`.XTestImports` is the one that is easy to miss and is a real hole without it. `go list -test` reports the imports of an *external* test package — a file declaring `package render_test` rather than `package render` — in a separate field. A check reading only the first two would let `render_test` import `internal/rules` unnoticed, which is precisely where a convenient fixture would be written.
 
 ## Reasoning
 
@@ -81,9 +83,16 @@ Checked over both `.Imports` and `.TestImports`.
 
 Option B's check says *do not import this package*. That stays correct when someone adds a field to `MatchState`, adds a new state-bearing type, or renames one. Option A's check has to enumerate what "exposes `MatchState`" means, and every such enumeration is a list that someone must remember to extend. RFC §5 is explicit that this is "exactly the kind of rule that erodes at 2am" — and a check that erodes silently is the same failure as no check.
 
-**Direct imports are the correct thing to check, not an approximation of it.** `web` will depend on `rules` transitively, through `match`. That is fine and unavoidable: in Go, a transitive dependency puts **no names in scope**. You cannot reference a type from a package you do not directly import. So a direct-import check is exactly congruent with the property §3 wants — that the type is unnameable in the template — rather than a weaker proxy for it.
+**Direct imports are the correct thing to check, not an approximation of it.** `web` will depend on `rules` transitively, through `match`. That is fine and unavoidable: in Go, a transitive dependency puts **no names in scope**. You cannot reference a type from a package you do not directly import. So a direct-import check is exactly congruent with the property it enforces, rather than a weaker proxy for it.
 
-**Test imports are covered too.** A `render` test that can name `MatchState` can build a fixture that non-test code later reads, and the exemption would be the first place the boundary leaks. If a render test needs a realistic view, it should construct a `game.PlayerView` directly — which is what a bot test needs anyway, so the fixtures get shared rather than duplicated.
+**But be precise about which property that is.** The check guarantees that `render` and `web` **cannot name** the match state. It does not guarantee that a `MatchState` *value* can never reach a template — a value can still travel inside an `any`, an `interface{}`, or a generic parameter that `render` is able to name. RFC §3's phrasing, "a template physically cannot leak what it cannot name," is true of the compile-time surface and slightly stronger than what an import check alone delivers.
+
+Two rules close that gap, and they belong with this decision rather than being discovered later:
+
+- **`game` carries no `any`, no `interface{}`, and no unconstrained type parameter.** Every field is a concrete type declared in `game` or in the standard library. A package that imports nothing cannot name a state type, so this makes smuggling one impossible rather than merely unlikely.
+- **`internal/match` returns `game` types to `web`, never `rules` types.** It is the only package on the path from HTTP to the engine, so it is the only place the rule needs to hold.
+
+**Test imports are covered too.** A `render` test that can name the match state can build a fixture that non-test code later reads, and the exemption would be the first place the boundary leaks. If a render test needs a realistic view, it should construct a `game.PlayerView` directly — which is what a bot test needs anyway, so the fixtures get shared rather than duplicated.
 
 **On the name.** `internal/view` was the obvious candidate and was rejected. The package holds `Order` and `Config` alongside `PlayerView`, and `view.Order` and `view.Config` misname two of its most-used types — a view is not what either of them is. `game.Order`, `game.Config`, `game.PlayerView` and `game.SeatID` all read correctly.
 
