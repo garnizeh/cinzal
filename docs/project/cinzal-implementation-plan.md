@@ -1,6 +1,6 @@
 # CINZAL — Implementation Roadmap
 
-**Status:** draft for review · **Revision:** p1 · **Companion docs:** `cinzal-gdd.md` **v2.8**, `cinzal-architecture-rfc.md` **RFC-001 r11**
+**Status:** draft for review · **Revision:** p1 · **Companion docs:** `cinzal-gdd.md` **v2.8**, `cinzal-architecture-rfc.md` **RFC-001 r12**
 
 *This document sequences the work. It does not re-decide anything the GDD or the RFC already decided — where it appears to, that is a spec gap and it is logged in §3 rather than resolved silently.*
 
@@ -167,7 +167,7 @@ Action: complete the table **before** `Resolve` is written, and mandate the meth
 Blocked by: **D1, D2**.
 
 **Deliverables**
-- `go.mod` (Go 1.23+), module path, toolchain pin; initial commit; `.gitignore`.
+- `go.mod` (Go 1.26.5), module path, toolchain pin; initial commit; `.gitignore`.
 - Package skeleton per RFC §5 with the D1 split applied — packages compile empty.
 - `Makefile`: `dev` (`go build -tags debug`), `prod`, `test`, `lint`, `generate` (templ + sqlc), `migrate`.
 - **CI (the load-bearing part of this milestone):**

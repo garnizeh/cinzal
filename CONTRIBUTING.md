@@ -122,7 +122,7 @@ make lint
 make generate  # templ + sqlc
 ```
 
-Requirements will be Go 1.23+, Postgres 16, and `templ`, `sqlc` and `goose` as tools. No Node, no frontend build step, no Docker required for the rules engine — `internal/rules` is pure and its tests do no I/O at all.
+Requirements will be Go 1.26.5, Postgres 16, and `templ`, `sqlc` and `goose` as tools. No Node, no frontend build step, no Docker required for the rules engine — `internal/rules` is pure and its tests do no I/O at all.
 
 ## The CI gates
 

@@ -1,0 +1,24 @@
+# The complete package set. Checked by scripts/check-packages.sh.
+#
+# This file exists so that a package deleted, renamed or added shows up as a
+# reviewed diff rather than as a silent change in what the import gates inspect.
+# A gate that runs over a package set which quietly shrank reports success while
+# inspecting nothing — the failure this whole milestone is written to avoid.
+#
+# Adding a package here is a deliberate act. If a gate starts passing right
+# after you edited this file, check that it is passing for the right reason.
+
+github.com/garnizeh/cinzal/cmd/replay
+github.com/garnizeh/cinzal/cmd/server
+github.com/garnizeh/cinzal/cmd/simulate
+github.com/garnizeh/cinzal/internal/auth
+github.com/garnizeh/cinzal/internal/bots
+github.com/garnizeh/cinzal/internal/debug
+github.com/garnizeh/cinzal/internal/game
+github.com/garnizeh/cinzal/internal/mail
+github.com/garnizeh/cinzal/internal/match
+github.com/garnizeh/cinzal/internal/render
+github.com/garnizeh/cinzal/internal/rules
+github.com/garnizeh/cinzal/internal/rules/gen
+github.com/garnizeh/cinzal/internal/store
+github.com/garnizeh/cinzal/internal/web
