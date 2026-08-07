@@ -93,7 +93,7 @@ So the procedure after pushing a fix is: **check whether the finding is still ra
 
 Wait for the review rather than merging without one, and if a merge genuinely cannot wait, say so in the pull request description so the commit on `main` records what went in unreviewed.
 
-*If you write tooling against this, note that the marker text is `Addressed in commits <sha> to <sha>` — a range, not a single hash. A grep for `Addressed in commit <sha>` matches nothing, which then reads as "unaddressed".*
+*If you write tooling against this: the marker wording **varies with how many commits the fix took** — `Addressed in commit <sha>` for one, `Addressed in commits <sha> to <sha>` for several. A pattern for either form alone silently misses the other and reads it as "unaddressed". Match `Addressed in commits? …`. Both directions of this mistake were made here, while checking for exactly this.*
 
 ### The review flow, and what each outcome means
 
