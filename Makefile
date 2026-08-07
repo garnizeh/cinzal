@@ -14,7 +14,7 @@ CMD     := ./cmd/...
 BIN     := bin
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test lint generate generate-check packages purity fog debug-isolation check clean
+.PHONY: help dev prod test lint generate generate-check packages purity fog debug-isolation secrets check clean
 
 ## help      list these targets
 help:
@@ -66,6 +66,17 @@ fog:
 debug-isolation:
 	./scripts/check-debug-isolation.sh
 
+## secrets   scan the tree and the history for credentials
+#
+# --ignore-gitleaks-allow is not optional. Without it a `gitleaks:allow` comment
+# on the offending line suppresses the finding, so anyone able to write the line
+# is able to switch the gate off for it - a required check with an inline
+# bypass. The config allowlist stays, because it is reviewed, versioned, and
+# names specific documented placeholders; an inline marker is none of those.
+secrets: require-gitleaks
+	gitleaks dir . --config .gitleaks.toml --no-banner --redact --ignore-gitleaks-allow
+	gitleaks git . --config .gitleaks.toml --no-banner --redact --ignore-gitleaks-allow
+
 # Paths holding generated output. EMPTY UNTIL M3 AND M5 — templ output arrives
 # with the templates, sqlc output with the schema. Each milestone appends here.
 GENERATED :=
@@ -95,11 +106,11 @@ generate-check: generate
 # EVERY GATE ADDS ITSELF HERE. The four gates of M0 do not exist yet and are
 # deliberately absent rather than stubbed: a target that cannot run must not be
 # listed as if it had. As each lands it appends itself to this line, and its
-# issue carries that as an acceptance criterion — #12 gitleaks remains.
+# All four M0 gates are now listed. Anything added later appends itself here.
 #
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
-check: packages purity fog debug-isolation lint test prod dev generate-check
+check: packages purity fog debug-isolation secrets lint test prod dev generate-check
 
 ## clean     remove build output
 clean:
