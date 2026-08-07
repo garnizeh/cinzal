@@ -1,0 +1,87 @@
+name: Decision
+description: A question that must be answered in writing before dependent work can start.
+labels: ["decision"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        A decision produces a **written answer**, not code. It closes with a document in
+        `docs/decisions/` recording the question, the options with their tradeoffs, the
+        choice, and the reasoning.
+
+        **Decisions block the tasks that depend on them.** A milestone does not start with
+        open blockers.
+
+  - type: input
+    id: decision-id
+    attributes:
+      label: Decision ID
+      description: Use the roadmap §3 identifier if it has one; otherwise the next free number.
+      placeholder: "D1"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: blocks-milestone
+    attributes:
+      label: Blocks which milestone
+      options:
+        - M0 — Foundations
+        - M1 — Rules core
+        - M2 — Bots and simulation
+        - M3 — Persistence
+        - M4 — Round lifecycle
+        - M5 — Playable web
+        - M6 — Async
+        - M7 — Onboarding
+        - M8 — Launch hardening
+        - Blocks nothing scheduled
+    validations:
+      required: true
+
+  - type: textarea
+    id: question
+    attributes:
+      label: The question
+      description: State it so that someone who has read the specs can answer it without further context.
+    validations:
+      required: true
+
+  - type: textarea
+    id: why-open
+    attributes:
+      label: Why it is open
+      description: What in the GDD or RFC is silent, ambiguous, or self-contradictory. Cite the sections.
+      placeholder: "RFC §5 lists state.go and fog.go in one package; RFC §3 requires them to be in different ones for the CI check to be writable at all."
+    validations:
+      required: true
+
+  - type: textarea
+    id: options
+    attributes:
+      label: Options and tradeoffs
+      description: At least two, each with what it costs. An option with no stated cost has not been examined.
+      value: |
+        **A — **
+
+        - For:
+        - Against:
+
+        **B — **
+
+        - For:
+        - Against:
+    validations:
+      required: true
+
+  - type: textarea
+    id: recommendation
+    attributes:
+      label: Recommendation
+      description: Which one, and the reason. If it is genuinely a toss-up, say so and pick anyway.
+
+  - type: textarea
+    id: consequences
+    attributes:
+      label: What this blocks
+      description: Which tasks or milestones cannot start until this is answered, and how expensive it is to change later.

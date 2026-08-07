@@ -1,0 +1,47 @@
+name: Milestone tracking
+description: The umbrella issue for a milestone. One per milestone.
+labels: ["tracking"]
+title: "Mn — <milestone name>"
+body:
+  - type: markdown
+    attributes:
+      value: |
+        One tracking issue per milestone. It opens when every blocking decision is closed,
+        and it closes when every task is closed **and** every exit demonstration has been performed.
+
+  - type: textarea
+    id: goal
+    attributes:
+      label: Goal
+      description: One sentence, from the roadmap.
+    validations:
+      required: true
+
+  - type: textarea
+    id: decisions
+    attributes:
+      label: Blocking decisions
+      description: Must all be closed before the first task starts.
+      value: |
+        - [ ] #
+    validations:
+      required: true
+
+  - type: textarea
+    id: tasks
+    attributes:
+      label: Tasks
+      value: |
+        - [ ] #
+    validations:
+      required: true
+
+  - type: textarea
+    id: exit
+    attributes:
+      label: Exit demonstrations
+      description: The milestone is not done until these are performed and their evidence recorded.
+      value: |
+        - [ ] #
+    validations:
+      required: true
