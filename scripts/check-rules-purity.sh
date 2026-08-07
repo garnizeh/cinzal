@@ -31,6 +31,10 @@
 # by tests and review. `math` is therefore allowed, and "no float64 enters
 # rules" is not enforced here.
 #
+# `fmt` is importable because Errorf and Sprintf are pure and the engine needs
+# them, but fmt.Print* and Fprint* are rejected at the call site: an import rule
+# cannot separate formatting from writing, and only the second is I/O.
+#
 # THIS CHECK FAILS CLOSED. Every path that cannot complete the inspection exits
 # non-zero rather than falling through to success.
 
@@ -48,6 +52,7 @@ ALLOWED_MODULE_IMPORT="$MODULE/internal/game"
 # Exact stdlib packages that break purity if imported directly.
 FORBIDDEN_EXACT="
 time
+hash/maphash
 math/rand
 math/rand/v2
 crypto/rand
@@ -82,23 +87,41 @@ violations=""
 
 while IFS= read -r pkg; do
     [ -n "$pkg" ] || continue
+
+    # `go list` reports only the files selected by the ACTIVE build
+    # configuration, so a forbidden import inside rules_windows.go would sail
+    # through Linux CI unseen. Rather than parse constrained files, refuse to be
+    # blind: there is no reason for a build-constrained file in the pure engine,
+    # and if one appears this gate stops instead of silently skipping it.
+    ignored="$(cd "$ROOT" && go list -f '{{join .IgnoredGoFiles " "}}' "$pkg")" \
+        || fail "could not list the build-constrained files of $pkg"
+    if [ -n "$ignored" ]; then
+        fail "$pkg has build-constrained files this gate cannot inspect: $ignored
+                    go list only reports the active build configuration, so their
+                    imports are invisible here. Either remove the constraint or
+                    teach this script to parse them - do not leave them unchecked."
+    fi
+
     imports="$(cd "$ROOT" && go list -f '{{join .Imports "\n"}}' "$pkg")" \
         || fail "could not list the imports of $pkg"
 
     while IFS= read -r imp; do
         [ -n "$imp" ] || continue
 
-        # Anything with a dot in its first path segment is outside the standard
-        # library. Only internal/game is permitted, and internal/rules packages
-        # may of course import each other.
         case "$imp" in
             "$ALLOWED_MODULE_IMPORT") continue ;;
             "$MODULE"/internal/rules|"$MODULE"/internal/rules/*) continue ;;
         esac
-        first="${imp%%/*}"
-        case "$first" in
-            *.*) violations="$violations  $pkg -> $imp  (outside the standard library)"$'\n'; continue ;;
-        esac
+
+        # Ask the toolchain whether this is standard library rather than
+        # guessing from the path. A dotless module path resolved through a local
+        # `replace` looks stdlib to a heuristic and is not.
+        std="$(cd "$ROOT" && go list -f '{{.Standard}}' "$imp" 2>/dev/null)" \
+            || fail "could not classify the import $imp (from $pkg)"
+        if [ "$std" != "true" ]; then
+            violations="$violations  $pkg -> $imp  (not standard library)"$'\n'
+            continue
+        fi
 
         for f in $FORBIDDEN_EXACT; do
             [ "$imp" = "$f" ] && violations="$violations  $pkg -> $imp"$'\n'
@@ -108,6 +131,16 @@ while IFS= read -r pkg; do
         done
     done <<< "$imports"
 done <<< "$pkgs"
+
+# fmt stays importable - Errorf and Sprintf are pure and the engine needs them -
+# but fmt.Print* and Fprint* write to stdout or a writer, which is I/O in a
+# package that must not perform any. An import rule cannot express that
+# distinction, so it is checked at the call site.
+printers="$(cd "$ROOT" && grep -rnE '\bfmt\.(Print|Printf|Println|Fprint|Fprintf|Fprintln)\(' \
+    --include='*.go' internal/rules 2>/dev/null | grep -v '_test\.go:' || true)"
+if [ -n "$printers" ]; then
+    violations="$violations$(printf '%s\n' "$printers" | sed 's/^/  writes to output: /')"$'\n'
+fi
 
 if [ -n "$violations" ]; then
     echo "check-rules-purity: internal/rules must stay pure — no I/O, no clock, no ambient randomness." >&2
