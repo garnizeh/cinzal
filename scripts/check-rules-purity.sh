@@ -35,6 +35,14 @@
 # them, but fmt.Print* and Fprint* are rejected at the call site: an import rule
 # cannot separate formatting from writing, and only the second is I/O.
 #
+# That call-site check is textual, with two consequences stated rather than
+# discovered. Aliased and dot imports of fmt are rejected outright, because they
+# would make the qualifier unpredictable and the grep unsound. And a mention of
+# fmt.Println inside a comment or a string literal will fail the gate - a false
+# positive, deliberately, because it costs a rename while a false negative costs
+# the property. If this ever gets noisy, the answer is an AST-based check, not a
+# looser pattern.
+#
 # THIS CHECK FAILS CLOSED. Every path that cannot complete the inspection exits
 # non-zero rather than falling through to success.
 
@@ -136,6 +144,18 @@ done <<< "$pkgs"
 # but fmt.Print* and Fprint* write to stdout or a writer, which is I/O in a
 # package that must not perform any. An import rule cannot express that
 # distinction, so it is checked at the call site.
+#
+# A textual check can only be sound if the qualifier is predictable, so aliased
+# and dot imports of fmt are rejected first. `import f "fmt"` or `import . "fmt"`
+# would let f.Println or a bare Println through unseen.
+aliased="$(cd "$ROOT" && grep -rnE '^[[:space:]]*(import[[:space:]]+)?(\.|[A-Za-z_][A-Za-z0-9_]*)[[:space:]]+"fmt"' \
+    --include='*.go' internal/rules 2>/dev/null \
+    | grep -v '_test\.go:' \
+    | grep -vE ':[[:space:]]*import[[:space:]]+"fmt"[[:space:]]*$' || true)"
+if [ -n "$aliased" ]; then
+    violations="$violations$(printf '%s\n' "$aliased" | sed 's/^/  aliased or dot import of fmt: /')"$'\n'
+fi
+
 printers="$(cd "$ROOT" && grep -rnE '\bfmt\.(Print|Printf|Println|Fprint|Fprintf|Fprintln)\(' \
     --include='*.go' internal/rules 2>/dev/null | grep -v '_test\.go:' || true)"
 if [ -n "$printers" ]; then
