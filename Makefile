@@ -67,9 +67,15 @@ debug-isolation:
 	./scripts/check-debug-isolation.sh
 
 ## secrets   scan the tree and the history for credentials
+#
+# --ignore-gitleaks-allow is not optional. Without it a `gitleaks:allow` comment
+# on the offending line suppresses the finding, so anyone able to write the line
+# is able to switch the gate off for it - a required check with an inline
+# bypass. The config allowlist stays, because it is reviewed, versioned, and
+# names specific documented placeholders; an inline marker is none of those.
 secrets: require-gitleaks
-	gitleaks dir . --config .gitleaks.toml --no-banner --redact
-	gitleaks git . --config .gitleaks.toml --no-banner --redact
+	gitleaks dir . --config .gitleaks.toml --no-banner --redact --ignore-gitleaks-allow
+	gitleaks git . --config .gitleaks.toml --no-banner --redact --ignore-gitleaks-allow
 
 # Paths holding generated output. EMPTY UNTIL M3 AND M5 — templ output arrives
 # with the templates, sqlc output with the schema. Each milestone appends here.
