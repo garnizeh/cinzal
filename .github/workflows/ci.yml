@@ -9,23 +9,22 @@ permissions:
   contents: read
 
 env:
-  # RFC-001 §4 names this version, and §6.3 explains why the project cares:
-  # the design is staked on `seed + order log` reproducing a match exactly, and
-  # "which Go built it" should never be a candidate explanation for a
-  # determinism mismatch.
+  # GOTOOLCHAIN=local means "use the toolchain that is installed, never switch
+  # to another one". Paired with go-version-file below, that is what turns
+  # go.mod's floor into an actual pin, without repeating the version anywhere.
   #
-  # go.mod cannot express a pin — its `go` directive is a floor that a newer
-  # toolchain satisfies, and a `toolchain` directive equal to it is rejected as
-  # redundant. This workflow is therefore the only place the exact version is
-  # enforced, which is why GOTOOLCHAIN is set as well as go-version: without it
-  # a newer toolchain on the runner would silently take over.
-  GO_VERSION: "1.26.5"
-  GOTOOLCHAIN: go1.26.5
+  # RFC-001 §4 names the version and §6.3 explains why the project cares: the
+  # design is staked on `seed + order log` reproducing a match exactly, and
+  # "which Go built it" should never be a candidate explanation for a
+  # determinism mismatch. go.mod cannot express a pin on its own — its `go`
+  # directive is a floor a newer toolchain satisfies, and a `toolchain`
+  # directive equal to it is rejected as redundant.
+  GOTOOLCHAIN: local
 
   # Pinned so a tool release cannot change what CI asserts without a reviewed
   # commit. These are build tools and stay out of go.mod deliberately — a tool
-  # dependency would drag its own graph into the module, and RFC-001 §4 keeps
-  # the runtime footprint deliberately small.
+  # directive drags its own dependency graph into the module, and RFC-001 §4
+  # keeps the runtime footprint deliberately small.
   GOLANGCI_LINT_VERSION: v2.11.4
   TEMPL_VERSION: v0.3.1001
   SQLC_VERSION: v1.28.0
@@ -35,25 +34,32 @@ jobs:
     name: check
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - uses: actions/setup-go@v5
+      # go.mod is the single source of the version. Repeating it here would be
+      # one more thing to keep in sync, and the copy that drifted would be the
+      # one CI trusted.
+      - uses: actions/setup-go@v7
         with:
-          go-version: ${{ env.GO_VERSION }}
+          go-version-file: go.mod
           check-latest: false
 
-      # The pin is worthless if it silently fails to apply, and setup-go
+      # The pin is worthless if it silently fails to apply, and a runner
       # resolving a different version would look identical to success.
       - name: Assert the pinned Go version is the one in use
         run: |
           set -euo pipefail
+          expected="go$(awk '/^go /{print $2; exit}' go.mod)"
           actual="$(go env GOVERSION)"
-          expected="go${GO_VERSION}"
+          if [ -z "${expected#go}" ]; then
+            echo "::error::could not read the go directive from go.mod"
+            exit 1
+          fi
           if [ "$actual" != "$expected" ]; then
             echo "::error::Go version pin did not apply: expected $expected, got $actual"
             exit 1
           fi
-          echo "Go $actual"
+          echo "Go $actual, pinned by go.mod and GOTOOLCHAIN=$GOTOOLCHAIN"
 
       - name: Install pinned tools
         run: |
