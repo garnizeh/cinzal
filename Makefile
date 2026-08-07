@@ -58,7 +58,7 @@ packages:
 purity:
 	./scripts/check-rules-purity.sh
 
-## fog       assert render and web have no path to the match state
+## fog       assert render and web never DIRECTLY import internal/rules
 fog:
 	./scripts/check-fog-boundary.sh
 
