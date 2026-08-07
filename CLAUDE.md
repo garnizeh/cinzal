@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **Milestone M0 is in progress: the package skeleton exists, nothing is implemented.** Every `internal/` package is a `doc.go` and no more.
 
-```
+```text
 docs/project/cinzal-gdd.md                  — Game Design Document (v2.8)
 docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r12)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
