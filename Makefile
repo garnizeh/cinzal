@@ -55,6 +55,15 @@ packages:
 	./scripts/check-packages.sh
 
 ## check     everything CI runs — reproduce a CI failure locally with this
+#
+# EVERY GATE ADDS ITSELF HERE. The four gates of M0 do not exist yet and are
+# deliberately absent rather than stubbed: a target that cannot run must not be
+# listed as if it had. As each lands it appends itself to this line, and its
+# issue carries that as an acceptance criterion — #9 rules purity, #10 the fog
+# boundary, #11 debug isolation, #12 gitleaks, and #8 generated-code freshness.
+#
+# If this line and the CI workflow ever disagree, the workflow is wrong: it
+# calls these targets rather than restating them, so there is one definition.
 check: packages lint test prod dev
 
 ## clean     remove build output

@@ -114,7 +114,7 @@ These come from the roadmap's cross-cutting workstreams. Each one exists because
 
 `make help` lists everything. The ones you will use:
 
-```
+```text
 make check     # everything CI runs — start here
 make test      # go test -race ./...
 make lint      # go vet + golangci-lint
