@@ -141,9 +141,10 @@ while IFS= read -r pkg; do
 done <<< "$pkgs"
 
 # fmt stays importable - Errorf and Sprintf are pure and the engine needs them -
-# but fmt.Print* and Fprint* write to stdout or a writer, which is I/O in a
-# package that must not perform any. An import rule cannot express that
-# distinction, so it is checked at the call site.
+# but fmt.Print* and Fprint* write to stdout or a writer and fmt.Fscan* reads
+# from a reader, all of which are I/O in a package that must perform none. An
+# import rule cannot express that distinction, so it is checked at the call site.
+# Sprintf, Sscanf and Errorf operate on strings and stay allowed.
 #
 # A textual check can only be sound if the qualifier is predictable, so aliased
 # and dot imports of fmt are rejected first. `import f "fmt"` or `import . "fmt"`
@@ -156,7 +157,7 @@ if [ -n "$aliased" ]; then
     violations="$violations$(printf '%s\n' "$aliased" | sed 's/^/  aliased or dot import of fmt: /')"$'\n'
 fi
 
-printers="$(cd "$ROOT" && grep -rnE '\bfmt\.(Print|Printf|Println|Fprint|Fprintf|Fprintln)\(' \
+printers="$(cd "$ROOT" && grep -rnE '\bfmt\.(Print|Printf|Println|Fprint|Fprintf|Fprintln|Fscan|Fscanf|Fscanln)\(' \
     --include='*.go' internal/rules 2>/dev/null | grep -v '_test\.go:' || true)"
 if [ -n "$printers" ]; then
     violations="$violations$(printf '%s\n' "$printers" | sed 's/^/  writes to output: /')"$'\n'
