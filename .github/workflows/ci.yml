@@ -97,8 +97,13 @@ jobs:
       # workflow is a caller, so `make check` reproduces a CI failure locally.
       # Each gate in #9-#12 appends itself to the `check` target rather than to
       # this file.
+      # -k keeps going after a failing target instead of stopping at the first.
+      # A contributor should see every failing gate in one run rather than
+      # fixing one, pushing, and discovering the next. The job still fails.
+      #
+      # Locally `make check` stops at the first failure, which is what you want
+      # while iterating; this is the one place the two differ, and deliberately.
+      #
+      # generate-check is a prerequisite of check and needs no separate step.
       - name: make check
-        run: make check
-
-      - name: make generate-check
-        run: make generate-check
+        run: make -k check
