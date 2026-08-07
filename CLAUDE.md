@@ -77,16 +77,23 @@ Full detail in [CONTRIBUTING.md](CONTRIBUTING.md). The parts an agent gets wrong
 
 CodeRabbit runs on the free OSS tier and frequently skips a pull request with "Review limit reached" — **and its status check reports success anyway.** This has been the common case on this repository, not the exception.
 
-**The reliable signal is a `✅ Addressed in commit <sha>` marker on its finding comments, or a finding you still have to answer.** Nothing else. Three separate misreadings, all made in this repository, produced that sentence:
+**There is exactly one reliable signal, and it is negative: a finding still raised against the current head.** That means *not addressed*. Everything else — including the `✅ Addressed` marker — is at best confirmation and at worst nothing at all.
+
+Four separate misreadings, every one made in this repository, produced that sentence:
 
 | Looks like a verdict | Actually means |
 |---|---|
 | Green status check | Nothing. It is green on a skipped review too. |
 | "Review limit reached" | *That attempt* was skipped. An earlier review may already cover earlier commits. |
-| **No review record on your latest commit** | Nothing. A **clean incremental review posts no review at all** — CodeRabbit edits its existing finding comments instead. Absence does not distinguish "not reviewed" from "reviewed and clean". |
+| **No review record on your latest commit** | Nothing. A clean incremental review posts no review at all. Absence does not distinguish "not reviewed" from "reviewed and clean". |
+| **No `✅ Addressed` marker on a finding you fixed** | Nothing. The marker is **not guaranteed** — a finding can be reviewed on a later commit, not re-raised, and never marked. |
 | `@coderabbitai review` → "Already reviewed" | The review ran. This is an answer, not a refusal. |
 
+So the procedure after pushing a fix is: **check whether the finding is still raised against the head.** If it is not, and you believe the fix is right, resolve the thread and record *why* in the reply — that is your judgement closing it, not a confirmation, and the difference belongs on the record.
+
 Wait for the review rather than merging without one, and if a merge genuinely cannot wait, say so in the pull request description so the commit on `main` records what went in unreviewed.
+
+*If you write tooling against this: the marker wording **varies with how many commits the fix took** — `Addressed in commit <sha>` for one, `Addressed in commits <sha> to <sha>` for several. A pattern for either form alone silently misses the other and reads it as "unaddressed". Match `Addressed in commits? …`. Both directions of this mistake were made here, while checking for exactly this.*
 
 ### The review flow, and what each outcome means
 

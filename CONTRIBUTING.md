@@ -87,14 +87,19 @@ On this project that has been the common case, not the exception. So:
 
 - **Read the comments, not the check.** The check tells you nothing about whether a review happened.
 - **"Limit reached" means *that attempt* was skipped, not that the pull request is unreviewed.** Both happen. A pull request can carry a full review of its first commit and then hit the limit on the incremental review of a later one — so look at whether a review exists and *which commits it covered*, rather than reading the most recent message as a verdict on the whole pull request.
-- **A clean incremental review leaves no review record at all.** This is the one that will mislead you, because absence looks the same as failure. When you push a fix and CodeRabbit finds nothing new, it posts no new review — it **edits its existing finding comments** to say `✅ Addressed in commit <sha>`. So the evidence lives in the inline comments and their `updated_at`, not in the list of reviews. Checking for a review object on your latest commit and finding none proves nothing.
+- **A clean incremental review leaves no review record at all.** When you push a fix and CodeRabbit finds nothing new, it posts no new review. Checking for a review object on your latest commit and finding none proves nothing.
+- **The `✅ Addressed` marker is not guaranteed either.** It usually appears on the finding comment when a fix lands, and when it does it is good confirmation — but a finding can be reviewed on a later commit, not re-raised, and still never marked. Its absence proves nothing, exactly like the absence of a review record.
+
+  If you match on it, note that **the wording varies with how many commits the fix took**: `Addressed in commit <sha>` for one, `Addressed in commits <sha> to <sha>` for several. A pattern written for either form alone silently misses the other and reads it as "unaddressed" — the mistake this paragraph exists to prevent, made twice here while checking for it, once in each direction. Match `Addressed in commits? …`.
 - **Retry after the refill time the message reports**, with a `@coderabbitai review` comment. It is usually 20 to 35 minutes. When the message gives no time at all, the free allowance is exhausted for longer and there is nothing to do but wait.
 - **CodeRabbit reviews incrementally and will not re-review a commit it has seen.** So `@coderabbitai review` replying **"Already reviewed"** is an answer, not a refusal — the review ran. Its own message notes the manual command "is applicable only when automatic reviews are paused", so when a review genuinely was missed, the way to get one is a new commit after the allowance returns, not repeating the command.
 - **Merge only once a real review has landed.** If waiting is genuinely not an option, say so in the pull request description, so the commit message on `main` records what went in unreviewed rather than implying it did not.
 
-**In short — the reliable check is `✅ Addressed`, or a finding you still have to answer.** Not the status check, not the presence of a review, not the absence of a limit message.
+**In short — there is exactly one reliable signal, and it is negative: a finding still raised against the current head.** That means *not addressed*. The status check, the presence of a review, the absence of a limit message and the `Addressed` marker are all, on their own, inconclusive.
 
-This is the same failure the CI gates in M0 are written to avoid — a check that passes by not running. It is worth recognising in a bot as readily as in our own tooling, and it took three separate misreadings on this repository to arrive at the sentence above.
+So after pushing a fix: **check whether the finding is still raised.** If it is not, and you believe the fix is right, resolve the thread and say *why* in the reply — that is your judgement closing it rather than a confirmation, and the difference is worth putting on the record.
+
+This is the same failure the CI gates in M0 are written to avoid — a check that passes by not running. It is worth recognising in a bot as readily as in our own tooling, and it took **four** separate misreadings on this repository to arrive at the sentence above. Each one was a variation on the same theme: **absence of a signal is not evidence of a state.**
 
 ### Your pull request description becomes the commit message
 
