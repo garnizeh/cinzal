@@ -35,6 +35,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          # The steps below run repository-controlled code - Makefile targets,
+          # module downloads, three third-party tools. Without this, checkout
+          # leaves the job token in .git/config where any of them can read it.
+          persist-credentials: false
 
       # go.mod is the single source of the version. Repeating it here would be
       # one more thing to keep in sync, and the copy that drifted would be the

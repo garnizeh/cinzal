@@ -63,12 +63,18 @@ generate-check: generate
 	@if [ -z "$(GENERATED)" ]; then \
 		printf 'generate-check: no generated paths declared yet — nothing to compare (M3, M5)\n'; \
 		printf '                this check is VACUOUS, not passing. See the GENERATED variable.\n'; \
-	elif [ -n "$$(git status --porcelain -- $(GENERATED))" ]; then \
-		printf 'generate-check: committed generated code does not match the tools output.\n' >&2; \
-		printf '                run `make generate` and commit the result.\n\n' >&2; \
-		git status --porcelain -- $(GENERATED) >&2; \
-		exit 1; \
 	else \
+		dirty=$$(git status --porcelain -- $(GENERATED)) || { \
+			printf 'generate-check: git could not inspect the generated paths.\n' >&2; \
+			printf '                failing rather than reporting OK on an inspection that did not happen.\n' >&2; \
+			exit 1; \
+		}; \
+		if [ -n "$$dirty" ]; then \
+			printf 'generate-check: committed generated code does not match the tools output.\n' >&2; \
+			printf '                run `make generate` and commit the result.\n\n' >&2; \
+			printf '%s\n' "$$dirty" >&2; \
+			exit 1; \
+		fi; \
 		printf 'generate-check: OK — %s unchanged\n' '$(GENERATED)'; \
 	fi
 
