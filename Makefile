@@ -14,7 +14,7 @@ CMD     := ./cmd/...
 BIN     := bin
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test lint generate generate-check packages purity check clean
+.PHONY: help dev prod test lint generate generate-check packages purity fog check clean
 
 ## help      list these targets
 help:
@@ -58,6 +58,10 @@ packages:
 purity:
 	./scripts/check-rules-purity.sh
 
+## fog       assert render and web have no path to the match state
+fog:
+	./scripts/check-fog-boundary.sh
+
 # Paths holding generated output. EMPTY UNTIL M3 AND M5 — templ output arrives
 # with the templates, sqlc output with the schema. Each milestone appends here.
 GENERATED :=
@@ -87,12 +91,12 @@ generate-check: generate
 # EVERY GATE ADDS ITSELF HERE. The four gates of M0 do not exist yet and are
 # deliberately absent rather than stubbed: a target that cannot run must not be
 # listed as if it had. As each lands it appends itself to this line, and its
-# issue carries that as an acceptance criterion — #10 the fog
-# boundary, #11 debug isolation, #12 gitleaks, and #8 generated-code freshness.
+# issue carries that as an acceptance criterion — #11 debug isolation and
+# #12 gitleaks remain.
 #
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
-check: packages purity lint test prod dev generate-check
+check: packages purity fog lint test prod dev generate-check
 
 ## clean     remove build output
 clean:
