@@ -40,8 +40,8 @@ Status is `open` until a document exists here.
 
 | # | Question | Status |
 |---|---|---|
-| D1 | Where does `MatchState` live relative to `PlayerView`? RFC §5 and §3 contradict each other, and the CI check cannot be written until this is settled | open |
-| D2 | Where does the order draft live between clicks? | open |
+| [D1](D01-package-layout.md) | Where does `MatchState` live relative to `PlayerView`? RFC §5 and §3 contradict each other, and the CI check cannot be written until this is settled | **decided** — leaf `internal/game`; `render` and `web` may not directly import `internal/rules` |
+| [D2](D02-order-draft-state.md) | Where does the order draft live between clicks? | **decided** — stateless, carried in the form |
 
 ### Blocks M1 — Rules core
 
