@@ -1,9 +1,11 @@
 module github.com/garnizeh/cinzal
 
 // On its own this is a FLOOR, not a pin: Go 1.27 satisfies it. A `toolchain`
-// directive would not change that - it only controls which toolchain is fetched
-// when the local one is older, and Go rejects one equal to the line below as
-// redundant.
+// directive would not change that. It names a MINIMUM toolchain to switch to,
+// so it raises the floor rather than capping it - and one equal to the line
+// below is redundant and does not survive: `go build` errors with "updates to
+// go.mod needed" until `go mod tidy` runs, and tidy deletes the line. There is
+// no directive that pins a version from inside go.mod.
 //
 // CI turns it into a pin without repeating the number: setup-go reads this line
 // via go-version-file, and GOTOOLCHAIN=local forbids switching to any other
