@@ -321,9 +321,7 @@ Undirected graph, generated procedurally per match from a recorded seed (needed 
 | **Black Market** | 20% | Where items are bought (§12). Each market shows 3 rolled items, visible to anyone with sight of it. |
 | **Alley** | 32% | No economic function. But an **Aggressive** player in an Alley gets **+1** in confrontation. Predator ground. |
 
-A 25-node map: 6 Warehouses, 6 Borders, 5 Black Markets, 8 Alleys.
-
-**Allocation rule (D9), for every node count that isn't 25.** Floor each type's exact share, then hand the remaining nodes one at a time to whichever types have the largest fractional part, breaking ties by the table order above — Warehouse, Border, Black Market, Alley:
+**Allocation rule (D9), for every supported node count.** Floor each type's exact share, then hand the remaining nodes one at a time to whichever types have the largest fractional part, breaking ties by the table order above — Warehouse, Border, Black Market, Alley. At 25 nodes every share is already an integer, so the rule assigns no remainder and reduces to the plain 6/6/5/8 split; it is not a special case, just the one row with nothing left over:
 
 | Nodes | Warehouse | Border | Black Market | Alley |
 |---|---|---|---|---|
@@ -335,7 +333,7 @@ A 25-node map: 6 Warehouses, 6 Borders, 5 Black Markets, 8 Alleys.
 | 25 | 6 | 6 | 5 | 8 |
 | 28 | 7 | 7 | 5 | 9 |
 
-The table is the readable form; the rule is the authority a new node count is computed against.
+The seven rows above are every node count currently supported (§6.1's per-player-count table, plus §19.1's scenario sizes). The table is the readable form; the rule is the authority a new supported node count is computed against.
 
 **Cut in v1.1: the warehouse supply limit.** v1.0 said each warehouse released only 2 cargo per round. With 6 warehouses, hidden positions, and contracts pointing players at different origins, three players converging on the same warehouse in the same round is close to a never-event. It was a rule that added a line to the reference card and fired approximately zero times per match. Cut. If playtesting shows warehouses genuinely contested, it comes back — but as a **Dockers' Strike** effect, which is where scarcity belongs.
 

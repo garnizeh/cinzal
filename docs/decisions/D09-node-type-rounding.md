@@ -26,7 +26,7 @@ Two things make this worse than a cosmetic gap. First, a "fix up the total after
 
 **A — Largest remainder (Hare quota), with a declared tie order.** Take the floor of each type's exact share, then hand the shortfall to whichever types have the largest fractional part, one node each, until the count matches N. Ties in fractional part broken by a fixed order.
 
-- For: one function, deterministic, extends to any node count without a new case — including the three M7 adds (12, 16, 20).
+- For: one function, deterministic, and requires no new case for any *future* supported node count — including the three M7 adds (12, 16, 20), all already covered below.
 - Against: none of substance. It's the standard fix for exactly this class of problem (apportionment with a fixed number of categories and a fixed total), and there's no monotonicity concern to weigh against it here — each match generates one map at one fixed N, not a sequence of totals that needs to stay consistent with each other the way, say, parliamentary seat apportionment does.
 
 **B — An explicit per-node-count table**, written by hand for each supported size, the way §6.2 already does for 25.
@@ -38,7 +38,7 @@ Two things make this worse than a cosmetic gap. First, a "fix up the total after
 
 **Option A.** Floor each type's exact share (`⌊shareᵢ × N⌋`); distribute the remaining `N − Σfloors` nodes one at a time to the types with the largest fractional part; break ties by GDD §6.2's own declaration order — **Warehouse, Border, Black Market, Alley** — the same "fixed, stated order rather than iteration order" fix [D3](D03-rng-consumption-table.md) already applied to card selection.
 
-The resulting counts at every node count named anywhere:
+The resulting counts at every currently supported node count (§6.1's per-player-count table plus §19.1's scenario sizes):
 
 | Nodes | Warehouse | Border | Black Market | Alley | Remainder went to |
 |---|---|---|---|---|---|
@@ -56,6 +56,8 @@ The resulting counts at every node count named anywhere:
 
 **§6.1 constraint 6 (no Warehouse adjacent to a Border) is not settled by this decision, on purpose.** This decision fixes *how many* of each type exist; whether the generator can always *place* that many Warehouses and Borders on the graph without one landing next to the other is a placement question for `rules/gen` (#59), the same shape of open item D8 left for the chokepoint/degree-budget interaction. Nothing in this table makes placement obviously infeasible — the worst case (12 nodes, 3 Warehouses, 3 Borders, 6 other nodes to separate them, max degree 4) leaves real room — but "leaves room" is not a proof, and this decision doesn't claim one.
 
+**What this decision does settle is the failure discipline, because leaving that open is a different and worse mistake than leaving placement itself open.** An unbounded reject-and-retry loop that never finds a satisfying placement is not a theoretical risk — it's exactly the shape of bug [D7](https://github.com/garnizeh/cinzal/issues/45)'s own issue warns about for a sibling generation problem: "silence here is a crash or an infinite retry loop in the generator." So: `rules/gen` **must cap placement attempts at a fixed, documented retry count and fail loudly — a returned error, not a panic, not a silent fallback to an invalid graph — if none succeeds**, matching this repository's own standing rule that a gate which cannot complete must report failure rather than pass by omission. The retry count itself is an implementation detail for #59, not this decision; the requirement that there be one, and that exhausting it is an explicit error, is not.
+
 ## Reasoning
 
 **Largest remainder over a divisor method, because there is no sequence to keep consistent.** Divisor methods (D'Hondt, Sainte-Laguë) exist mainly to avoid paradoxes that show up when a total changes over time or across related allocations — neither applies here. Each match fixes its node count once, at setup, and generates one map against it; there's no series of node counts that needs to stay mutually consistent the way, say, successive parliamentary seat counts do. Largest remainder is the simpler of two options that produce identical guarantees for this problem shape, and simpler is the right tie-breaker when both are otherwise equal.
@@ -70,6 +72,6 @@ The resulting counts at every node count named anywhere:
 
 - **GDD §6.2 gains the allocation rule and the full table** (12 through 28), replacing the single 25-node example with the general algorithm plus a parity-tested table.
 - **`rules/gen`'s node-type assignment (#60) is unblocked** — it was waiting on this the same way it was waiting on D8.
-- **A follow-up task, alongside D8's: validate that Warehouse/Border placement can always satisfy constraint 6** at the tightest allocation (12 nodes, 3 and 3). If it can't at some node count, the fix is a placement-algorithm concern (bias assignment away from adjacency, or treat it as another rejection-sampled constraint) — not a reason to revisit the counts in this table.
+- **A follow-up task, alongside D8's: validate that Warehouse/Border placement can always satisfy constraint 6** at the tightest allocation (12 nodes, 3 and 3), and implement the bounded-retry, fail-loudly discipline this decision requires regardless of the outcome. If placement can't always be found, the fix is a placement-algorithm concern (bias assignment away from adjacency, or treat it as another rejection-sampled constraint) — not a reason to revisit the counts in this table.
 - **[D7](https://github.com/garnizeh/cinzal/issues/45) can now assume a fixed Warehouse/Border count per node count** rather than a range, when it defines the contract-pool fallback.
 - Reversible at low cost while `rules/gen` is unwritten; expensive after — the same golden-replay argument D8 and D3 both carry, since node-type counts are baked into every fixed test map.
