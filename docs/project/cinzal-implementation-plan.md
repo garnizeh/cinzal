@@ -1,6 +1,6 @@
 # CINZAL — Implementation Roadmap
 
-**Status:** draft for review · **Revision:** p1 · **Companion docs:** `cinzal-gdd.md` **v2.8**, `cinzal-architecture-rfc.md` **RFC-001 r12**
+**Status:** draft for review · **Revision:** p2 · **Companion docs:** `cinzal-gdd.md` **v2.8**, `cinzal-architecture-rfc.md` **RFC-001 r12**
 
 *This document sequences the work. It does not re-decide anything the GDD or the RFC already decided — where it appears to, that is a spec gap and it is logged in §3 rather than resolved silently.*
 
@@ -16,7 +16,7 @@ Three conventions:
 - **Blocking decisions are listed before the milestone they block**, in §3. A milestone does not start with open blockers.
 - **No time estimates.** Ordering, dependencies and gates only — per the RFC's own posture that the risky unknowns are measurement problems, not scheduling problems.
 
-There are **no commits in this repository yet**. M0 starts from an empty tree.
+*Written when there were no commits in this repository. **M0 is now closed** — the package skeleton, the Makefile and all four CI gates are in, and the gates are required status checks on `main`. **M1 is open**, with D3–D14 as its blocking decisions.*
 
 ---
 
@@ -138,7 +138,9 @@ Action: complete the table **before** `Resolve` is written, and mandate the meth
 
 **D14 · Small resolution gaps** to close while writing the pipeline, each cheap alone and each a silent bug if missed: `Torched` reducing a lease to ≤ 0 (expire, and does the public expiry trace fire?); `Muscle` loss in a 3+ melee (every non-winner loses); buying an item at the hand limit of 3; `Open Doors` letting a player "buy one item at half price" without being at a market — from which market's stock?; **`Bounty`** (highest RP) has no tie-break in RFC §6.5's table, unlike `New Boss`.
 
-**D15 · Two documented cross-reference errors**, worth fixing in the source docs rather than working around: RFC §6.5's tie-break table cites a card called **"Blitz"** which does not exist in GDD §14.2 — the described behaviour (highest Infamy, hits every tied player) is **Raid**. And GDD §9.2's action table still says Stake Post is capped at "**5**", which §10.3 replaced with 4/4/4/3.
+**~~D15~~ · Two documented cross-reference errors** — *not a decision; reclassified as a task.* RFC §6.5's tie-break table cites a card called **"Blitz"** which does not exist in GDD §14.2 — the described behaviour (highest Infamy, hits every tied player) is **Raid**. And GDD §9.2's action table still says Stake Post is capped at "**5**", which §10.3 replaced with 4/4/4/3.
+
+Both are wrong sentences rather than open questions: there is nothing to weigh and no option to reject, so they produce a pull request against the source documents rather than a document in `docs/decisions/`. Listing them here alongside twelve genuine decisions was a filing mistake, kept visible because the numbering is cited elsewhere. **The twelve decisions that block M1 are D3–D14.**
 
 ### 3.3 Product surface — blocks **M5**/**M6**
 
@@ -190,7 +192,7 @@ Blocked by: **D1, D2**.
 
 **Goal:** the entire game, deterministic and headless. No database, no network, no browser.
 
-Blocked by: **D3–D15**. Blocks: everything.
+Blocked by: **D3–D14**. Blocks: everything.
 
 **Deliverables**
 - `Config` (§6.2), including `Rounds` **validation** against deck arithmetic (RFC §6.2) and the D11 suppression flags.
