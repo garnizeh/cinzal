@@ -59,7 +59,11 @@ Status is `open` until a document exists here.
 | D12 | `Decoy` is unspecified at the fog boundary | open |
 | D13 | `Blackout` and `Rain` distort the observation archive's denominator | open |
 | D14 | Small resolution gaps: `Torched` at zero lease, `Muscle` in a melee, buying at the hand limit, `Open Doors` stock, `Bounty` tie-break | open |
-| D15 | Two cross-reference errors in the source documents: the non-existent "Blitz" card, and a stale post cap of 5 | open |
+| ~~D15~~ | Two cross-reference errors in the source documents: the non-existent "Blitz" card, and a stale post cap of 5 | **not a decision** — reclassified as a task, [#40](https://github.com/garnizeh/cinzal/issues/40) |
+
+**On D15.** It arrived in [roadmap §3.2](../project/cinzal-implementation-plan.md) alongside twelve genuine decisions and it is not one of them. RFC §6.5 cites a card called "Blitz" that GDD §14.2 does not contain — the card with that behaviour is **Raid** — and GDD §9.2 still caps Stake Post at 5, which §10.3 replaced with 4/4/4/3. There is no question to answer and no option to weigh: both are wrong sentences, so they produce a pull request against the specs rather than a document here.
+
+The row stays, struck through, because the numbering is cited elsewhere and a silently vanished D15 reads as an oversight. **D3–D14 are the twelve decisions that block M1.**
 
 ### Blocks M5 — Playable web, and M6 — Async
 
