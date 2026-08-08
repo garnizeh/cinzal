@@ -50,7 +50,7 @@ Status is `open` until a document exists here.
 | [D3](D03-rng-consumption-table.md) | The RNG consumption table is incomplete — at least eight consumers implied by the card text are missing from RFC §6.4 | **decided** — nine of ten gaps closed with a mandated method each; Riot's index cost is reserved, pending [D4](https://github.com/garnizeh/cinzal/issues/42) |
 | D4 | `Riot` has no specification, and it has a fog dimension | open |
 | D5 | Phase 8 (Upkeep) is never enumerated in either document | open |
-| [D6](D06-contract-tier-mix.md) | The contract offer has no tier distribution | **decided** — one slot guarantees the highest eligible tier; the other two are a weighted draw over eligible tiers, default uniform |
+| [D6](D06-contract-tier-mix.md) | The contract offer has no tier distribution | **decided** — one slot targets the highest eligible tier (subject to D7's fallback if that pool is empty); the other two are a weighted draw over eligible tiers, default uniform |
 | [D7](D07-contract-pool-fallback.md) | Contract generation can produce an empty or short pool mid-match | **decided** — drop to a lower tier, then offer fewer than three; hold the offer (cooldown not restarted) when the whole pool is empty |
 | [D8](D08-sector-size-constraint.md) | The sector size constraint is arithmetically impossible at 15, 16 and 12 nodes | **decided** — per-sector minimum lowered from 4 to 3 nodes; sector count stays four everywhere |
 | [D9](D09-node-type-rounding.md) | Node type shares do not divide at 15, 22 and 28 nodes, and no rounding rule is stated | **decided** — largest remainder, ties broken by §6.2's declaration order |
