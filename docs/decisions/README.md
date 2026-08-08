@@ -47,7 +47,7 @@ Status is `open` until a document exists here.
 
 | # | Question | Status |
 |---|---|---|
-| D3 | The RNG consumption table is incomplete — at least eight consumers implied by the card text are missing from RFC §6.4 | open |
+| [D3](D03-rng-consumption-table.md) | The RNG consumption table is incomplete — at least eight consumers implied by the card text are missing from RFC §6.4 | **decided** — ten of eleven gaps closed with a mandated method each; Riot's index cost is reserved, pending [D4](https://github.com/garnizeh/cinzal/issues/42) |
 | D4 | `Riot` has no specification, and it has a fog dimension | open |
 | D5 | Phase 8 (Upkeep) is never enumerated in either document | open |
 | D6 | The contract offer has no tier distribution | open |
