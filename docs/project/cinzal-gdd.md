@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.11 (scope-locked for prototype)
+## Game Design Document — v2.12 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -135,6 +135,9 @@
 >
 > **Changelog v2.10 → v2.11** — the node-type shares had no rounding rule (D9)
 > - **§6.2 gave one worked example (25 nodes) and no rule for anywhere else.** Naive per-type rounding doesn't even conserve the node count at 15, 22 or 28. Added the largest-remainder allocation rule (floor each share, hand remainders to the largest fractional part, ties broken by the table's own declaration order) plus the full table for every named node count, 12 through 28 — full reasoning in [D9](../decisions/D09-node-type-rounding.md).
+>
+> **Changelog v2.11 → v2.12** — the contract pool can run dry mid-match (D7)
+> - **§8.1's opening-offer guarantee (constraint 7) only covers setup.** A player who explores little, or a `Bridge Down` that severs the last path to a Known Warehouse, can leave a later offer with fewer than three valid contracts, or none. Added a fallback ladder to §8.1 — drop to the next-lower tier's band, never a higher one, never by widening a band or relaxing the Known-origin rule; a slot still empty at Tier I is dropped, not filled invalidly. **§8.2's held-offer rule now also covers a completely empty pool**, not just a full 2-contract slot, on the same terms: the cooldown does not restart, and the offer arrives the moment any pair becomes valid. Full reasoning in [D7](../decisions/D07-contract-pool-fallback.md).
 
 ---
 
@@ -514,6 +517,10 @@ Constraint 7 (§6) then guarantees a **Known** Warehouse to originate from — g
 
 Exploration keeps its return, too — a wider Known map means more origins available, which means more and better offers.
 
+**Fallback when the pool is short (D7).** Constraint 7 guarantees a valid opening offer; nothing guarantees one later — a player who explores little Knows few Warehouses, and `Bridge Down` can push a pair permanently out of range. If a slot's target tier has fewer than one valid (origin, destination) pair, the generator drops to the next-lower tier's distance band and tries again — **never** to a higher tier, and never by widening a band or relaxing the Known-origin rule — repeating down to Tier I. A slot still empty after Tier I is dropped rather than filled with an invalid contract: an offer of one or two contracts is honest, and declining an offer entirely is already a documented outcome. The offer names the reason ("fewer contracts than usual") rather than staying silent — you already know your own fog, so nothing is disclosed that you couldn't already work out. See §8.2 for what happens when the pool empties out completely.
+
+*(The fallback is a fixed, bounded cascade — target tier, then each lower tier in turn, at most three slots × four tiers — never a loop that redraws until three are found.)*
+
 ### 8.2 Contact Cooldown
 
 Your fixer doesn't take everyone's calls at the same rate. The more your name is worth, the faster the work comes back around.
@@ -528,6 +535,8 @@ Your fixer doesn't take everyone's calls at the same rate. The more your name is
 The cooldown starts the round you accept or decline an offer. It is **always displayed** — the player sees "Next offer: round 9" on the HUD at all times, never a surprise.
 
 If you're at 2 active contracts when the cooldown elapses, the offer is **held and delivered at the next offer phase in which you have a free slot**. The cooldown does not restart while an offer is held — the moment a slot opens, the offer is waiting.
+
+**The same hold applies when the pool itself is empty (D7)** — every eligible tier's fallback cascade (§8.1) coming up with nothing. This can only happen if every Warehouse you Know is presently unreachable from every Border on the navigable graph, most likely a `Bridge Down` that severed the last path. The cooldown does not restart; the offer is delivered, at whatever size the pool then supports, the moment any pair becomes valid again. A held-for-full-slots offer and a held-for-empty-pool offer compose — the round waits on both conditions clearing.
 
 *(Read literally, "the moment a slot frees" would mean an offer arriving mid-resolution — after a delivery in Phase 5, say. That cannot work: orders for the round are already submitted, so an offer you cannot act on is not an offer, and generating one would mean drawing cards against a slot count the engine has no way to know at Phase 2. Offers are evaluated once per round, at Phase 2, against the state at the close of the previous round.)*
 
