@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.9 (scope-locked for prototype)
+## Game Design Document — v2.10 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -129,6 +129,9 @@
 >
 > **Changelog v2.8 → v2.9** — a stale cross-reference (D15)
 > - **§9.2's Stake Post row restated a flat cap of 5.** The player-count-scaled cap in §10.3 has existed since v1.1 (5/4/4/3), and v2.2 corrected the two-player value to 4 — §9.2 never picked up either change. The row now points at §10.3 instead of quoting a number, so the two sections cannot drift apart again.
+>
+> **Changelog v2.9 → v2.10** — the sector-size floor didn't fit three named maps (D8)
+> - **§6.1 constraint 3's 4–8-nodes-per-sector floor needed 16 nodes minimum**, which the 15-node two-player map and the 12- and 16-node §19.1 scenario maps all fall short of or barely meet. Lowered to **3–8**, which every named node count now satisfies with four sectors, unconditionally. Sector count, the Unstable Sector mechanic, and sector-majority scoring are all unchanged — full reasoning in [D8](../decisions/D08-sector-size-constraint.md).
 
 ---
 
@@ -300,7 +303,7 @@ Undirected graph, generated procedurally per match from a recorded seed (needed 
 **Generation constraints.** The generator rejects and retries until all hold:
 1. The graph is connected.
 2. Minimum degree 2, maximum degree 4. No dead ends (frustrating), no super-hubs (dominant).
-3. Each sector holds 4–8 nodes and is internally connected.
+3. Each sector holds 3–8 nodes and is internally connected.
 4. Between any two adjacent sectors there are **at least 3 and at most 5 edges**. These are the **chokepoints** — where ambushes happen and where a post is worth its lease.
 5. Minimum graph distance of 4 between any two starting positions.
 6. No Warehouse is adjacent to a Border. Every delivery costs at least 3 steps.
