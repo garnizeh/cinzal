@@ -14,7 +14,7 @@ A match runs 15 rounds — roughly 30–35 minutes — and **the number of playe
 
 | Document | What it is | Authority |
 |---|---|---|
-| [`docs/project/cinzal-gdd.md`](docs/project/cinzal-gdd.md) | Game Design Document, v2.9 | Authoritative on **rules** |
+| [`docs/project/cinzal-gdd.md`](docs/project/cinzal-gdd.md) | Game Design Document, v2.10 | Authoritative on **rules** |
 | [`docs/project/cinzal-architecture-rfc.md`](docs/project/cinzal-architecture-rfc.md) | Architecture RFC-001, r13 | Authoritative on **architecture** |
 | [`docs/project/cinzal-implementation-plan.md`](docs/project/cinzal-implementation-plan.md) | Implementation roadmap, p1 | Sequencing, exit criteria, open decisions |
 

@@ -52,7 +52,7 @@ Status is `open` until a document exists here.
 | D5 | Phase 8 (Upkeep) is never enumerated in either document | open |
 | D6 | The contract offer has no tier distribution | open |
 | D7 | Contract generation can produce an empty or short pool mid-match | open |
-| D8 | The sector size constraint is arithmetically impossible at 15, 16 and 12 nodes | open |
+| [D8](D08-sector-size-constraint.md) | The sector size constraint is arithmetically impossible at 15, 16 and 12 nodes | **decided** — per-sector minimum lowered from 4 to 3 nodes; sector count stays four everywhere |
 | D9 | Node type shares do not divide at 15, 22 and 28 nodes, and no rounding rule is stated | open |
 | D10 | Map generation produces no 2D layout, which the projection and the SVG both need | open |
 | D11 | `Config` has no subsystem-suppression flags, which solo scenarios require | open |
