@@ -138,7 +138,7 @@ make packages  # assert the package graph matches scripts/packages.txt
 
 **Go 1.26.5.** RFC §4 names it and §6.3 explains why the project cares: the design is staked on `seed + order log` reproducing a match exactly, and *"which Go built it"* should never be a candidate explanation for a determinism mismatch. Note that `go.mod` can only express a **floor** — no directive pins a version from inside it — so the exact version is enforced in CI.
 
-`golangci-lint` for `make lint`. `templ` and `sqlc` for `make generate`; both are no-ops until M5 and M3 respectively, so you can skip them until then. Postgres 16 arrives with M3.
+`golangci-lint` for `make lint`. `gitleaks` for `make secrets`. `templ` and `sqlc` for `make generate`; both are no-ops until M5 and M3 respectively, so you can skip them until then. Postgres 16 arrives with M3.
 
 No Node, no frontend build step, and no Docker for the rules engine — `internal/rules` is pure and its tests do no I/O at all.
 
@@ -153,9 +153,11 @@ Four checks make the architecture real rather than conventional. They are not st
 | **Rules purity** | `internal/rules` imports nothing that does I/O, tells time, or generates randomness |
 | **Fog boundary** | The rendering and web layers cannot name the full match state |
 | **Debug isolation** | The production binary contains no debug routes |
-| **Secret scan** | No credentials or connection strings in the diff |
+| **Secret scan** | No credentials or connection strings in the tree, or in the commits this change adds |
 
 If one of these blocks you, the answer is almost never to weaken the gate.
+
+The secret scan reads history as well as the tree, because a credential added in one commit and deleted in the next is absent from the tree and present in the history forever. It is scoped to the commits your branch adds: a credential somewhere else in the repository is not your pull request's problem, and making it one was a real defect ([#37](https://github.com/garnizeh/cinzal/issues/37)). Locally, `make secrets` scopes itself the same way, to `origin/main..HEAD`.
 
 ## Reporting a bug in a match
 

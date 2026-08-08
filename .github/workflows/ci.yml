@@ -44,7 +44,12 @@ jobs:
         with:
           # The secret scan reads history, not just the working tree: a
           # credential committed and later removed is still leaked. The default
-          # shallow clone would hide exactly those commits.
+          # shallow clone would hide exactly those commits, and the base of the
+          # range computed below would not resolve.
+          #
+          # This fetches every branch, which is why the history scan is scoped
+          # to a commit range rather than left to scan every ref it can see
+          # (#37). The depth stays; the scope is what was wrong.
           fetch-depth: 0
           # The steps below run repository-controlled code - Makefile targets,
           # module downloads, three third-party tools. Without this, checkout
@@ -92,6 +97,64 @@ jobs:
           tar -xz -C "$(go env GOPATH)/bin" -f "$archive" gitleaks
           rm -f "$archive"
           gitleaks version
+
+      # The secret scan asks whether THE CHANGE adds a credential, not whether
+      # the repository contains one anywhere (#37). Only this workflow knows
+      # what "the change" is, so it computes the range and the gate consumes it;
+      # the gate itself decides what to do with one that does not resolve.
+      #
+      # The shas arrive as environment variables rather than inline ${{ }}
+      # expansions: an expansion is pasted into the script before bash sees it,
+      # so a value containing shell syntax would be executed rather than read.
+      - name: Determine the commits this change adds
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          PUSH_BEFORE: ${{ github.event.before }}
+          PUSH_AFTER: ${{ github.event.after }}
+        run: |
+          set -euo pipefail
+          resolves() { git rev-parse --verify --quiet "$1^{commit}" >/dev/null 2>&1; }
+
+          case "$EVENT_NAME" in
+            pull_request)
+              for sha in "$PR_BASE_SHA" "$PR_HEAD_SHA"; do
+                resolves "$sha" || {
+                  echo "::error::$sha is not in this clone — checkout must fetch"
+                  echo "::error::enough history for the base..head range to resolve."
+                  exit 1
+                }
+              done
+              range="$PR_BASE_SHA..$PR_HEAD_SHA"
+              ;;
+            push)
+              resolves "$PUSH_AFTER" || {
+                echo "::error::the pushed commit $PUSH_AFTER is not in this clone"
+                exit 1
+              }
+              if resolves "$PUSH_BEFORE"; then
+                range="$PUSH_BEFORE..$PUSH_AFTER"
+              else
+                # A branch that did not exist before, or one that was force-
+                # pushed: "before" is either all zeros or a commit no longer
+                # reachable. There is no honest range, so the whole history of
+                # the pushed commit is scanned. Over-scanning, never under.
+                echo "::notice::$PUSH_BEFORE does not resolve — scanning the full history of $PUSH_AFTER"
+                range="$PUSH_AFTER"
+              fi
+              ;;
+            *)
+              # Deliberately not a fallback. A new trigger added to this
+              # workflow must decide what "the change" means for it, rather
+              # than inheriting a guess from here.
+              echo "::error::no commit range defined for the $EVENT_NAME event"
+              exit 1
+              ;;
+          esac
+
+          echo "CINZAL_SECRETS_RANGE=$range" >> "$GITHUB_ENV"
+          echo "secret scan scoped to $range"
 
       # One definition, two callers: the Makefile is the definition and this
       # workflow is a caller, so `make check` reproduces a CI failure locally.
