@@ -4,16 +4,22 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-**Milestone M0 is in progress: the package skeleton exists, nothing is implemented.** Every `internal/` package is a `doc.go` and no more.
+**M0 is closed. M1 — Rules core is open, and nothing is implemented yet.** Every `internal/` package is a `doc.go` and no more.
 
 ```text
 docs/project/cinzal-gdd.md                  — Game Design Document (v2.8)
 docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r12)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
-docs/decisions/                             — Decision log; D1 and D2 are decided, D3–D22 are open
+docs/decisions/                             — Decision log; D1 and D2 are decided, D3–D14 and D16–D22 are open
 ```
 
-`go.mod`, the `Makefile` and `scripts/check-packages.sh` exist. The four CI gates do **not** yet — they are issues #9 through #12, and until #13 lands nothing is a required status check. Run `make check` before pushing; it runs what CI will run.
+D15 is **not** a decision — it is two factual errors in the source documents, tracked as a task. The log's catalogue says so.
+
+**M1 does not start with its blockers open.** D3–D14 are twelve written decisions that gate specific M1 tasks, and each is an issue with the tradeoffs already laid out. A task whose blocking decision is still open is not ready to write, however obvious the answer looks at the time. Roadmap §3 is the source: *"none should be resolved by whoever hits it first at 2am."*
+
+`go.mod`, the `Makefile` and `scripts/check-packages.sh` exist, and **all four CI gates are live and required on `main`** — purity, fog boundary, debug isolation, and the gitleaks secret scan. Run `make check` before pushing; it runs what CI runs.
+
+One caveat carried out of M0: `make generate-check` currently reports **VACUOUS, not passing** — there are no generated paths declared until M3 and M5. Do not read it as a green check.
 
 The package layout is fixed by [D01](docs/decisions/D01-package-layout.md) and is not negotiable by convenience:
 
