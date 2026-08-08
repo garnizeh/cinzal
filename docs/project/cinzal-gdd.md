@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.10 (scope-locked for prototype)
+## Game Design Document — v2.11 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -132,6 +132,9 @@
 >
 > **Changelog v2.9 → v2.10** — the sector-size floor didn't fit three named maps (D8)
 > - **§6.1 constraint 3's 4–8-nodes-per-sector floor needed 16 nodes minimum**, which the 15-node two-player map and the 12- and 16-node §19.1 scenario maps all fall short of or barely meet. Lowered to **3–8**, which every named node count now satisfies with four sectors, unconditionally. Sector count, the Unstable Sector mechanic, and sector-majority scoring are all unchanged — full reasoning in [D8](../decisions/D08-sector-size-constraint.md).
+>
+> **Changelog v2.10 → v2.11** — the node-type shares had no rounding rule (D9)
+> - **§6.2 gave one worked example (25 nodes) and no rule for anywhere else.** Naive per-type rounding doesn't even conserve the node count at 15, 22 or 28. Added the largest-remainder allocation rule (floor each share, hand remainders to the largest fractional part, ties broken by the table's own declaration order) plus the full table for every named node count, 12 through 28 — full reasoning in [D9](../decisions/D09-node-type-rounding.md).
 
 ---
 
@@ -318,7 +321,19 @@ Undirected graph, generated procedurally per match from a recorded seed (needed 
 | **Black Market** | 20% | Where items are bought (§12). Each market shows 3 rolled items, visible to anyone with sight of it. |
 | **Alley** | 32% | No economic function. But an **Aggressive** player in an Alley gets **+1** in confrontation. Predator ground. |
 
-A 25-node map: 6 Warehouses, 6 Borders, 5 Black Markets, 8 Alleys.
+**Allocation rule (D9), for every supported node count.** Floor each type's exact share, then hand the remaining nodes one at a time to whichever types have the largest fractional part, breaking ties by the table order above — Warehouse, Border, Black Market, Alley. At 25 nodes every share is already an integer, so the rule assigns no remainder and reduces to the plain 6/6/5/8 split; it is not a special case, just the one row with nothing left over:
+
+| Nodes | Warehouse | Border | Black Market | Alley |
+|---|---|---|---|---|
+| 12 | 3 | 3 | 2 | 4 |
+| 15 | 4 | 3 | 3 | 5 |
+| 16 | 4 | 4 | 3 | 5 |
+| 20 | 5 | 5 | 4 | 6 |
+| 22 | 5 | 5 | 5 | 7 |
+| 25 | 6 | 6 | 5 | 8 |
+| 28 | 7 | 7 | 5 | 9 |
+
+The seven rows above are every node count currently supported (§6.1's per-player-count table, plus §19.1's scenario sizes). The table is the readable form; the rule is the authority a new supported node count is computed against.
 
 **Cut in v1.1: the warehouse supply limit.** v1.0 said each warehouse released only 2 cargo per round. With 6 warehouses, hidden positions, and contracts pointing players at different origins, three players converging on the same warehouse in the same round is close to a never-event. It was a rule that added a line to the reference card and fired approximately zero times per match. Cut. If playtesting shows warehouses genuinely contested, it comes back — but as a **Dockers' Strike** effect, which is where scarcity belongs.
 
