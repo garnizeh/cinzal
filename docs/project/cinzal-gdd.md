@@ -128,7 +128,7 @@
 > - **Abandoning cargo was missing from the field table** in §9. It was described in prose and carried in the order, but a reader building from the table would have shipped without it.
 >
 > **Changelog v2.8 → v2.9** — a stale cross-reference (D15)
-> - **§9.2's Stake Post row restated a flat cap of 5**, which v2.2 replaced with the player-count-scaled cap in §10.3 (4/4/4/3). The row now points at §10.3 instead of quoting a number, so the two sections cannot drift apart again.
+> - **§9.2's Stake Post row restated a flat cap of 5.** The player-count-scaled cap in §10.3 has existed since v1.1 (5/4/4/3), and v2.2 corrected the two-player value to 4 — §9.2 never picked up either change. The row now points at §10.3 instead of quoting a number, so the two sections cannot drift apart again.
 
 ---
 
