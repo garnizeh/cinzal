@@ -76,7 +76,9 @@
 > - Companion pointer moved to GDD v2.14.
 >
 > **Changelog r14 → r15** — `upkeep()` had no body (D5)
-> - **§6.7 ended the pipeline with a bare function name.** Expanded into its five ordered steps, and the ordering is now stated as a requirement rather than left to whoever writes it: the `Flagged`/`EvasiveStepPenalty` clear must run before the contract-deadline Debt cascade that can set `Flagged` fresh, and that cascade must run before the lease decrement it depends on reading pre-mutation. Lease removal reuses the existing row 4 anchor (§9.1) regardless of cause — natural expiry and a Debt-driven surrender must be byte-identical on the wire, or which lease died discloses that a player is in debt. Everything else `upkeep()` touches is private to the acting seat, since none of it has a row in §9.1's table. Two counters the issue's draft list assumed lived here do not: `LastOfferRound` needs no mutation (§6.6 already describes it as read-only-by-difference), and `LooseCrateHeldRounds` ticks inside `writeTrail`, three steps earlier in the same pipeline. Full reasoning, iteration order, and both worked examples in [D5](../decisions/D05-upkeep-phase.md).
+> - **§6.7 ended the pipeline with a bare function name.** Expanded into its four ordered steps, and the one real ordering constraint is now stated as a requirement rather than left to whoever writes it: the contract-deadline Debt cascade must run before the lease decrement it depends on reading pre-mutation, or Debt can end up surrendering a healthier lease than "fewest rounds remaining" calls for. Lease removal reuses the existing row 4 anchor (§9.1) regardless of cause — natural expiry and a Debt-driven surrender must be byte-identical on the wire, or which lease died discloses that a player is in debt. Everything else `upkeep()` touches is private to the acting seat, since none of it has a row in §9.1's table.
+> - **`Flagged` and `EvasiveStepPenalty` moved out of `upkeep()` entirely, into §6.6's entry-snapshot mechanism**, alongside the Ledger and the step-allowance formula's Infamy read. A first-draft version of this decision cleared both as an Upkeep step and got caught on review: either field can be set fresh from more than one place in the same round (an ordinary Debt trigger during resolution, an Evasive loss, or the contract cascade above), and any Upkeep-phase clear runs after all of resolution, so it cannot distinguish a value the round already consumed from one just written for the next round. Consuming both from the frozen snapshot — the same one the step-allowance formula already reads — and resetting the live copy in that same top-of-`Resolve` step, before anything in the round can write to it, is the only position immune to that.
+> - Two more counters the issue's draft list assumed lived in `upkeep()` do not: `LastOfferRound` needs no mutation (§6.6 already describes it as read-only-by-difference), and `LooseCrateHeldRounds` ticks inside `writeTrail`, three steps earlier in the same pipeline. Full reasoning, iteration order, and both worked examples in [D5](../decisions/D05-upkeep-phase.md).
 > - Companion pointer moved to GDD v2.15.
 
 ---
@@ -379,8 +381,8 @@ The row that will bite is Raid. It looks like it needs a tie-break and it does n
 | `LastEndNode` | Loitering's 1-step radius test (GDD §9.1) | previous round |
 | `LoiteringStreak` | Loitering escalation: silent → trace at 2 → global at 3+ | until broken |
 | `LooseCrateHeldRounds` | Loose crate heat announcement at 2+ (GDD §8.4) | while carried |
-| `Flagged` | −1 step from Debt (GDD §13) — boolean, never stacks | next round only |
-| `EvasiveStepPenalty` | −1 step after an Evasive loss (GDD §15) | next round only |
+| `Flagged` | −1 step from Debt (GDD §13) — boolean, never stacks | next round only, consumed from the entry snapshot below, not cleared by `upkeep()` |
+| `EvasiveStepPenalty` | −1 step after an Evasive loss (GDD §15) | next round only, consumed from the entry snapshot below, not cleared by `upkeep()` |
 | `LastOfferRound` | Contact Cooldown countdown (GDD §8.2) | until next offer |
 | `DeadlinePauseUsed` | once-per-**contract**, so it lives on the contract instance, not the seat (GDD §8.4) | contract lifetime |
 | `ConsecutiveDefaults` | Autopilot (§8.2) | until a real submission |
@@ -405,6 +407,8 @@ That snapshot has **three** consumers, which is the argument for naming it expli
 | **Legend order-phase broadcast** | GDD §11.1 evaluates it as the order phase opens — which is this state |
 
 The step-allowance row is the one with teeth. Without freezing, a +2 Infamy from an early confrontation could push a player from Known to Feared mid-resolution, cutting them from 4 steps to 3 halfway through a route they had already committed to.
+
+**`Flagged` and `EvasiveStepPenalty` (table above) are consumers of this same snapshot, not separately-cleared state.** Both are step-allowance inputs (§9.1a), so they're read from `entry` exactly like the Infamy tier base — and the **live** copy is reset to `false` in the same top-of-`Resolve` step that takes the snapshot, before any resolution step (including a same-round Debt trigger or Evasive loss) can write to it. [D5](../decisions/D05-upkeep-phase.md) found this the hard way: an Upkeep-phase clear, at any position in the phase, can't distinguish "the value this round already used" from "a value this round just wrote for next round," because both can be true of the same field by the time Upkeep runs. Clearing at snapshot time — before either write is possible — is the only position immune to that.
 
 Two further implementation notes that are easy to get wrong:
 
@@ -439,11 +443,10 @@ writeTrail()                  → Loitering evaluation (AFTER actions, §6.6),
 globalEvent() · incident() · pressure()
   ↓
 upkeep()                      → fixed order, load-bearing (D5, GDD "Upkeep" in §15):
-                                1. clear Flagged, EvasiveStepPenalty     (this round's values)
-                                2. contract deadlines → penalty, discard, Debt cascade
-                                3. lease decrement    → expire at zero, anchor row 4 (§9.1)
-                                4. Sinkhole decrement  → clear at zero, no anchor
-                                5. next-round modifier clear (Streets Blocked, Distracted
+                                1. contract deadlines → penalty, discard, Debt cascade
+                                2. lease decrement    → expire at zero, anchor row 4 (§9.1)
+                                3. Sinkhole decrement  → clear at zero, no anchor
+                                4. next-round modifier clear (Streets Blocked, Distracted
                                    Guard, Scaffolding, Retainer, Dockers' Strike, Blackout)
 ```
 
@@ -451,7 +454,7 @@ Every step emits `Event` values. Events are the substrate for the trail, the rec
 
 **The collision check runs at least once per round** even when every route is empty, which is the boundary case GDD §15 calls out for a table where nobody moves.
 
-**`upkeep()`'s five steps carry no fairness dimension** — a lease decrement confers no advantage by iteration position — so they take the §6.5 default: seat index across seats, a contract's assigned ID across a seat's own two slots, `NodeID` across map-scoped state (leases, Sinkholes). Only steps 1→2→3 have a real ordering constraint; steps 4 and 5 have none relative to the others and are fixed here purely so the sequence stays single-valued. Full derivation of the constrained pair in [D5](../decisions/D05-upkeep-phase.md).
+**`upkeep()`'s four steps carry no fairness dimension** — a lease decrement confers no advantage by iteration position — so they take the §6.5 default: seat index across seats, a contract's assigned ID across a seat's own two slots, `NodeID` across map-scoped state (leases, Sinkholes). Only steps 1→2 have a real ordering constraint; steps 3 and 4 have none relative to the others and are fixed here purely so the sequence stays single-valued. `Flagged` and `EvasiveStepPenalty` are deliberately absent from this list — see §6.6. Full derivation in [D5](../decisions/D05-upkeep-phase.md).
 
 ---
 

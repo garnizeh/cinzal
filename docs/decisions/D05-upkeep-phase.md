@@ -20,19 +20,18 @@ The issue assembled a best-reading list from the rules that need a per-round dec
 **A — The issue's own proposed table, taken as written.** Roughly GDD declaration order: decrement leases, decrement contracts, advance the Contact Cooldown, clear `Flagged`/`EvasiveStepPenalty`, decrement `Sinkhole`, tick `LooseCrateHeldRounds`, clear next-round modifiers.
 
 - For: matches the order the rules appear in the GDD; looks like a straight transcription.
-- Against: breaks in two independent, GDD-contradicting ways once traced through with concrete numbers (worked below), and two of its eight rows don't belong in Upkeep at all — RFC §6.7 already places one of them (crate heat) in an earlier pipeline step, and the other (Contact Cooldown) turns out to need no per-round mutation whatsoever.
+- Against: breaks in two independent, GDD-contradicting ways once traced through with concrete numbers (worked below), and four of its eight rows don't belong in Upkeep at all — RFC §6.7 already places one of them (crate heat) in an earlier pipeline step, one (Contact Cooldown) needs no per-round mutation whatsoever, and two (the `Flagged`/`EvasiveStepPenalty` clears) belong to the entry-snapshot mechanism instead, for the reason the second failure case below makes concrete.
 
-**B — Order by dependency, not by declaration; clear flags before anything that can re-set them.** This decision's answer, detailed below.
+**B — Order by dependency, not by declaration; stop treating `Flagged`/`EvasiveStepPenalty` as an Upkeep step at all.** This decision's answer, detailed below.
 
-- For: both failure cases in A resolve correctly, verified against GDD's own worked text (§13's "a fresh debt while already Flagged simply refreshes it for the following round" only holds under this ordering).
-- Against: the order isn't self-evident from reading the specs top to bottom — it has to be derived, the same cost [D9](D09-node-type-rounding.md) paid to get its rounding rule right.
+- For: both failure cases in A resolve correctly, verified against GDD's own worked text (§13's "a fresh debt while already Flagged simply refreshes it for the following round" only holds under this fix) — and it holds regardless of *where in the round* a fresh flag gets written, not only for the case inside Upkeep itself.
+- Against: the order isn't self-evident from reading the specs top to bottom — it has to be derived, the same cost [D9](D09-node-type-rounding.md) paid to get its rounding rule right. And it means one of the issue's eight proposed rows isn't an Upkeep row under any ordering, which is a bigger correction than reordering.
 
 ## Decision
 
 **Option B.** Upkeep runs once per round, after Phase 7, for every round including round 15, in this fixed sequence:
 
 ```text
-0. Clear Flagged and EvasiveStepPenalty          — the value each seat entered this round with
 1. Contract deadlines                            — decrement; on expiry: fire penalty, discard
                                                     the contract, drop any cargo held for it,
                                                     cascade through Debt (§13) if unpayable
@@ -47,10 +46,13 @@ The issue assembled a best-reading list from the rules that need a per-round dec
                                                     Blackout: clear whichever fired for this round
 ```
 
-Two rows the issue proposed **do not belong in Upkeep**, and are removed rather than reordered:
+Three rows the issue proposed **do not belong in Upkeep**, and are removed rather than reordered:
 
 - **Contact Cooldown needs no Upkeep step.** `LastOfferRound` (RFC §6.6) is written once, when an offer resolves at Phase 2/5, and read at the next Phase 2 as `round − LastOfferRound ≥ cooldown`. There is no stored countdown to decrement — the round counter advancing (which happens in `Tick`, not `upkeep`) does the "advancing" for free. Giving Upkeep a step here would mean writing a mutation whose only effect is to be immediately correct already.
 - **`LooseCrateHeldRounds` ticks in `writeTrail`, not Upkeep.** RFC §6.7's pipeline names it explicitly: `writeTrail() → Loitering evaluation …, crate heat, per-node logs, …`. That has to be where it lives — the 2-consecutive-round threshold is evaluated against *this round's* trail entries, and `writeTrail` is where those get generated, three phases before Upkeep runs. Placing the tick in Upkeep would double-count or skip a round depending on exactly how the off-by-one landed.
+- **`Flagged` and `EvasiveStepPenalty` are not cleared by Upkeep at all — they are consumed by the same entry-snapshot mechanism RFC §6.6 already defines for the Ledger and the step-allowance formula.** `Resolve` freezes `entry := s.Snapshot()` at the top of the call, before any resolution step runs; §9.1a's step formula already reads `Flagged` and the Evasive penalty from that frozen state, exactly like it reads Infamy for the tier base. The **live** copy — the one carried into the round's output state — is reset to `false` for both fields in that same top-of-`Resolve` step, before Phase 5 or Phase 8 run. This one change is a correction to this decision's own first draft, not just to the issue's: an Upkeep-phase "clear" step, wherever it sits in Upkeep's order, is *too late* to be correct — see Reasoning.
+
+**Where a fresh flag can come from.** Both fields get set by events that happen *inside* the round whose Upkeep would otherwise be tempted to clear them: `EvasiveStepPenalty` by an Evasive loss in Phase 5's `resolveConfrontations`, and `Flagged` by any Debt trigger — a stake, a gate fee, or a lease renewal that can't be covered in Phase 5's `resolveActions`/`resolveAddons`, *or* the contract-deadline cascade in this phase's own step 1. All of these have to survive into the following round untouched. Freezing the clear at the top of `Resolve`, before any of them can fire, is what makes that true regardless of which one actually fires.
 
 **Iteration order**, per RFC §6.5's default (no positional advantage, no RNG involved — plain seat index):
 
@@ -61,7 +63,7 @@ Two rows the issue proposed **do not belong in Upkeep**, and are removed rather 
 **Event emission.** Every step above emits an `Event` — Upkeep is not exempted from the "one representation, six consumers" rule (RFC §6.7). Visibility is decided the same way it always is, per-row:
 
 - **Lease removal is the one row already in the eleven-writer table** (RFC §9.1, row 4: "Lease expired — Global"). It fires identically whether the lease hit zero on its own or was surrendered through step 1's Debt cascade — see Reasoning for why the two causes must **not** be distinguishable.
-- **Everything else is private** to the affected seat's own `SelfState`/recap history — the contract-deadline miss and its penalty, the `Flagged`/`EvasiveStepPenalty` clears, the Sinkhole clear, the next-round-modifier clears. None of them has a row in RFC §9.1's table, and `OpponentView` carries no contract information at all, so there is no channel through which any of these could reach another seat without adding a twelfth writer this decision doesn't authorise.
+- **Everything else is private** to the affected seat's own `SelfState`/recap history — the contract-deadline miss and its penalty, the Sinkhole clear, the next-round-modifier clears. None of them has a row in RFC §9.1's table, and `OpponentView` carries no contract information at all, so there is no channel through which any of these could reach another seat without adding a twelfth writer this decision doesn't authorise. (`Flagged`/`EvasiveStepPenalty` no longer belong to this list at all — see below.)
 
 **Suppression ([D11](README.md), open).** No step above needs a branch. Each operates by iterating state that already exists — held leases, active contracts, active Sinkholes, active next-round modifiers. When [D11](README.md) disables a subsystem, no such state is ever created (no Stake Post action, no incident cards drawn), so the corresponding step iterates zero items and is a no-op as a consequence of empty input, not of a suppression check written into Upkeep. This matches [D11](README.md)'s own framing, quoted in the roadmap: flags belong in `Config`, "not as branches in `rules`." Flagged as consistent with the eventual D11 resolution, not resolved by it — the same posture [D9](D09-node-type-rounding.md) took toward placement feasibility.
 
@@ -78,12 +80,23 @@ Two rows the issue proposed **do not belong in Upkeep**, and are removed rather 
 
 The GDD's own wording drives the fix: "fewest rounds remaining" is a claim about a value, and Option A lets that value already be mutated (via a different rule, in the same phase) before Debt gets to read it. Reading it before any of Upkeep's own decrements touch it is the only way "fewest remaining" means what a player watching the HUD would expect it to mean.
 
-**Worked example — why `Flagged`/`EvasiveStepPenalty` must clear *before* the contract cascade, not after.** A player is already `Flagged` entering round 7 (set by a debt event last round; round 7's step formula already applied the −1). During round 7's own Upkeep, that same player's contract deadline expires and they again can't cover the penalty — Debt fires again, and per GDD §13, *"a fresh debt while already Flagged simply refreshes it for the following round."*
+**Worked example — why `Flagged`/`EvasiveStepPenalty` can't be cleared by an Upkeep step, in any position.** A player is already `Flagged` entering round 7 (set by a debt event last round; round 7's step formula already applied the −1, reading it from the frozen entry snapshot). Two things can happen during round 7 that set `Flagged` fresh, intended for round 8:
 
-- **Clearing last (Option A):** the contract cascade runs, sets `Flagged = true` fresh for round 8. The clear step then runs, sees `Flagged = true`, and clears it — **wiping out the refresh the GDD's own sentence describes**. Round 8 silently gets full steps.
-- **Clearing first (this decision):** the clear removes round 7's already-spent value before the cascade runs. If the cascade sets `Flagged` fresh, nothing downstream in this pass touches it again, and round 8 correctly applies −1.
+- An ordinary Debt trigger in **Phase 5** (a stake or gate fee the player can't cover in `resolveActions`/`resolveAddons`) — nothing to do with Upkeep at all.
+- The contract-deadline cascade in round 7's **own Upkeep**, step 1 — the case this decision's first draft considered.
 
-This is the RFC §6.6 failure mode by name: nothing crashes either way, the counter still "advances," and only a test asserting the rule fires *on the correct round* — the discipline RFC §16.1's cross-round-state row already demands — would catch the wrong order.
+Try clearing `Flagged` as an Upkeep step, anywhere in the phase:
+
+| Where the clear runs | What happens to a Phase-5-set flag | What happens to a step-1-set flag |
+|---|---|---|
+| **Before step 1** (this decision's first draft) | **Wiped.** Phase 5 already ran and set `Flagged = true` for round 8 before Upkeep's clear ever executes — the clear can't tell that value apart from round 7's already-spent one, and erases it. | Survives, by construction — the clear ran before step 1 could set it. |
+| **After step 1** (the issue's literal order) | Also wiped — a later clear is no more able to distinguish the two writes than an earlier one. | Wiped — step 1 sets it, the clear immediately erases it. |
+
+**Neither position is correct, because the flaw isn't the position — it's clearing inside Upkeep at all.** Any Upkeep-phase clear runs *after* Phase 5, so it cannot tell "round 7's already-consumed value" apart from "a value Phase 5 just wrote for round 8" — both are sitting in the same field by the time Upkeep starts.
+
+The fix is to stop clearing in Upkeep and instead **consume `Flagged`/`EvasiveStepPenalty` from the entry snapshot RFC §6.6 already takes at the top of `Resolve`**, the same way it already handles the Ledger and the step-allowance formula's Infamy read. The snapshot is taken before Phase 5 runs, so it captures exactly "the value round 7 entered with" — and the live copy is reset to `false` in that same step, before anything in round 7 (Phase 5's confrontations, Phase 5's other Debt triggers, or Upkeep's own step 1) has had a chance to write to it. Whichever of those does fire, its write lands on an already-cleared field and is never touched again during round 7 — so it survives untouched into round 8, regardless of which source set it or when.
+
+This is the RFC §6.6 failure mode by name: nothing crashes either way, the counter still "advances," and only a test asserting the rule fires *on the correct round* — the discipline RFC §16.1's cross-round-state row already demands — would catch it. It is also the finding CodeRabbit raised against this decision's first draft, confirmed correct on inspection: the draft's "clear before the cascade" fix solved the step-1 case and left the more common Phase-5 case (any Evasive loss) broken.
 
 **Why cause-blind lease removal isn't a simplification, it's a fog requirement.** A separate "surrendered for debt" trace, distinguishable from ordinary expiry, would newly disclose that a player is in debt — private information under GDD §5's Cr$-band-only visibility. RFC §9.1's existing row 4 is already singular ("Lease expired — Global"); keeping it that way isn't laziness, it's the same negative-assertion discipline RFC §16.3 holds the whole projection to: the two causes must produce byte-identical `Event` payloads, or the fog suite has a new leak to test for that this decision would have quietly introduced.
 
@@ -91,9 +104,10 @@ This is the RFC §6.6 failure mode by name: nothing crashes either way, the coun
 
 ## Consequences
 
-- **GDD §4 and RFC §6.7 gain the enumerated step list** in this decision, replacing the empty `upkeep()` stub name with the five-step, dependency-ordered sequence above.
+- **GDD §4 and RFC §6.7 gain the enumerated step list** in this decision, replacing the empty `upkeep()` stub name with the four-step, dependency-ordered sequence above.
+- **RFC §6.6's entry-snapshot table gains two consumers**: `Flagged` and `EvasiveStepPenalty` join the Ledger and the step-allowance formula as fields read from the frozen snapshot rather than live state, with the live copy cleared in that same top-of-`Resolve` step.
 - **The roadmap's `Resolve()` task is unblocked** (implementation plan, M1 task list: *"`Resolve()` as the fixed pipeline of RFC §6.7 … event/incident/pressure/upkeep"*) — it was waiting on this the same way it waited on [D3](D03-rng-consumption-table.md)'s consumption table and [D9](D09-node-type-rounding.md)'s rounding rule.
-- **RFC §16.1's cross-round-state row gets five concrete test rows**: contract-deadline expiry-and-cascade, lease expiry-and-cascade-interaction, `Flagged` clear-before-cascade, `EvasiveStepPenalty` clear, Sinkhole decrement — each asserting the rule fires on the correct round, per that row's own standard. Two more tests are negative by design: assert `LastOfferRound` is untouched by `upkeep()`, and assert `LooseCrateHeldRounds` changes only inside `writeTrail`, guarding against either row silently migrating back into Upkeep in a future refactor.
+- **RFC §16.1's cross-round-state row gets four concrete test rows**: contract-deadline expiry-and-cascade, lease expiry-and-cascade-interaction, Sinkhole decrement, next-round-modifier clear — each asserting the rule fires on the correct round, per that row's own standard. Plus one test specific to the snapshot fix: a `Flagged` set by a Phase-5 Debt trigger (not Upkeep's own cascade) must survive untouched into the following round. Three more tests are negative by design: assert `LastOfferRound` is untouched by `upkeep()`, assert `LooseCrateHeldRounds` changes only inside `writeTrail`, and assert neither `Flagged` nor `EvasiveStepPenalty` is written by any Upkeep step — guarding against any of the three silently migrating back into Upkeep in a future refactor.
 - **A new fog test**: the two-cause worked example above (natural expiry vs. Debt-driven surrender) must serialise to identical `Event` bytes, matching RFC §16.3's negative-assertion style.
 - **[D11](README.md) inherits no new obligation.** When it resolves, it only has to guarantee that suppressed subsystems never populate the state Upkeep iterates over — Upkeep itself needs no further change.
 - Reversible at low cost now, while `rules.Resolve` is unwritten; expensive after golden replays exist, since every one of these steps changes cross-round state that a fixed-seed fixture would bake in — the same argument [D8](D08-sector-size-constraint.md) and [D9](D09-node-type-rounding.md) both carry.
