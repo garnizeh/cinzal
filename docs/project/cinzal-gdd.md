@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.12 (scope-locked for prototype)
+## Game Design Document — v2.13 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -138,6 +138,9 @@
 >
 > **Changelog v2.11 → v2.12** — the contract pool can run dry mid-match (D7)
 > - **§8.1's opening-offer guarantee (constraint 7) only covers setup.** A player who explores little, or a `Bridge Down` that severs the last path to a Known Warehouse, can leave a later offer with fewer than three valid contracts, or none. Added a fallback ladder to §8.1 — drop to the next-lower tier's band, never a higher one, never by widening a band or relaxing the Known-origin rule; a slot still empty at Tier I is dropped, not filled invalidly. **§8.2's held-offer rule now also covers a completely empty pool**, not just a full 2-contract slot, on the same terms: the cooldown does not restart, and the offer arrives the moment any pair becomes valid. Full reasoning in [D7](../decisions/D07-contract-pool-fallback.md).
+>
+> **Changelog v2.12 → v2.13** — the offer had no tier mix (D6)
+> - **Nothing said what tiers a three-contract offer draws from.** Read literally, a Legend eligible for I–IV could be shown three Tier I contracts — and §24.2's own ladder arithmetic silently assumed that never happens, since every completed job in that table lands at exactly the top eligible tier's RP. §8.1 now states the rule that arithmetic already assumed: one of the three targets your highest currently eligible tier (still subject to the existing pool-short fallback below if that tier is empty), the other two are drawn from your eligible tiers on an even split by default. Full reasoning in [D6](../decisions/D06-contract-tier-mix.md).
 
 ---
 
@@ -490,6 +493,8 @@ Manual annotation, because players will out-think the tooling and should be able
 You may hold up to **2 active contracts**. You do not receive an offer every round — offers are gated by the **Contact Cooldown** (§8.2).
 
 When an offer comes, you see **3 contracts** and take **1**, or decline all. Declining does not reset the cooldown — it restarts it. This is the game's main injection of randomness, and it always passes through a choice (P2).
+
+**Tier mix of an offer (D6).** One of the three always **targets** your **highest currently eligible tier** — eligibility uses your Infamy at Phase 2, the same moment that gates the Contact Cooldown (§11.1). The other two are drawn independently from your eligible tiers, on an even split by default. This is what makes climbing the ladder pay off in fact and not just in expectation: every offer to a Known, Feared or Legend player includes a shot at the tier their Infamy just bought them, not three more Tier I jobs at long odds against ever seeing the one they climbed for. (If that targeted tier's pool happens to be empty, the pool-short fallback below still applies to this slot exactly as it does to the other two — the guarantee is on the target, not an exemption from the fallback.)
 
 A contract specifies:
 - **Origin** — a specific Warehouse
