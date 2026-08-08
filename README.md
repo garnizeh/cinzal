@@ -43,7 +43,7 @@ Client-side rules via WASM and rich map interaction are deliberately deferred to
 
 Chosen so the riskiest unknowns — *is it deterministic, is it balanced* — resolve before any UI exists.
 
-```
+```text
 M0  Foundations       CI gates for fog boundary and rules purity
 M1  Rules core        the whole game, headless and deterministic
 M2  Bots + simulation the measurement gate — answers the open balance questions

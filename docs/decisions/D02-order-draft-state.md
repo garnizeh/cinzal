@@ -13,7 +13,7 @@ A player builds a route by clicking nodes on the map, one request per click. Whe
 
 **RFC-001 §11** defines the endpoint and stops there:
 
-```
+```text
 POST /m/{id}/order/node/{node}   append/remove a node from the route draft
 ```
 
