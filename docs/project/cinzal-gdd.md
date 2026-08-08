@@ -1459,7 +1459,7 @@ Watch for Tier IV contracts being accepted and then abandoned. If nobody volunta
 
 | # | Source | Fires in | Before or after the decision | What the player can do about it |
 |---|---|---|---|---|
-| 1 | Map generation | Setup | Before | Nothing — but it's symmetric and constrained (§6) |
+| 1 | Map generation, including node layout (§6.4, D10) | Setup | Before | Nothing — but it's symmetric and constrained (§6) |
 | 2 | Starting positions | Setup | Before | Nothing — minimum distance 4 guaranteed |
 | 3 | Contract offer (3 drawn) | Phase 2 | **Before** | Choose 1 of 3, or decline |
 | 4 | Market stock (3 items) | Phase 3, every 2 rounds | **Before** | Choose whether to travel there |
