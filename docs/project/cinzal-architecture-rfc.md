@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r12 · **Companion doc:** `cinzal-gdd.md` **v2.8**
+**Status:** draft for review · **Revision:** r13 · **Companion doc:** `cinzal-gdd.md` **v2.9**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -65,6 +65,10 @@
 > - **Free-for-all pushback had no ordering.** Two or three losers each drawing 1–2 `pushback.hop` indices, iterated in arrival order, is a replay divergence. Added to §6.5.
 > - **Multiple confrontations in one movement step** had no ordering either — a gap nobody raised, found while fixing the one above.
 > - Companion pointer moved to GDD v2.8.
+>
+> **Changelog r12 → r13** — a card that never existed (D15)
+> - **§6.5's tie-break table cited "Blitz"**, which is not a card in GDD §14.2. The described behaviour — highest Infamy, hits every tied player — is **Raid**. Table row and prose both corrected; the reasoning attached to the row was right about the rule and only wrong about the name.
+> - Companion pointer moved to GDD v2.9.
 
 ---
 
@@ -347,7 +351,7 @@ func bySeat(s State) []SeatID       // RNG batches
 | Autopilot picks a lease to renew | fewest rounds remaining | **lowest NodeID** |
 | New Boss targets a player (GDD §14.2) | lowest RP | fairness key (§6.5) |
 | Winner takes cargo in a 3+ way melee | the winner's choice | bot or default order: **lowest seat** |
-| Blitz targets a player (GDD §14.2) | highest Infamy | **none needed** — the GDD hits every tied player |
+| Raid targets a player (GDD §14.2) | highest Infamy | **none needed** — the GDD hits every tied player |
 | **Losers of a 3+ way melee**, drawing `pushback.hop` | — | **seat index**, before any draw is consumed |
 | **Several confrontations in the same movement step** | — | **node ID**, resolved one node at a time |
 
@@ -355,7 +359,7 @@ func bySeat(s State) []SeatID       // RNG batches
 
 The last two rows are RNG batches in the §6.5 sense and take seat and node index accordingly. They are called out separately because they are easy to miss: a free-for-all produces **two or three losers, each consuming one or two `pushback.hop` indices**, and the natural implementation walks the loser slice in whatever order the collision detector appended to it. Likewise, two confrontations at different nodes in the same step both draw, and nothing about the step loop imposes an order between them.
 
-The row that will bite is Blitz. It looks like it needs a tie-break and it does not — adding one would be a rule change wearing the costume of a determinism fix.
+The row that will bite is Raid. It looks like it needs a tie-break and it does not — adding one would be a rule change wearing the costume of a determinism fix.
 
 ### 6.6 Cross-round derived state
 
