@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r16 · **Companion doc:** `cinzal-gdd.md` **v2.16**
+**Status:** draft for review · **Revision:** r17 · **Companion doc:** `cinzal-gdd.md` **v2.16**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -84,6 +84,12 @@
 > **Changelog r15 → r16** — node coordinates had no source (D10)
 > - **§9.1's `NodeView` had no position field, and nothing generated one**, despite GDD §7.1 disclosing "position on the map" at Rumoured and §11.2 rendering the map straight from `PlayerView`. `NodeView` gains `X, Y int`, present under the same absence rule as every other field on the type. Added a `gen.layout` row to §6.4's RNG table: `rules/gen` assigns each sector's nodes onto a fixed 9-point lattice inside that sector's fixed canvas quadrant, via the same partial-Fisher-Yates shape already mandated for Torn Map — exactly `n` draws per sector, never a truncation case, since D8 caps every sector at 8 nodes against a 9-point lattice. §11.2's SVG `viewBox` is now the literal constant `"0 0 1000 1000"`, sourced from this decision rather than computed from the rendered node set. Full reasoning in [D10](../decisions/D10-map-layout.md).
 > - Companion pointer moved to GDD v2.16.
+>
+> **Changelog r16 → r17** — solo scenarios had no suppression mechanism (D11)
+> - **§6.2's `Config` sketch gains a `Suppress SubsystemSuppression` field** — one boolean per subsystem (Leases, Incidents, Events, InfamyTiers, Items) — closing the gap §14.4 already assumed was closed ("as `Config` flags, not as branches in `rules`"). No separate Pressure flag: Pressure's precondition, Legend tier, is unreachable once `InfamyTiers` is suppressed, so it is already fully covered.
+> - **§14.4 now cites this decision** instead of its own ad hoc list of disabled subsystems.
+> - `deck.event.*`/`deck.incident.*`'s 23/25-draw cost (still pending its own §6.4 table edit — D3's note says that lands with #56) becomes conditional on `Suppress.Events`/`Suppress.Incidents`: zero draws, not their usual count, when set. Recorded in D3's own document, amended, rather than duplicated here ahead of #56's sync.
+> - Full reasoning, including why Infamy keeps being tracked as a number while only its tier *effects* are gated, and why Items suppression leaves map generation untouched, in [D11](../decisions/D11-config-suppression-flags.md).
 
 ---
 
@@ -230,7 +236,19 @@ type Config struct {
     ShakedownCost     int              // 4
     LedgerCost        int              // 3
     Contracts         [4]ContractTier
+    Suppress          SubsystemSuppression  // solo scenarios only; zero value for every other match
     // …
+}
+
+// SubsystemSuppression holds the per-subsystem "off" flags GDD §19.1's
+// scenario ladder needs. Semantics for each field, and why there is no
+// separate Pressure flag, are D11's, not this sketch's.
+type SubsystemSuppression struct {
+    Leases      bool
+    Incidents   bool
+    Events      bool
+    InfamyTiers bool
+    Items       bool
 }
 ```
 
@@ -1190,7 +1208,7 @@ Solo is not a mode. It is an ordinary match with **one human seat, the rest fill
 
 Four things do need building, and all four are cheap:
 
-**Scenarios are data.** Each of the five scenarios in GDD §19.1 is a row: node count, round count, `Config` overrides, bot seats and tiers, and which subsystems are suppressed. Scenario 1 disables leases, incidents, items and Infamy tiers; scenario 2 re-enables posts and the trail. Suppression is expressed as `Config` flags, not as branches in `rules` — the same discipline the city catalogue would need, and for the same reason.
+**Scenarios are data.** Each of the five scenarios in GDD §19.1 is a row: node count, round count, `Config` overrides, bot seats and tiers, and which subsystems are suppressed via `Config.Suppress` ([D11](../decisions/D11-config-suppression-flags.md) — one boolean per subsystem, each subsystem's guard placed where it is already invoked, never a condition threaded through `rules`). Scenario 1 sets `Leases`, `Incidents`, `InfamyTiers` and `Items`; scenario 2 re-enables posts and the trail but keeps `InfamyTiers` and `Events` set. Suppression is expressed as `Config` flags, not as branches in `rules` — the same discipline the city catalogue would need, and for the same reason.
 
 **Scenarios pin a fixed seed.** The map, the contract offers and the event order are identical for every player who runs a given scenario. This buys three things at once: contextual tips can be attached to specific rounds and specific nodes, the tutorial becomes testable as a golden replay, and two players can compare notes on the same board.
 

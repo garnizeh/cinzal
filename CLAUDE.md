@@ -10,9 +10,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```text
 docs/project/cinzal-gdd.md                  — Game Design Document (v2.16)
-docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r16)
+docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r17)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
-docs/decisions/                             — Decision log; D1, D2, D3, D4, D5, D6, D7, D8, D9 and D10 are decided, D11–D14 and D16–D22 are open
+docs/decisions/                             — Decision log; D1, D2, D3, D4, D5, D6, D7, D8, D9, D10 and D11 are decided, D12–D14 and D16–D22 are open
 ```
 
 D15 is **not** a decision — it is two factual errors in the source documents, tracked as a task. The log's catalogue says so.
