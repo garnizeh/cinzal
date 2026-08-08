@@ -144,6 +144,10 @@ No Node, no frontend build step, and no Docker for the rules engine — `interna
 
 **A missing tool fails the target rather than skipping it.** That is deliberate, and it is the same principle as the CI gates below: a check that did not run looks exactly like one that passed.
 
+### RTK (agent tooling)
+
+[`.rtk/filters.toml`](.rtk/filters.toml) is committed for [RTK](https://github.com/rtk-ai/rtk), a token-optimised CLI proxy that Claude Code sessions in this repo use to compact command output (`git`, `go test`, `grep`, and friends) without changing what the commands do. It is agent tooling, not a build dependency — human contributors and CI never need it, and its absence fails nothing.
+
 ## The CI gates
 
 Four checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
