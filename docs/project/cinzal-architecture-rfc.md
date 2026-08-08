@@ -443,14 +443,15 @@ writeTrail()                  → Loitering evaluation (AFTER actions, §6.6),
 globalEvent() · incident() · pressure()
   ↓
 upkeep()                      → fixed order, load-bearing (D5, GDD "Upkeep" in §15):
-                                1. contract deadlines → penalty, discard, Debt cascade
+                                1. contract deadlines → penalty, discard, drop bound cargo,
+                                   Debt cascade
                                 2. lease decrement    → expire at zero, anchor row 4 (§9.1)
                                 3. Sinkhole decrement  → clear at zero, no anchor
                                 4. next-round modifier clear (Streets Blocked, Distracted
                                    Guard, Scaffolding, Retainer, Dockers' Strike, Blackout)
 ```
 
-Every step emits `Event` values. Events are the substrate for the trail, the recap, email bodies, the debug trace, and telemetry — one representation, six consumers.
+Every step emits `Event` values. Events are the substrate for the trail, the recap, email bodies, the debug trace, and telemetry — one representation, six consumers. `upkeep()` runs after every round, round 15 included, before final scoring (GDD §16) reads the resulting state — D5 settles this explicitly; there is no truncated final round.
 
 **The collision check runs at least once per round** even when every route is empty, which is the boundary case GDD §15 calls out for a table where nobody moves.
 
