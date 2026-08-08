@@ -7,8 +7,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **M0 is closed. M1 — Rules core is open, and nothing is implemented yet.** Every `internal/` package is a `doc.go` and no more.
 
 ```text
-docs/project/cinzal-gdd.md                  — Game Design Document (v2.8)
-docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r12)
+docs/project/cinzal-gdd.md                  — Game Design Document (v2.9)
+docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r13)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
 docs/decisions/                             — Decision log; D1 and D2 are decided, D3–D14 and D16–D22 are open
 ```
@@ -29,7 +29,7 @@ The package layout is fixed by [D01](docs/decisions/D01-package-layout.md) and i
 
 There is no `game.State` and there must never be one.
 
-Treat the two docs as the spec. **The RFC is authoritative on architecture; the GDD is authoritative on rules.** Both are heavily changelogged at the top of each file — read the changelog before assuming a section is current, since later entries correct earlier ones (e.g. GDD mechanics have moved through v0.9 → v2.8, and several early designs — ghost paths, warehouse supply limits, seat-order tie-breaks — were deliberately cut). If GDD and RFC ever seem to disagree, the RFC's own changelog explains which GDD revision it's paired with ("Companion doc" header).
+Treat the two docs as the spec. **The RFC is authoritative on architecture; the GDD is authoritative on rules.** Both are heavily changelogged at the top of each file — read the changelog before assuming a section is current, since later entries correct earlier ones (e.g. GDD mechanics have moved through v0.9 → v2.9, and several early designs — ghost paths, warehouse supply limits, seat-order tie-breaks — were deliberately cut). If GDD and RFC ever seem to disagree, the RFC's own changelog explains which GDD revision it's paired with ("Companion doc" header).
 
 ## What Cinzal is
 

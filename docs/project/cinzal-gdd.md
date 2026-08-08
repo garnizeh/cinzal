@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.8 (scope-locked for prototype)
+## Game Design Document — v2.9 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -126,6 +126,9 @@
 > **Changelog v2.7 → v2.8** — two pieces of loose prose that would have become bugs
 > - **"Delivered the moment a slot frees"** (§8.2) read as though an offer could arrive mid-round. It cannot, and an implementer taking it literally would have had to draw contract cards against a slot count that does not exist yet. It means the next offer phase, and now says so.
 > - **Abandoning cargo was missing from the field table** in §9. It was described in prose and carried in the order, but a reader building from the table would have shipped without it.
+>
+> **Changelog v2.8 → v2.9** — a stale cross-reference (D15)
+> - **§9.2's Stake Post row restated a flat cap of 5**, which v2.2 replaced with the player-count-scaled cap in §10.3 (4/4/4/3). The row now points at §10.3 instead of quoting a number, so the two sections cannot drift apart again.
 
 ---
 
@@ -671,7 +674,7 @@ Pick one:
 |---|---|---|
 | **Pickup** | Warehouse matching a held contract, or any node with dropped cargo you have the contract for | Take the cargo. |
 | **Deliver** | The destination Border, carrying the right cargo | Payment −Cr$ 1 gate fee, +Infamy, +RP. Global announcement. |
-| **Stake Post** | Any unowned node, if under your cap of 5 | Buy a lease (§10.4). Public announcement. |
+| **Stake Post** | Any unowned node, if under your cap (§10.3) | Buy a lease (§10.4). Public announcement. |
 | **Deal** | Black Market | Buy 1 of the 3 items on offer. |
 | **Vanish** | Anywhere | **−2 Infamy.** You leave no "fresh tracks" trace this round. |
 | **Surveil** | Anywhere | Sight of everything within 2 steps this round. |
