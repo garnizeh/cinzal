@@ -66,16 +66,15 @@ fog:
 debug-isolation:
 	./scripts/check-debug-isolation.sh
 
-## secrets   scan the tree and the history for credentials
+## secrets   scan the tree, and the commits this change adds, for credentials
 #
-# --ignore-gitleaks-allow is not optional. Without it a `gitleaks:allow` comment
-# on the offending line suppresses the finding, so anyone able to write the line
-# is able to switch the gate off for it - a required check with an inline
-# bypass. The config allowlist stays, because it is reviewed, versioned, and
-# names specific documented placeholders; an inline marker is none of those.
+# The history scan is scoped to a commit range rather than every ref the clone
+# can see - #37, where a credential on one branch failed the gate on three
+# unrelated pull requests. CI sets CINZAL_SECRETS_RANGE to the range the pull
+# request adds; unset, the script derives it from origin/main. The reasoning,
+# and the fail-open it closes, are in the script.
 secrets: require-gitleaks
-	gitleaks dir . --config .gitleaks.toml --no-banner --redact --ignore-gitleaks-allow
-	gitleaks git . --config .gitleaks.toml --no-banner --redact --ignore-gitleaks-allow
+	./scripts/check-secrets.sh
 
 # Paths holding generated output. EMPTY UNTIL M3 AND M5 — templ output arrives
 # with the templates, sqlc output with the schema. Each milestone appends here.
