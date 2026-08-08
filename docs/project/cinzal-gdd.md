@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.13 (scope-locked for prototype)
+## Game Design Document — v2.14 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -141,6 +141,9 @@
 >
 > **Changelog v2.12 → v2.13** — the offer had no tier mix (D6)
 > - **Nothing said what tiers a three-contract offer draws from.** Read literally, a Legend eligible for I–IV could be shown three Tier I contracts — and §24.2's own ladder arithmetic silently assumed that never happens, since every completed job in that table lands at exactly the top eligible tier's RP. §8.1 now states the rule that arithmetic already assumed: one of the three targets your highest currently eligible tier (still subject to the existing pool-short fallback below if that tier is empty), the other two are drawn from your eligible tiers on an even split by default. Full reasoning in [D6](../decisions/D06-contract-tier-mix.md).
+>
+> **Changelog v2.13 → v2.14** — Riot had no specification, and it had a fog dimension (D4)
+> - **§14.3's Riot entry was one sentence — "randomized... names, events, all of it" — with no method and no rule against manufacturing a false named fix.** Added a passage under the HAZARDS table: Riot **permutes**, never invents, and only touches the round's sight-gated trail entries in the flagged sector (cargo taken, fresh tracks, confrontations, item purchases) — the five global-announcement types (delivery, post staked, lease expired, Loitering, loose crate) are untouched, because scrambling those would contradict already-broadcast fact rather than obscure fog. Entry contents, including whether and whom an entry names, travel unchanged; only the node it's attached to moves. The affected player is told their own trace moved, not where; nobody else is told anything the public Headline didn't already disclose. Full reasoning, the RNG method, and the index cost in [D4](../decisions/D04-riot-trail-randomization.md).
 
 ---
 
@@ -1040,6 +1043,8 @@ The remaining composition is **always displayed** — "6 hazards, 3 boons left" 
 | **Sinkhole** | One random node in the sector is impassable for **3 rounds**. |
 | **Shakedown** | Every player ending here pays **Cr$ 4**. |
 | **Informant Ring** | Every player ending here has their position revealed publicly. |
+
+**Riot, precisely (D4).** "Randomized" means *permuted*, not invented. Only the round's **sight-gated** trail entries generated in the flagged sector move — cargo taken, fresh tracks, confrontations, item purchases. Deliveries, post stakings, lease expiries, and Loitering/loose-crate entries are **global announcements of real game state**, not fog information, and Riot leaves them exactly where they happened. Among the entries that do move, only their **node assignment** is shuffled — the entry's contents (whether it's named, and whose name) travel with it unchanged, so Riot never speaks a name that wasn't already in the sector this round, and the usual name gates (Infamy ≥ 3 for cargo, ≥ 6 for a purchase) are checked against the real actor exactly as they always are. A player whose own trace was moved is told so — not where it went, not what now sits at the node they actually stood on — because they already know what they did; withholding that would be lying to them about their own round, and telling them more would leak someone else's. Anyone reading the sector's log this round already knows Riot fired — it's the Unstable flag's own incident, announced in the Headline — so the shuffle itself discloses nothing further.
 
 **BOONS (5)**
 | Incident | Effect on players ending in the unstable sector |
