@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r14 · **Companion doc:** `cinzal-gdd.md` **v2.14**
+**Status:** draft for review · **Revision:** r15 · **Companion doc:** `cinzal-gdd.md` **v2.15**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -74,6 +74,10 @@
 > - **§9.1's own prose, and the `writeAnchors` pseudocode right below it, had both drifted from the table.** r8 inserted the cargo-taken row at position 1, shifting every later row down by one, but neither the two paragraphs distinguishing global-vs-sight-gated and named-vs-node-only rows nor the code comment stating the same split were updated — all three still cited row 6 as the sight-gated, both-named confrontation entry (it is row 7 now) and rows 4–5 as the node-only ones (they are rows 5–6). Found while confirming which rows Riot is allowed to touch; corrected against the table, which was already right, and against issue #75's independently-restated copy, which had already caught the drift.
 > - No table change: Riot's permutation runs entirely inside `Resolve`/`writeTrail`, before `Project` ever sees the round, so the eleven-writer table needed no new row and no footnote. Full reasoning in [D4](../decisions/D04-riot-trail-randomization.md).
 > - Companion pointer moved to GDD v2.14.
+>
+> **Changelog r14 → r15** — `upkeep()` had no body (D5)
+> - **§6.7 ended the pipeline with a bare function name.** Expanded into its five ordered steps, and the ordering is now stated as a requirement rather than left to whoever writes it: the `Flagged`/`EvasiveStepPenalty` clear must run before the contract-deadline Debt cascade that can set `Flagged` fresh, and that cascade must run before the lease decrement it depends on reading pre-mutation. Lease removal reuses the existing row 4 anchor (§9.1) regardless of cause — natural expiry and a Debt-driven surrender must be byte-identical on the wire, or which lease died discloses that a player is in debt. Everything else `upkeep()` touches is private to the acting seat, since none of it has a row in §9.1's table. Two counters the issue's draft list assumed lived here do not: `LastOfferRound` needs no mutation (§6.6 already describes it as read-only-by-difference), and `LooseCrateHeldRounds` ticks inside `writeTrail`, three steps earlier in the same pipeline. Full reasoning, iteration order, and both worked examples in [D5](../decisions/D05-upkeep-phase.md).
+> - Companion pointer moved to GDD v2.15.
 
 ---
 
@@ -432,12 +436,22 @@ writeTrail()                  → Loitering evaluation (AFTER actions, §6.6),
                                 crate heat, per-node logs, then distribute by sight
                                 and append to each seat's archive (§9.2)
   ↓
-globalEvent() · incident() · pressure() · upkeep()
+globalEvent() · incident() · pressure()
+  ↓
+upkeep()                      → fixed order, load-bearing (D5, GDD "Upkeep" in §15):
+                                1. clear Flagged, EvasiveStepPenalty     (this round's values)
+                                2. contract deadlines → penalty, discard, Debt cascade
+                                3. lease decrement    → expire at zero, anchor row 4 (§9.1)
+                                4. Sinkhole decrement  → clear at zero, no anchor
+                                5. next-round modifier clear (Streets Blocked, Distracted
+                                   Guard, Scaffolding, Retainer, Dockers' Strike, Blackout)
 ```
 
 Every step emits `Event` values. Events are the substrate for the trail, the recap, email bodies, the debug trace, and telemetry — one representation, six consumers.
 
 **The collision check runs at least once per round** even when every route is empty, which is the boundary case GDD §15 calls out for a table where nobody moves.
+
+**`upkeep()`'s five steps carry no fairness dimension** — a lease decrement confers no advantage by iteration position — so they take the §6.5 default: seat index across seats, a contract's assigned ID across a seat's own two slots, `NodeID` across map-scoped state (leases, Sinkholes). Only steps 1→2→3 have a real ordering constraint; steps 4 and 5 have none relative to the others and are fixed here purely so the sequence stays single-valued. Full derivation of the constrained pair in [D5](../decisions/D05-upkeep-phase.md).
 
 ---
 

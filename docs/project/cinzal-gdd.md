@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.14 (scope-locked for prototype)
+## Game Design Document — v2.15 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -144,6 +144,9 @@
 >
 > **Changelog v2.13 → v2.14** — Riot had no specification, and it had a fog dimension (D4)
 > - **§14.3's Riot entry was one sentence — "randomized... names, events, all of it" — with no method and no rule against manufacturing a false named fix.** Added a passage under the HAZARDS table: Riot **permutes**, never invents, and only touches the round's sight-gated trail entries in the flagged sector (cargo taken, fresh tracks, confrontations, item purchases) — the five global-announcement types (delivery, post staked, lease expired, Loitering, loose crate) are untouched, because scrambling those would contradict already-broadcast fact rather than obscure fog. Entry contents, including whether and whom an entry names, travel unchanged; only the node it's attached to moves. The affected player is told their own trace moved, not where; nobody else is told anything the public Headline didn't already disclose. Full reasoning, the RNG method, and the index cost in [D4](../decisions/D04-riot-trail-randomization.md).
+>
+> **Changelog v2.14 → v2.15** — Phase 8 (Upkeep) was never enumerated (D5)
+> - **§4's phase diagram named "Upkeep" and nothing else ever said what it does.** Added a new §15 subsection spelling out the five ordered steps — clear `Flagged`/Evasive step penalty, contract deadlines, lease decrement, Sinkhole decrement, next-round modifier clear — and the two orderings that are load-bearing, not stylistic: the flag clear has to run before the contract-deadline Debt cascade that can set it fresh, and that same cascade has to run before the lease decrement it depends on reading "fewest rounds remaining" from. Also settles that round 15 runs Upkeep like any other round, so final scoring reads state after it. Full reasoning, both worked examples, and two corrections to counters that turn out not to belong here after all, in [D5](../decisions/D05-upkeep-phase.md).
 
 ---
 
@@ -1192,6 +1195,20 @@ Capping at balance fixes that. But a flat exemption would go too far the other w
 With three or more players in a node it's a free-for-all: highest total wins, everyone else loses.
 
 **Why this shape.** The cost of losing is a wasted round and a cargo — painful, recoverable, and over. It is not the v0.9 original, where a loser paid stake plus fee plus Infamy plus a base. The **underestimated** modifier is the comeback valve: the player everyone has stopped watching gets a real shot at the one who thinks they own the city.
+
+### Upkeep
+
+Phase 8, once per round, after Pressure (§14.4) — including round 15, before final scoring (§16) reads the table. Five steps, in this fixed order:
+
+1. **Clear `Flagged` and the Evasive step penalty** — the values this round's step allowance already used, not anything set later in this same phase.
+2. **Contract deadlines.** Decrement every held contract. At zero: pay the penalty (§8.3), discard the contract, drop any cargo held for it, and run Debt (§13) if the penalty can't be paid in full — which may surrender a lease and re-flag the player for next round.
+3. **Leases.** Decrement every lease still held, including any that survived step 2's Debt cascade. At zero, the lease expires and **"The corner went quiet"** fires publicly (§10.4) — the same trace whether the lease expired on its own or was surrendered for debt. The district never learns which.
+4. **Sinkhole.** Decrement every active Sinkhole (§14.3). At zero, the node is passable again — no announcement; it's read off the map like any other passable node.
+5. **Next-round modifiers.** Clear whichever of Streets Blocked, Distracted Guard, Scaffolding, Retainer, Dockers' Strike, or Blackout applied this round.
+
+**Steps 1 and 2 are ordered on purpose, not by convention.** A contract's Debt cascade surrenders "the lease with fewest rounds remaining" (§13) — that has to be read *before* this same phase's own lease decrement touches it, or a lease that would have expired on its own this round is spared while a healthier one gets taken in its place, turning a one-lease penalty into two. And the `Flagged` clear has to run *before* that same cascade might set it again: §13 says a fresh debt while already Flagged "simply refreshes it for the following round" — true only if the clear runs first. Get either backwards and nothing crashes; a rule just quietly stops firing, which is exactly the failure shape the rest of this document keeps naming and testing against directly. Full reasoning, both worked with numbers, in [D5](../decisions/D05-upkeep-phase.md).
+
+Two counters that look like they belong here don't. The Contact Cooldown (§8.2) needs no per-round action — `LastOfferRound` is written once and read as a difference against the current round, so there is nothing to decrement. And the loose-crate heat tick (§8.4) fires earlier, in the same pass that writes the round's trail, because its 2-consecutive-round threshold is evaluated against that round's own entries.
 
 ---
 
