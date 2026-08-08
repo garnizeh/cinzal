@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.15 (scope-locked for prototype)
+## Game Design Document — v2.16 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -147,6 +147,9 @@
 >
 > **Changelog v2.14 → v2.15** — Phase 8 (Upkeep) was never enumerated (D5)
 > - **§4's phase diagram named "Upkeep" and nothing else ever said what it does.** Added a new §15 subsection spelling out the four ordered steps — contract deadlines, lease decrement, Sinkhole decrement, next-round modifier clear — and the one ordering among them that's load-bearing, not stylistic: the contract-deadline Debt cascade has to run before the lease decrement it depends on reading "fewest rounds remaining" from, or a healthier lease than necessary gets surrendered. `Flagged` and the Evasive step penalty turn out not to be Upkeep steps at all — both are consumed at the moment the following round reads them, not cleared at the end of the round that set them, because either can be set fresh from more than one place in a single round and an end-of-phase clear can't tell "already used" apart from "just set for next round." Also settles that round 15 runs Upkeep like any other round, so final scoring reads state after it. Full reasoning, all four corrections, and both worked examples in [D5](../decisions/D05-upkeep-phase.md).
+>
+> **Changelog v2.15 → v2.16** — map generation produced no 2D layout (D10)
+> - **§7.1 discloses a Rumoured node's "position on the map", and nothing in §6 ever generated one.** Added §6.4: node coordinates are generated once, deterministically from the seed, as part of map generation — never recomputed per viewer, so a node's dot never moves as it goes Rumoured → Known. The four sectors each render as one contiguous region of the canvas, which is what §9.1's Pushing On sector bias needs to be a real choice rather than a bias over confetti. Exact canvas size, lattice, and RNG cost live in RFC §6.4 — full reasoning in [D10](../decisions/D10-map-layout.md).
 
 ---
 
@@ -358,6 +361,16 @@ Two players average 4.5 encounters a match, and **27% of matches produce fewer t
 2. **Tighter map.** 15 nodes — already reflected in the generation table above. The 19-node figure quoted in the simulation below was the pre-fix value.
 
 Simulated together these put the two-player rate into the 9–12 band, comfortably inside target. Both are 2p-only and should never leak into 3+ player tables, where the problem is the reverse.
+
+### 6.4 Layout (D10)
+
+Map generation produces 2D coordinates for every node, not just its topology. Layout is:
+
+- **Generated once, deterministically from the seed**, as the last step of map generation — never recomputed for a particular viewer, and never a function of which nodes that viewer can currently see.
+- **Stable for the whole match.** A node's position is fixed the moment the graph is generated; it does not move when the node's fog state changes for a player, including the Rumoured → Known transition §7.1 disclosure depends on.
+- **Sector-coherent.** Each of the four sectors renders as one contiguous region of the map, not nodes scattered across the whole canvas — the property §9.1's Pushing On sector bias needs to make "aim at a district" a real choice.
+
+The exact canvas size, the per-sector lattice, and the RNG cost are an architecture concern, not a rules one — see RFC §6.4 for the full mechanism. Full reasoning in [D10](../decisions/D10-map-layout.md).
 
 ---
 

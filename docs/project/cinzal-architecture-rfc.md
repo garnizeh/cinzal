@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r15 · **Companion doc:** `cinzal-gdd.md` **v2.15**
+**Status:** draft for review · **Revision:** r16 · **Companion doc:** `cinzal-gdd.md` **v2.16**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -80,6 +80,10 @@
 > - **`Flagged` and `EvasiveStepPenalty` moved out of `upkeep()` entirely, into §6.6's entry-snapshot mechanism**, alongside the Ledger and the step-allowance formula's Infamy read. A first-draft version of this decision cleared both as an Upkeep step and got caught on review: either field can be set fresh from more than one place in the same round (an ordinary Debt trigger during resolution, an Evasive loss, or the contract cascade above), and any Upkeep-phase clear runs after all of resolution, so it cannot distinguish a value the round already consumed from one just written for the next round. Consuming both from the frozen snapshot — the same one the step-allowance formula already reads — and resetting the live copy in that same top-of-`Resolve` step, before anything in the round can write to it, is the only position immune to that.
 > - Two more counters the issue's draft list assumed lived in `upkeep()` do not: `LastOfferRound` needs no mutation (§6.6 already describes it as read-only-by-difference), and `LooseCrateHeldRounds` ticks inside `writeTrail`, three steps earlier in the same pipeline. Full reasoning, iteration order, and both worked examples in [D5](../decisions/D05-upkeep-phase.md).
 > - Companion pointer moved to GDD v2.15.
+>
+> **Changelog r15 → r16** — node coordinates had no source (D10)
+> - **§9.1's `NodeView` had no position field, and nothing generated one**, despite GDD §7.1 disclosing "position on the map" at Rumoured and §11.2 rendering the map straight from `PlayerView`. `NodeView` gains `X, Y int`, present under the same absence rule as every other field on the type. Added a `gen.layout` row to §6.4's RNG table: `rules/gen` assigns each sector's nodes onto a fixed 9-point lattice inside that sector's fixed canvas quadrant, via the same partial-Fisher-Yates shape already mandated for Torn Map — exactly `n` draws per sector, never a truncation case, since D8 caps every sector at 8 nodes against a 9-point lattice. §11.2's SVG `viewBox` is now the literal constant `"0 0 1000 1000"`, sourced from this decision rather than computed from the rendered node set. Full reasoning in [D10](../decisions/D10-map-layout.md).
+> - Companion pointer moved to GDD v2.16.
 
 ---
 
@@ -279,6 +283,7 @@ Every consumer must be enumerated, because an unaccounted draw is a replay diver
 | Snatch Job relocation | `incident.relocate` | 1 per affected player | Phase 7 |
 | Crate placement | `crate.node` | 1 | Dead Runner, Spilled Load |
 | **Torn Map item** | `item.tornmap` | **exactly `min(4, hidden)`** | Method mandated below |
+| **Node layout — coordinate assignment** | `gen.layout` | **exactly `n` per sector — total node count over the whole map** | `rules/gen`, Setup only, after node-type assignment (D9), before the event/incident deck shuffles. Method mandated by [D10](../decisions/D10-map-layout.md) below §6.4's Torn Map passage. |
 
 **Why the decks are shuffled at setup.** r2 had the event card drawn in Phase 6 and the incident card in Phase 7. That is impossible: GDD §14.1 publishes the event's **category** and the incident's **sector** in the Headline, at Phase 1, before orders are submitted. You cannot reveal metadata about a card you have not selected yet, and selecting it at Phase 1 while claiming to draw it at Phase 6 is the same bug wearing a hat.
 
@@ -311,6 +316,23 @@ reveal(candidates[:n])
 ```
 
 Torn Map is the **only** item that draws. The other seven take a player-declared target or apply a fixed effect.
+
+**Node layout needs its method mandated for the same reason.** [D10](../decisions/D10-map-layout.md) fixes coordinates on a **1000 × 1000** canvas, split into four fixed 500 × 500 quadrants — one per sector, sectors sorted ascending by `SectorID` into top-left/top-right/bottom-left/bottom-right. Each quadrant carries a fixed 9-point lattice (a 3×3 grid, 175 units apart, 75-unit margin from the quadrant edges). Assignment is the identical partial-Fisher-Yates shape as Torn Map, run once per sector over that sector's `NodeID`-sorted nodes:
+
+```go
+// Mandated. cells is the quadrant's fixed 9-point lattice, row-major order.
+// n = this sector's node count, 3..8 per D8 — always ≤ 9, so no truncation case exists.
+cells := quadrantLattice(sectorID)
+for i := 0; i < n; i++ {
+    j := i + rng.Next("gen.layout", len(cells)-i)
+    cells[i], cells[j] = cells[j], cells[i]
+}
+for i, node := range sectorNodesSortedByNodeID {
+    node.X, node.Y = cells[i].X, cells[i].Y
+}
+```
+
+Minimum separation (175 units within a sector, 150 across a quadrant boundary) is a property of the fixed grid, not a runtime check — unlike Torn Map, there is no rejection branch here at all, and so no truncation case for §16.2's invariant test to cover. Total cost for a match is exactly its node count.
 
 **Conditional draws are lazy. A branch not taken consumes nothing.**
 
@@ -738,6 +760,8 @@ Three implementation rules, each protecting a specific way this leaks:
 
 **Hidden nodes are absent from the map, not present with empty fields.** A `NodeView{Type: ""}` is a leak: it tells the client the node exists and, worse, the size of the map. Absence is the only safe representation.
 
+**`NodeView` carries `X, Y int` — canvas coordinates, generated once by `rules/gen` and never recomputed per viewer** ([D10](../decisions/D10-map-layout.md)). They follow the same absence rule as every other field on the type: present exactly when the node itself is present, which GDD §7.1 already puts at Rumoured and above. The `viewBox` those coordinates render into (§11.2) is a fixed constant, `"0 0 1000 1000"`, so the coordinates themselves are the only thing that ever crosses the wire — nothing about the map's true extent is derivable from what a partial view discloses.
+
 **Rumoured nodes carry no edges.** GDD §7.1 makes this a rule of the game; here it is also the mechanism. A Rumoured node ships with type, sector, and position, and its `Edges` field is nil — so the client physically cannot plot into it, and cannot infer the local topology from a contract destination.
 
 **Opponent position information has exactly eleven authorised writers**, and the projection must implement all of them. The Board's anchored Attribution (GDD §7.5) is built entirely on this table; omit a row and the deduction layer has nothing to intersect. This list is checked against the GDD §7.3 trail table, row for row, whenever either document moves.
@@ -958,6 +982,8 @@ The sub-100ms requirement is real for **hover preview and dragging**. It is not 
 // internal/render — takes the projection, returns markup. ~250 lines.
 func Map(v rules.PlayerView, draft OrderDraft) templ.Component
 ```
+
+**The `viewBox` is the literal constant `"0 0 1000 1000"`, always** ([D10](../decisions/D10-map-layout.md)) — never computed from the rendered node set, which would leak the map's extent through geometry the same way an over-eager JSON field would leak it through data. `Map()` places each node at the `X, Y` coordinates `rules/gen` already assigned; there is no client-side or render-time layout step at all.
 
 Each node renders as a clickable region posting to the order draft:
 
