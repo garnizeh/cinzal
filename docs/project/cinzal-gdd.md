@@ -196,7 +196,7 @@ Brazilian urban noir. Concrete, rain, sodium light. No heroes. Game text — eve
 
 ## 4. Shape of a match
 
-```
+```text
 SETUP
   └─ map generation, starting positions, opening contract offer
 
@@ -582,7 +582,7 @@ A sequence of steps along graph edges, starting from your position. An empty rou
 
 Every modifier is summed against the Infamy base, **then** the floor is applied, **then** any hard cap. The floor is applied exactly once, at the end. Anything else lets a negative reach the path validator.
 
-```
+```text
 steps  =  infamy_base                    # 4 / 4 / 3 / 2  by tier (§11)
         − 1  if Flagged                  # §13, boolean, never stacks
         − 1  if Curfew is in effect      # global event, §14.2
@@ -894,7 +894,7 @@ An extra step next round, a free contract offer, a revealed node, a half-price i
 
 At the start of each round, before orders, the game publishes two facts:
 
-```
+```text
 ROUND 7 · HEADLINE
 
   "THE GUARD PROMISES A RESPONSE"
@@ -1109,7 +1109,7 @@ They also learn about the fight regardless, because a confrontation writes a pub
 
 ### The confrontation
 
-```
+```text
 TOTAL = D6
       + Infamy tier bonus            (+0 / +1 / +2 / +3)
       + stance modifier              (+1 / 0 / −1)

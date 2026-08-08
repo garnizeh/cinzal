@@ -120,7 +120,7 @@ Three consequences shape the rest of this document.
 
 ## 4. Stack
 
-```
+```text
 Go 1.26.5
 templ                     — typed templates
 HTMX 2.x + SSE extension  — interactivity
@@ -140,7 +140,7 @@ client-side map interaction — pan, zoom, hover, animation, touch
 
 ## 5. Package layout
 
-```
+```text
 cmd/
   server/         — the web process
   simulate/       — headless bot harness (§16.4)
@@ -403,7 +403,7 @@ Two further implementation notes that are easy to get wrong:
 
 `Resolve` is a fixed sequence of small pure steps, each independently testable:
 
-```
+```text
 validate(orders)              → reject illegal, degrade stale    GDD §15.0
   ↓
 for step := 1..maxRouteLen:
@@ -438,7 +438,7 @@ Every step emits `Event` values. Events are the substrate for the trail, the rec
 
 **The order log is the truth. Match state is derived and never stored.**
 
-```
+```text
 state = fold(Resolve, initial(seed, cfg), orderLog)
 ```
 
@@ -513,7 +513,7 @@ Go is comfortable to somewhere around the 100 row. And 100 board renders per sec
 
 **And it gets built like this**, decided now so it is not invented under production pressure:
 
-```
+```text
 snapshots(match_id, round, config_hash, code_version, state JSONB)
 ```
 
@@ -644,7 +644,7 @@ The submit and the sweep contend on the same row lock, so exactly one of them wi
 
 Autopilot could be implemented as a flag someone sets. It should not be. It is a **fact about the order log**:
 
-```
+```text
 autopilot(seat) ⇔ seat has a user_id
                   AND the last two rounds both recorded source <> 'human'
 ```
@@ -850,7 +850,7 @@ A stale cached WASM binary disagreeing with the server produces the worst possib
 
 Server-rendered HTML throughout. HTMX swaps fragments; there is no JSON API.
 
-```
+```text
 GET  /                          landing
 POST /auth/request              email → issue OTP, enqueue mail
 POST /auth/verify               code → session cookie
@@ -879,7 +879,7 @@ GET  /m/{id}/replay             finished only: {seed, config, log} bundle
 
 The core interaction, and where HTMX earns its place. It is one `<form>` carrying:
 
-```
+```text
 round           the round this form was rendered for  — see §11.1a
 route[]         node IDs in order
 blind_steps     0–2          (Pushing On)
@@ -909,7 +909,7 @@ The order form is a mutating POST that a player can fire more than once. Three c
 
 The fix is a field, not a table:
 
-```
+```text
 round    the round this form was rendered for   ← required
 ```
 
@@ -961,7 +961,7 @@ This is the largest single deferral in the plan, and the cheapest to live with. 
 
 One stream per match. Events are small and mostly cause a fragment refetch rather than carrying data:
 
-```
+```text
 event: submitted     data: {"seats": 3, "of": 4}
 event: resolved      data: {"round": 7}
 event: deadline      data: {"at": "…"}
@@ -990,7 +990,7 @@ Nothing else about rendering is settled in this RFC. The remaining questions —
 
 No passwords. Email OTP, which pairs with the notification infrastructure the game needs anyway — one sender, one template system, one deliverability problem.
 
-```
+```text
 POST /auth/request   { email }
   → 6-digit code, store bcrypt hash + 10min expiry, enqueue mail
   → ALWAYS the same response, whether or not the account exists
@@ -1027,7 +1027,7 @@ A guest can bind an email later and keep their history. A guest session that exp
 
 Email is on the critical path for both login and gameplay. It gets an outbox, not an inline `send()`.
 
-```
+```text
 handler → INSERT INTO outbox → worker goroutine → provider
                                   ↓ failure
                               exponential backoff, 5 attempts, then dead-letter
@@ -1167,7 +1167,7 @@ Scenario reset costs nothing: truncate the order log and refold (§7.1). Retryin
 
 Debug code is **not compiled into the production binary**. A runtime flag is one environment-variable mistake away from serving a god view of live matches, and that mistake is unrecoverable — you cannot un-leak a map.
 
-```
+```text
 make dev    → go build -tags debug
 make prod   → go build            (debug routes do not exist)
 ```
@@ -1236,7 +1236,7 @@ Two things survive into the production build because they are diagnostics, not g
 
 Drawn directly from the GDD, and each corresponds to a rule that would otherwise fail silently:
 
-```
+```text
 balance >= 0                            always (GDD §13)
 steps   >= 1                            always (GDD §9.1a)
 cargo   <= 1 per player                 always
@@ -1268,7 +1268,7 @@ Serialise the view to JSON and assert that hidden node IDs do not appear anywher
 
 `cmd/simulate` runs matches headlessly and emits the GDD §22 metrics as CSV.
 
-```
+```bash
 simulate --matches 10000 --players 4 --bots operator \
          --sweep LeaseCostPerBlock=1,2,3,4,5 --out sweep.csv
 ```
@@ -1299,7 +1299,7 @@ The one alert worth waking someone for is a **determinism-check mismatch**. Ever
 
 Single static binary, `embed.FS` for templates, static assets, WASM, and migrations. Postgres. That is the entire production topology.
 
-```
+```text
 docker build → one binary + one image
 env: DATABASE_URL, MAIL_PROVIDER_KEY, BASE_URL, SESSION_KEY
 start: migrate (advisory lock) → serve

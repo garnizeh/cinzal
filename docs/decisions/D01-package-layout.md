@@ -25,7 +25,7 @@ The `go list` check that §5 mandates cannot be written until this is settled, a
 
 **A — Subpackages of `rules`**
 
-```
+```text
 internal/rules/state/   MatchState, Player, Node, Graph
 internal/rules/view/    PlayerView, NodeView, TrailEntry, Anchor
 internal/rules/         Resolve, Project, Legal, RNG, gen
@@ -36,7 +36,7 @@ internal/rules/         Resolve, Project, Legal, RNG, gen
 
 **B — A leaf package outside `rules`**
 
-```
+```text
 internal/game/     the shared vocabulary — imports NOTHING
 internal/rules/    MatchState + Resolve, Project, Legal, RNG, gen
 internal/render/   imports game, never rules
@@ -50,7 +50,7 @@ internal/web/      imports game, never rules
 
 **Option B**, with the leaf package named **`internal/game`**.
 
-```
+```text
 internal/game/     PlayerView, NodeView, TrailEntry, Anchor, NodeStats, SeatArchive,
                    Order, OrderDraft, Config, Event, SeatID, NodeID
                    — imports nothing outside the standard library

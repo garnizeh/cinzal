@@ -427,7 +427,7 @@ Risks specific to *delivery*. The game-design risks (R1–R12) live in GDD §20 
 
 ## 7. Milestone dependency graph
 
-```
+```text
 M0 Foundations
  └─> M1 Rules core ──────────────┬─> M2 Bots + simulation ──> (balance answers)
                                  │                                   │

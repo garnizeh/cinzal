@@ -159,6 +159,16 @@ If one of these blocks you, the answer is almost never to weaken the gate.
 
 The secret scan reads history as well as the tree, because a credential added in one commit and deleted in the next is absent from the tree and present in the history forever. It is scoped to the commits your branch adds: a credential somewhere else in the repository is not your pull request's problem, and making it one was a real defect ([#37](https://github.com/garnizeh/cinzal/issues/37)). Locally, `make secrets` scopes itself the same way, to `origin/main..HEAD` — falling back to the whole history of `HEAD` when `origin/main` is unknown or your branch adds nothing to it, as on `main` itself. It over-scans rather than under-scans: no path through the gate inspects zero commits, because a scan of nothing reports "no leaks found" exactly like a clean one.
 
+### What is deliberately not a gate
+
+**Style linters do not join the required set.** Specifically, `markdownlint` does not run in CI — decided in [#23](https://github.com/garnizeh/cinzal/issues/23), recorded here because that is where the next person to feel strongly will look.
+
+Each gate above exists because the failure it prevents is invisible and expensive: a fog leak ships silently, a determinism break surfaces weeks later on one machine. A missing code-fence language is neither. Mixing the two weakens the signal — if a required check can fail on a cosmetic nit, contributors learn that a red check might be nothing, which is precisely the mirror of the problem this project has already spent real time on: a green check that might be nothing. Keeping the blocking set to *"this would break the game"* is what makes it worth reading.
+
+Style still gets caught; it is caught in review, where the cost of being wrong is a comment rather than a blocked merge. CodeRabbit reports `MD040` and its siblings already.
+
+This bars a **required** check, not the tool. An advisory job — one that annotates and cannot block — was left unbuilt rather than forbidden; if someone wants it, the thing to preserve is that it never becomes required.
+
 ## Reporting a bug in a match
 
 Once matches exist, the best bug report is a **match export** — `{seed, config, order log}`, a few kilobytes, downloadable by any player of a finished match. Attach it to the issue and `cmd/replay` reproduces your exact match. No description of what went wrong will ever be as useful.
