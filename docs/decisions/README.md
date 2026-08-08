@@ -47,8 +47,8 @@ Status is `open` until a document exists here.
 
 | # | Question | Status |
 |---|---|---|
-| [D3](D03-rng-consumption-table.md) | The RNG consumption table is incomplete — at least eight consumers implied by the card text are missing from RFC §6.4 | **decided** — nine of ten gaps closed with a mandated method each; Riot's index cost is reserved, pending [D4](https://github.com/garnizeh/cinzal/issues/42) |
-| D4 | `Riot` has no specification, and it has a fog dimension | open |
+| [D3](D03-rng-consumption-table.md) | The RNG consumption table is incomplete — at least eight consumers implied by the card text are missing from RFC §6.4 | **decided** — all ten gaps closed with a mandated method each, including Riot's, completed by [D4](D04-riot-trail-randomization.md) |
+| [D4](D04-riot-trail-randomization.md) | `Riot` has no specification, and it has a fog dimension | **decided** — permutes the flagged sector's current-round sight-gated trail entries among themselves; global entries untouched, no name is ever invented, no new row lands in RFC §9.1 |
 | D5 | Phase 8 (Upkeep) is never enumerated in either document | open |
 | [D6](D06-contract-tier-mix.md) | The contract offer has no tier distribution | **decided** — one slot targets the highest eligible tier (subject to D7's fallback if that pool is empty); the other two are a weighted draw over eligible tiers, default uniform |
 | [D7](D07-contract-pool-fallback.md) | Contract generation can produce an empty or short pool mid-match | **decided** — drop to a lower tier, then offer fewer than three; hold the offer (cooldown not restarted) when the whole pool is empty |

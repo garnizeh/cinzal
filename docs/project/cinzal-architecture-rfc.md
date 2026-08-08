@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r13 · **Companion doc:** `cinzal-gdd.md` **v2.9**
+**Status:** draft for review · **Revision:** r14 · **Companion doc:** `cinzal-gdd.md` **v2.14**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -69,6 +69,11 @@
 > **Changelog r12 → r13** — a card that never existed (D15)
 > - **§6.5's tie-break table cited "Blitz"**, which is not a card in GDD §14.2. The described behaviour — highest Infamy, hits every tied player — is **Raid**. Table row and prose both corrected; the reasoning attached to the row was right about the rule and only wrong about the name.
 > - Companion pointer moved to GDD v2.9.
+>
+> **Changelog r13 → r14** — Riot's fog dimension (D4), and a numbering bug it surfaced
+> - **§9.1's own prose, and the `writeAnchors` pseudocode right below it, had both drifted from the table.** r8 inserted the cargo-taken row at position 1, shifting every later row down by one, but neither the two paragraphs distinguishing global-vs-sight-gated and named-vs-node-only rows nor the code comment stating the same split were updated — all three still cited row 6 as the sight-gated, both-named confrontation entry (it is row 7 now) and rows 4–5 as the node-only ones (they are rows 5–6). Found while confirming which rows Riot is allowed to touch; corrected against the table, which was already right, and against issue #75's independently-restated copy, which had already caught the drift.
+> - No table change: Riot's permutation runs entirely inside `Resolve`/`writeTrail`, before `Project` ever sees the round, so the eleven-writer table needed no new row and no footnote. Full reasoning in [D4](../decisions/D04-riot-trail-randomization.md).
+> - Companion pointer moved to GDD v2.14.
 
 ---
 
@@ -741,15 +746,15 @@ It still belongs in the table for two reasons. A fog test suite asserting "no un
 
 Two distinctions the implementation must not blur:
 
-**Global versus sight-gated.** Rows 1–5 and 7–9 reach every player unconditionally. Row 6 is a trail entry: it names both parties, but only players who had sight of that node receive it. Treating a confrontation as global is a leak; treating a delivery as sight-gated breaks the anchor system.
+**Global versus sight-gated.** Rows 2–6 and 9–11 reach every player unconditionally. Rows 1, 7 and 8 are trail entries: row 7 (confrontation) names both parties, rows 1 and 8 name one, but all three reach only players who had sight of that node. Treating a confrontation as global is a leak; treating a delivery as sight-gated breaks the anchor system.
 
-**Named versus node-only.** Rows 4 and 5 announce a *node*, not a player — "someone has been standing here", "someone is holding the runner's crate". They are still position information, and the Board must surface them, but attribution has to treat them as an unattributed fix rather than a named one. Getting this wrong in either direction is a bug: naming the player is a leak, and dropping the entry removes a real deduction input.
+**Named versus node-only.** Rows 5 and 6 announce a *node*, not a player — "someone has been standing here", "someone is holding the runner's crate". They are still position information, and the Board must surface them, but attribution has to treat them as an unattributed fix rather than a named one. Getting this wrong in either direction is a bug: naming the player is a leak, and dropping the entry removes a real deduction input.
 
 ```go
 // The single place any of this may be written.
 func writeAnchors(v *PlayerView, s State, seat SeatID) {
-    // rows 1-5, 7-9: unconditional
-    // row 6: gated by hadSight(seat, node)
+    // rows 2-6, 9-11: unconditional
+    // rows 1, 7, 8: gated by hadSight(seat, node)
 }
 ```
 
