@@ -209,7 +209,7 @@ rtk pnpm outdated       # Compact outdated packages (80%)
 rtk pnpm install        # Compact install output (90%)
 rtk npm run <script>    # Compact npm script output
 rtk npx <cmd>           # Compact npx command output
-rtk prisma              # Prisma without ASCII art (88%)
+rtk prisma generate     # Prisma without ASCII art (88%)
 rtk uv run <cmd>        # Compact uv project command output
 ```
 
@@ -229,7 +229,7 @@ rtk json <file>         # JSON structure without values
 rtk deps                # Dependency overview
 rtk env                 # Environment variables compact
 rtk summary <cmd>       # Smart summary of command output
-rtk diff                # Ultra-compact diffs
+rtk diff <f1> <f2>       # Ultra-compact file diff; use `rtk git diff` for repo diffs
 ```
 
 ### Infrastructure (85% savings)
@@ -237,7 +237,8 @@ rtk diff                # Ultra-compact diffs
 rtk docker ps           # Compact container list
 rtk docker images       # Compact image list
 rtk docker logs <c>     # Deduplicated logs
-rtk kubectl get         # Compact resource list
+rtk kubectl pods        # Compact pod list
+rtk kubectl services    # Compact service list
 rtk kubectl logs        # Deduplicated pod logs
 ```
 
@@ -270,5 +271,5 @@ rtk init --global       # Add RTK to ~/.claude/CLAUDE.md
 | Infrastructure | docker, kubectl | 85% |
 | Network | curl, wget | 65-70% |
 
-Overall average: **60-90% token reduction** on common development operations.
+Overall average: **60-90% reduction in raw Bash output** on common development operations. This measures bytes stripped from command output, not the resulting reduction in API billing — input tokens (prompt, system instructions, history) are unaffected.
 <!-- /rtk-instructions -->
