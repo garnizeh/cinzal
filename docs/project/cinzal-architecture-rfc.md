@@ -71,7 +71,7 @@
 > - Companion pointer moved to GDD v2.9.
 >
 > **Changelog r13 → r14** — Riot's fog dimension (D4), and a numbering bug it surfaced
-> - **§9.1's own prose had drifted from its table.** r8 inserted the cargo-taken row at position 1, shifting every later row down by one, but the two paragraphs distinguishing global-vs-sight-gated and named-vs-node-only rows were never updated — they still cited row 6 as the sight-gated, both-named confrontation entry (it is row 7 now) and rows 4–5 as the node-only ones (they are rows 5–6). Found while confirming which rows Riot is allowed to touch; corrected against the table, which was already right, and against issue #75's independently-restated copy, which had already caught the drift.
+> - **§9.1's own prose, and the `writeAnchors` pseudocode right below it, had both drifted from the table.** r8 inserted the cargo-taken row at position 1, shifting every later row down by one, but neither the two paragraphs distinguishing global-vs-sight-gated and named-vs-node-only rows nor the code comment stating the same split were updated — all three still cited row 6 as the sight-gated, both-named confrontation entry (it is row 7 now) and rows 4–5 as the node-only ones (they are rows 5–6). Found while confirming which rows Riot is allowed to touch; corrected against the table, which was already right, and against issue #75's independently-restated copy, which had already caught the drift.
 > - No table change: Riot's permutation runs entirely inside `Resolve`/`writeTrail`, before `Project` ever sees the round, so the eleven-writer table needed no new row and no footnote. Full reasoning in [D4](../decisions/D04-riot-trail-randomization.md).
 > - Companion pointer moved to GDD v2.14.
 
@@ -753,8 +753,8 @@ Two distinctions the implementation must not blur:
 ```go
 // The single place any of this may be written.
 func writeAnchors(v *PlayerView, s State, seat SeatID) {
-    // rows 1-5, 7-9: unconditional
-    // row 6: gated by hadSight(seat, node)
+    // rows 2-6, 9-11: unconditional
+    // rows 1, 7, 8: gated by hadSight(seat, node)
 }
 ```
 
