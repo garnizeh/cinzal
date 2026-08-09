@@ -20,10 +20,17 @@ func TestEventKindNamesAreStable(t *testing.T) {
 		EventLeaseExpired:  "LeaseExpired",
 		EventDelivered:     "Delivered",
 		EventItemPurchased: "ItemPurchased",
+
+		// Not from GDD §7.3 — RFC §9.1's Anchor writer table, rows 6, 9,
+		// 10 and 11, sourced from GDD §8.4, §11, and §14.2 respectively.
+		EventLooseCrateHeld: "LooseCrateHeld",
+		EventTierFeared:     "TierFeared",
+		EventTierLegend:     "TierLegend",
+		EventInformants:     "Informants",
 	}
 
-	if len(want) != 8 {
-		t.Fatalf("test table itself is wrong: GDD §7.3 lists 8 trail archetypes, table has %d", len(want))
+	if len(want) != 12 {
+		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows is 12, table has %d", len(want))
 	}
 
 	for kind, name := range want {

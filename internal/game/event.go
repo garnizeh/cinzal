@@ -47,6 +47,35 @@ const (
 	// EventItemPurchased is GDD §7.3's "Someone worked the counter." Named
 	// iff the actor's Infamy is >= 6 (RFC §9.1 row 8) — see Item.
 	EventItemPurchased
+
+	// The four kinds below are not in GDD §7.3's trail table — RFC §9.1
+	// sources them from elsewhere (loose crate holding, the Infamy ladder,
+	// and the Informants event card) and lists them as rows 6, 9, 10 and
+	// 11 of the position-writer table. They land here ahead of the
+	// resolution logic that will eventually produce them (#63, #65, #72),
+	// because #75's Project — and the Anchor type in view.go — depends on
+	// this vocabulary existing, not on that logic being built yet.
+
+	// EventLooseCrateHeld is GDD §8.4's "run hot" escalation: a loose crate
+	// held for a second consecutive round triggers a global announcement
+	// of the holder's node (RFC §9.1 row 6). Never named, the same shape
+	// as EventLoitering.
+	EventLooseCrateHeld
+
+	// EventTierFeared is the Feared tier's automatic position reveal,
+	// fired at the end of every round Infamy sits at 6-8 (GDD §11, RFC
+	// §9.1 row 9).
+	EventTierFeared
+
+	// EventTierLegend is the Legend tier's automatic position reveal,
+	// fired for the whole order phase whenever Infamy sits at 9-10 (GDD
+	// §11, RFC §9.1 row 10) — the ladder's steepest exposure cost.
+	EventTierLegend
+
+	// EventInformants is the Underworld global event card: every player's
+	// current position is revealed to everyone, once (GDD §14.2, RFC §9.1
+	// row 11).
+	EventInformants
 )
 
 // String returns the event kind's name, or "EventKind(n)" for an invalid
@@ -69,6 +98,14 @@ func (k EventKind) String() string {
 		return "Delivered"
 	case EventItemPurchased:
 		return "ItemPurchased"
+	case EventLooseCrateHeld:
+		return "LooseCrateHeld"
+	case EventTierFeared:
+		return "TierFeared"
+	case EventTierLegend:
+		return "TierLegend"
+	case EventInformants:
+		return "Informants"
 	default:
 		return invalidEnumString("EventKind", int(k))
 	}
