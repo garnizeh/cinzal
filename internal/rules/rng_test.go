@@ -149,4 +149,12 @@ func TestConsumedIsQueryablePerRound(t *testing.T) {
 	if round1.Round() != 1 || round2.Round() != 2 {
 		t.Fatalf("Round() = (%d, %d), want (1, 2)", round1.Round(), round2.Round())
 	}
+
+	// The round is part of the derivation, so identically-seeded RNGs bound
+	// to different rounds must not draw the same first value — a regression
+	// that dropped r.round from the HMAC message would pass every assertion
+	// above and still desynchronise every round after the first.
+	if NewRNG(seed, 1).Next(PurposePressureD6, 1<<30) == NewRNG(seed, 2).Next(PurposePressureD6, 1<<30) {
+		t.Errorf("first draw is identical across rounds 1 and 2; round is not part of the derivation")
+	}
 }

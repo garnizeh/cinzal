@@ -4,53 +4,83 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"os"
 	"strconv"
+	"strings"
 	"testing"
 )
 
-// declaredPurposeConstants parses rng_purpose.go's own source and returns
-// every string value assigned to a `Purpose`-typed constant. It reads the
-// source rather than trusting a hand-maintained list, so a constant added
-// without updating this test's expectations is still caught: the point of
-// the acceptance criterion is that the constants and the table cannot drift
-// apart silently.
+// declaredPurposeConstants parses every non-test .go file in this package
+// directory and returns the string value of every `Purpose`-typed constant
+// it finds. It reads the source rather than trusting a hand-maintained
+// list, so a constant added anywhere in the package — not just in this
+// file — is still caught: the point of the acceptance criterion is that
+// the constants and the table cannot drift apart silently.
+//
+// A ValueSpec that omits its type inherits the previous spec's type within
+// the same const block, per the Go spec's iota-repetition rule; this walk
+// carries that type forward so such a constant is not silently skipped.
 func declaredPurposeConstants(t *testing.T) map[Purpose]bool {
 	t.Helper()
 
-	fset := token.NewFileSet()
-	file, err := parser.ParseFile(fset, "rng_purpose.go", nil, 0)
+	entries, err := os.ReadDir(".")
 	if err != nil {
-		t.Fatalf("parse rng_purpose.go: %v", err)
+		t.Fatalf("read internal/rules directory: %v", err)
 	}
 
+	fset := token.NewFileSet()
 	declared := map[Purpose]bool{}
-	for _, decl := range file.Decls {
-		gen, ok := decl.(*ast.GenDecl)
-		if !ok || gen.Tok != token.CONST {
+	filesScanned := 0
+
+	for _, entry := range entries {
+		name := entry.Name()
+		if entry.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
 			continue
 		}
-		for _, spec := range gen.Specs {
-			vs, ok := spec.(*ast.ValueSpec)
-			if !ok {
+
+		file, err := parser.ParseFile(fset, name, nil, 0)
+		if err != nil {
+			t.Fatalf("parse %s: %v", name, err)
+		}
+		filesScanned++
+
+		for _, decl := range file.Decls {
+			gen, ok := decl.(*ast.GenDecl)
+			if !ok || gen.Tok != token.CONST {
 				continue
 			}
-			ident, ok := vs.Type.(*ast.Ident)
-			if !ok || ident.Name != "Purpose" {
-				continue
-			}
-			for _, val := range vs.Values {
-				lit, ok := val.(*ast.BasicLit)
-				if !ok || lit.Kind != token.STRING {
+
+			lastType := ""
+			for _, spec := range gen.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
 					continue
 				}
-				unquoted, err := strconv.Unquote(lit.Value)
-				if err != nil {
-					t.Fatalf("unquote %s: %v", lit.Value, err)
+				if ident, ok := vs.Type.(*ast.Ident); ok {
+					lastType = ident.Name
 				}
-				declared[Purpose(unquoted)] = true
+				if lastType != "Purpose" {
+					continue
+				}
+				for _, val := range vs.Values {
+					lit, ok := val.(*ast.BasicLit)
+					if !ok || lit.Kind != token.STRING {
+						continue
+					}
+					unquoted, err := strconv.Unquote(lit.Value)
+					if err != nil {
+						t.Fatalf("unquote %s: %v", lit.Value, err)
+					}
+					declared[Purpose(unquoted)] = true
+				}
 			}
 		}
 	}
+
+	if filesScanned == 0 {
+		t.Fatal("scanned zero .go files in internal/rules — the directory walk found nothing, which would make this test vacuously pass")
+	}
+
 	return declared
 }
 

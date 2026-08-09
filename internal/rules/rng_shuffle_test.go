@@ -172,9 +172,30 @@ func TestShuffleConstrainedDeterministic(t *testing.T) {
 	}
 
 	a, b := run(), run()
+	if len(a) != len(b) {
+		t.Fatalf("length mismatch: %v vs %v", a, b)
+	}
 	for i := range a {
 		if a[i] != b[i] {
 			t.Fatalf("result diverged at %d: %v vs %v", i, a, b)
 		}
 	}
+}
+
+// TestShuffleConstrainedPanicsOnUnmetQuota asserts a quota is a fixed
+// contract, not a best-effort target: a category short of its quota must
+// panic rather than silently return a deck smaller than D03 promises,
+// consuming fewer draws than the §6.4 table predicts.
+func TestShuffleConstrainedPanicsOnUnmetQuota(t *testing.T) {
+	type card struct{ category int }
+
+	pool := []card{{0}, {0}, {1}, {1}, {1}} // category 0 has only 2, quota needs 3
+	quota := map[int]int{0: 3, 1: 2}
+
+	defer func() {
+		if recover() == nil {
+			t.Fatal("ShuffleConstrained did not panic on an under-filled category")
+		}
+	}()
+	ShuffleConstrained(NewRNG(testSeed(15), 0), PurposeDeckIncidentSelect, PurposeDeckIncidentOrder, pool, func(c card) int { return c.category }, quota)
 }

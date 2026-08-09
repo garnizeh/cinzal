@@ -1,6 +1,9 @@
 package rules
 
-import "sort"
+import (
+	"fmt"
+	"sort"
+)
 
 // PartialFisherYates performs RFC-001 §6.4's mandated bounded selection: a
 // partial Fisher-Yates over candidates, which the caller must already have
@@ -13,6 +16,10 @@ import "sort"
 // row use: inventing a second correct-looking selection method anywhere in
 // this package would recreate the desync risk this shape exists to
 // prevent.
+//
+// The returned slice aliases candidates' backing array. Callers must pass a
+// freshly built slice — never one shared with State — and must not retain
+// the result past the resolution step that produced it.
 func PartialFisherYates[T any](rng *RNG, purpose Purpose, candidates []T, k int) []T {
 	n := min(k, len(candidates))
 	for i := 0; i < n; i++ {
@@ -37,6 +44,14 @@ func PartialFisherYates[T any](rng *RNG, purpose Purpose, candidates []T, k int)
 // randomizes it. Categories are visited in ascending order, not map
 // iteration order, so the draw sequence stays deterministic regardless of
 // how quota's keys happen to hash.
+//
+// A quota is a fixed contract, not a best-effort target: a category with
+// fewer than quota[c] items panics rather than silently returning a short
+// deck. PartialFisherYates's own min(k, n) truncation is correct for a
+// bounded selection like Torn Map, where the candidate pool can vary; a
+// short deck here would both violate D03's exact per-category counts and
+// consume fewer draws than the §6.4 table predicts, desynchronising a
+// replay in a later round with no obvious cause at the point it surfaces.
 func ShuffleConstrained[T any](rng *RNG, selectPurpose, orderPurpose Purpose, pool []T, categoryOf func(T) int, quota map[int]int) []T {
 	byCategory := make(map[int][]T, len(quota))
 	for _, item := range pool {
@@ -54,6 +69,9 @@ func ShuffleConstrained[T any](rng *RNG, selectPurpose, orderPurpose Purpose, po
 
 	selected := make([]T, 0, total)
 	for _, c := range categories {
+		if len(byCategory[c]) < quota[c] {
+			panic(fmt.Sprintf("rules: ShuffleConstrained(%q): category %d has %d items, quota requires %d", selectPurpose, c, len(byCategory[c]), quota[c]))
+		}
 		selected = append(selected, PartialFisherYates(rng, selectPurpose, byCategory[c], quota[c])...)
 	}
 
