@@ -28,6 +28,8 @@ const (
 	NodeAlley       // 32% — no economic function; +1 confrontation for an Aggressive occupant (GDD §6.2, §9.3)
 )
 
+// String returns the node type's GDD §6.2 name, or "NodeType(n)" for an
+// invalid value.
 func (t NodeType) String() string {
 	switch t {
 	case NodeWarehouse:
@@ -57,6 +59,8 @@ const (
 	SectorNorthVale   // Dry red, predominantly Borders (GDD §3)
 )
 
+// String returns the sector's GDD §3 district name, or "Sector(n)" for an
+// invalid value.
 func (s Sector) String() string {
 	switch s {
 	case SectorOldDocks:
@@ -88,6 +92,8 @@ const (
 	FogInSight  // Adds this round's trail log, and market stock if a Black Market (GDD §7.1)
 )
 
+// String returns the fog state's GDD §7.1 name, or "FogState(n)" for an
+// invalid value.
 func (f FogState) String() string {
 	switch f {
 	case FogHidden:
@@ -115,6 +121,8 @@ const (
 	StanceEvasive    // −1 confrontation; keep cargo on a loss if the Cr$ 4 shakedown is paid (GDD §9.3)
 )
 
+// String returns the stance's GDD §9.3 name, or "Stance(n)" for an invalid
+// value.
 func (s Stance) String() string {
 	switch s {
 	case StanceAggressive:
@@ -144,6 +152,8 @@ const (
 	ActionNothing   // No action taken; also the degradation fallback (GDD §9.2, §15.0)
 )
 
+// String returns the action's GDD §9.2 name, or "ActionKind(n)" for an
+// invalid value.
 func (a ActionKind) String() string {
 	switch a {
 	case ActionPickup:
@@ -178,6 +188,8 @@ const (
 	TierLegend // Infamy 9-10 (GDD §9.1)
 )
 
+// String returns the tier's GDD §9.1 title, or "InfamyTier(n)" for an
+// invalid value.
 func (t InfamyTier) String() string {
 	switch t {
 	case TierNobody:

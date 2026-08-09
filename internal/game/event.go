@@ -49,6 +49,8 @@ const (
 	EventItemPurchased
 )
 
+// String returns the event kind's name, or "EventKind(n)" for an invalid
+// value.
 func (k EventKind) String() string {
 	switch k {
 	case EventCargoTaken:
