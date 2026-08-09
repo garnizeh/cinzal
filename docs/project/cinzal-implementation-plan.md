@@ -1,6 +1,6 @@
 # CINZAL — Implementation Roadmap
 
-**Status:** draft for review · **Revision:** p2 · **Companion docs:** `cinzal-gdd.md` **v2.16**, `cinzal-architecture-rfc.md` **RFC-001 r17**
+**Status:** draft for review · **Revision:** p2 · **Companion docs:** `cinzal-gdd.md` **v2.16**, `cinzal-architecture-rfc.md` **RFC-001 r19**
 
 *This document sequences the work. It does not re-decide anything the GDD or the RFC already decided — where it appears to, that is a spec gap and it is logged in §3 rather than resolved silently.*
 
@@ -136,6 +136,8 @@ Action: complete the table **before** `Resolve` is written, and mandate the meth
 
 **D13 · `Blackout` and `Rain` distort the observation archive.** RFC §9.2 builds the Heat Map rate on a `Sight` denominator where "sight with no traffic" is real evidence. Under **Rain** no tracks are recorded anywhere, and under **Blackout** nobody has sight beyond their own node. If those rounds count toward the denominator, every watched node's rate is silently deflated by an event the player had no part in. Needs a rule: exclude suppressed rounds from the denominator, or surface them in the confidence flag.
 
+**Resolved by [D13](../decisions/D13-observation-denominator.md): excluded only where a real entry was actually erased by Rain or Blackout, not the whole round.** `SeatArchive` gains a parallel `Obscured` set; Vanish, Distracted Guard and Festival suppress the *acting* player's own entry by design and never populate it.
+
 **D14 · Small resolution gaps** to close while writing the pipeline, each cheap alone and each a silent bug if missed: `Torched` reducing a lease to ≤ 0 (expire, and does the public expiry trace fire?); `Muscle` loss in a 3+ melee (every non-winner loses); buying an item at the hand limit of 3; `Open Doors` letting a player "buy one item at half price" without being at a market — from which market's stock?; **`Bounty`** (highest RP) has no tie-break in RFC §6.5's table, unlike `New Boss`.
 
 **~~D15~~ · Two documented cross-reference errors** — *not a decision; reclassified as a task.* RFC §6.5's tie-break table cites a card called **"Blitz"** which does not exist in GDD §14.2 — the described behaviour (highest Infamy, hits every tied player) is **Raid**. And GDD §9.2's action table still says Stake Post is capped at "**5**", which §10.3 replaced with 4/4/4/3.
@@ -201,7 +203,7 @@ Blocked by: **D3–D14**. Blocks: everything.
 - `MatchState`, `Player`, `Node`, `Graph`, `Contract` (per-player instances with their own Deadline Pause flag), the four fog states, and the eight cross-round counters from RFC §6.6.
 - `Order` + `Legal()` covering every row of GDD §15.0, and the affordance metadata RFC §10.2 requires the server to render.
 - `Resolve()` as the fixed pipeline of RFC §6.7 — validate → per-step movement with crossing and collision → actions → deliveries → add-ons → trail → event/incident/pressure/upkeep — with the entry snapshot (§6.6) and both orderings (§6.5) implemented as the only two comparators in the codebase.
-- `Project()` and `PlayerView`, including the `SeatArchive` sight/trail history (§9.2), `NodeStats`, and all **twelve** authorised position writers (§9.1), including Decoy's self-named row per [D12](../decisions/D12-decoy-fog-writer.md).
+- `Project()` and `PlayerView`, including the `SeatArchive` sight/trail/obscured history (§9.2, `Obscured` excluding only rounds a real entry was actually erased by Rain or Blackout per [D13](../decisions/D13-observation-denominator.md)), `NodeStats`, and all **twelve** authorised position writers (§9.1), including Decoy's self-named row per [D12](../decisions/D12-decoy-fog-writer.md).
 - Final scoring (GDD §16) and the two-player rule set (§6.3).
 - Full test suite from RFC §16.1's matrix that does not need a database: unit, property, golden replays, **fog negative tests**, cross-round counters, lazy RNG, Torn Map, tie-breaks, entry snapshot, anchor parity, headline coherence, adversarial payloads.
 
@@ -209,7 +211,7 @@ Blocked by: **D3–D14**. Blocks: everything.
 - `resolve(s, o) == resolve(s, o)` byte-identical, and a golden 15-round replay reproduces on a second machine and a second OS.
 - The RNG index count for each round matches the §6.4 table prediction **including truncation cases**.
 - Fog suite: for a state where seat A cannot see node N, `Project(s, A)` serialised to JSON contains **no occurrence of N's ID anywhere in the bytes**.
-- Anchor parity test passes against GDD §7.3's trail table, row for row.
+- Anchor parity test passes: every GDD §7.3 row with a name attached maps to its correct row of RFC §9.1's twelve-writer table (or correctly to no row, for Fresh tracks); every writer row without a §7.3 counterpart cites its source section instead (RFC §16.1).
 - A full match can be driven to final scoring from a Go test with no I/O of any kind.
 
 ---

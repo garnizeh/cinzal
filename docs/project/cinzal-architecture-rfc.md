@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r18 · **Companion doc:** `cinzal-gdd.md` **v2.16**
+**Status:** draft for review · **Revision:** r19 · **Companion doc:** `cinzal-gdd.md` **v2.16**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -96,6 +96,12 @@
 > - **No new leak surface.** Decoy reuses row 1's `TrailEntry` kind rather than introducing a distinct one specifically so no reader — including the planter — can distinguish a fabricated entry from a real one by any field, ordering, or serialisation artefact; the fabricated/real distinction exists only inside `MatchState`'s internal record and is stripped at `Project`.
 > - **A real, pre-existing bug found while writing row 12's parity note: §9.1's "checked against GDD §7.3, row for row" claim was never literally true.** Rows 6, 9, 10 and 11 (loose crate holding, the two Infamy-tier reveals, Informants) were already sourced from other GDD sections, not from §7.3's eight-row trail table, before this decision added a fifth such row. §9.1 and §16.1's Anchor parity test row are corrected to state the real check: every §7.3 row with a name attached must map to exactly one writer row here, and every writer row without a §7.3 counterpart must cite its source document and section instead — a GDD section directly for rows 6 and 9–11, or D12 (grounded in GDD §§9.4 and 12) for row 12 — not a row-count or row-for-row equality between two tables of different size by design.
 > - GDD §9.4 and §12 needed no textual change; both already specified the mechanics this decision assumed. Full reasoning, including why B's "forge any player's name" reading was rejected, in [D12](../decisions/D12-decoy-fog-writer.md).
+>
+> **Changelog r18 → r19** — Rain and Blackout had no rule for the archive's denominator (D13)
+> - **§9.2's `SeatArchive` gains `Obscured map[NodeID]RoundSet`; `NodeStats` gains `ObscuredRounds int`.** A node stays in `Sight` — positive or an honest zero — whenever Rain's or Blackout's suppression didn't actually erase anything there; it moves to `Obscured` only when a real entry genuinely occurred and neither card let it survive. Excluded from the denominator only where the reading is actually corrupted, not merely because a suppression card was live somewhere in the match that round.
+> - **Vanish, Distracted Guard and Festival need no special case.** All three suppress the *acting* player's own entry as a designed, successful evasion, not a world-level event — a watcher's "nothing here" stays an honest zero, never `Obscured`.
+> - **No pipeline change.** `writeTrail()` still runs before `globalEvent()` per §6.7, but the event deck is fixed at Setup and Phase 1's Headline peek is non-consuming (§6.4) — `writeTrail` re-reads the same peek to know whether Rain is this round's card, rather than needing a retroactive correction after `globalEvent()` pops it.
+> - Full reasoning, including why Rain's suppression is narrower than "the round doesn't count" and why Riot doesn't raise the same problem, in [D13](../decisions/D13-observation-denominator.md).
 
 ---
 
@@ -484,7 +490,8 @@ resolveAddons()               → Ledger (one round stale), lease renewals
   ↓
 writeTrail()                  → Loitering evaluation (AFTER actions, §6.6),
                                 crate heat, per-node logs, then distribute by sight
-                                and append to each seat's archive (§9.2)
+                                and append to each seat's archive, honoring D13's
+                                Rain/Blackout exclusion rule (§9.2)
   ↓
 globalEvent() · incident() · pressure()
   ↓
@@ -839,21 +846,27 @@ That cannot be computed from a single round's view, and §7.3 rules out a cache 
 
 ```go
 type SeatArchive struct {
-    Sight map[NodeID]RoundSet    // which rounds you had sight of this node
-    Trail []StampedTrailEntry    // every entry you have ever received
+    Sight    map[NodeID]RoundSet    // which rounds you had sight of this node,
+                                     // and the reading was honest — see below
+    Obscured map[NodeID]RoundSet    // rounds a real entry at this node was erased
+                                     // by Rain or Blackout specifically (D13)
+    Trail    []StampedTrailEntry    // every entry you have ever received
 }
 
 type NodeStats struct {
     ObservedRounds int   // |Sight[node]|
     TrafficRounds  int   // rounds within that set carrying a tracks entry
+    ObscuredRounds int   // |Obscured[node]| — rounds excluded, not zeroed (D13)
 }                        // rate = TrafficRounds / ObservedRounds
 ```
 
 **The `Sight` set is the part that is easy to miss.** A trail archive alone cannot produce the denominator, because *sight with no traffic* is itself an observation — "I watched this chokepoint for six rounds and nothing crossed" is exactly the evidence the rate is built from, and it leaves no trail entry behind. Storing only the entries would silently turn every rate into 100%, which is precisely the misleading raw-count reading that GDD §7.5 introduced the rate to avoid.
 
-**This is fog-sensitive state living inside `MatchState`.** Seat A's archive must never reach seat B, so `Project` ships only the requesting seat's, and the fog suite tests it as it tests any other hidden fact.
+**`Obscured` exists because two cards break that premise, and only where they actually erase something ([D13](../decisions/D13-observation-denominator.md)).** Rain (GDD §14.2) suppresses "fresh tracks" entries specifically; Blackout (GDD §14.2) suppresses every entry kind, but sight itself is already capped to a seat's own node that round. Either way, a node stays in `Sight` — as a positive or an honest zero — whenever the suppression didn't actually erase anything there; it moves to `Obscured` only when a real trail-entry event genuinely occurred and neither card let it survive. `writeTrail` determines this from the same before-suppression fact it already computes to decide what to emit, re-reading Phase 1's non-consuming event-deck peek (§6.4) rather than waiting for `globalEvent()` to pop the card — no retroactive correction and no new RNG draw. Vanish, Distracted Guard and Festival never populate `Obscured`: each suppresses the *acting* player's own entry as a designed, successful evasion, not a world-level event, so a watcher's "nothing here" stays an honest `Sight` zero.
 
-Size is a non-issue: 25 nodes × 15 rounds is a 15-bit set per node per seat, and the trail archive runs to a few hundred entries per match.
+**This is fog-sensitive state living inside `MatchState`.** Seat A's archive must never reach seat B, so `Project` ships only the requesting seat's whole `SeatArchive` — `Sight`, `Obscured` and `Trail` alike — and the fog suite tests all three as it tests any other hidden fact.
+
+Size is a non-issue: 25 nodes × 15 rounds is a 15-bit set per node per seat — true of `Obscured` as much as `Sight` — and the trail archive runs to a few hundred entries per match.
 
 ### 9.3 Testing the projection
 
@@ -1299,7 +1312,7 @@ Two things survive into the production build because they are diagnostics, not g
 | Concurrency | Two goroutines submitting the last order of a round; assert exactly one resolution. Submit at `deadline_at ± 1ms` against a real Postgres clock; assert the reject/accept boundary is exact and that Autopilot engages on the correct round (§8.1, §8.2). |
 | Effects | **Fold a finished match ten times; assert `outbox` gains zero rows.** The single most valuable regression test in the suite (§7.4). |
 | Cross-round state | One test per row of §6.6, asserting the rule **fires on the correct round** — not merely that the counter advances. These fail silently otherwise. |
-| Archive | A node watched 6 rounds with traffic in 4 reports 4/6; a node watched with *no* traffic reports 0/N, not absence (§9.2). |
+| Archive | A node watched 6 rounds with traffic in 4 reports 4/6; a node watched with *no* traffic reports 0/N, not absence (§9.2). Plus four D13 cases: a non-fresh-tracks entry (confrontation, cargo taken, …) at a node during a Rain round is unaffected and reports normally; a node with genuinely no traffic during a Rain or Blackout round reports an honest zero, not an exclusion; a node whose only would-be entry is erased by Rain or Blackout is absent from `Sight`, present in `Obscured`, and excluded from `ObservedRounds` for that round; a node where Vanish/Distracted Guard/Festival suppressed the *acting* player's own entry reports an ordinary honest zero to every other watching seat, never `Obscured` ([D13](../decisions/D13-observation-denominator.md)). |
 | Lazy RNG | Truncate a Pushing On walk at a Gas Leak boundary; assert the unrun steps consumed zero indices (§6.4). |
 | Torn Map | Fewer than 4 hidden nodes remaining; assert exactly `min(4, hidden)` indices consumed and no duplicate reveal (§6.4). |
 | Tie-breaks | Two leases with identical rounds remaining; assert the same one is surrendered across 100 runs and on a rebuilt state (§6.5). |
