@@ -1,0 +1,84 @@
+package game
+
+import "testing"
+
+// Stringer is satisfied by every enum in this package. Kept as an explicit
+// compile-time assertion because a String() method with the wrong receiver
+// or a typo'd signature fails silently — fmt falls back to the numeric
+// default instead of a build error.
+type stringer interface{ String() string }
+
+var (
+	_ stringer = NodeType(0)
+	_ stringer = Sector(0)
+	_ stringer = FogState(0)
+	_ stringer = Stance(0)
+	_ stringer = ActionKind(0)
+	_ stringer = InfamyTier(0)
+	_ stringer = ItemID(0)
+	_ stringer = EventKind(0)
+)
+
+// TestZeroValueIsInvalid holds every enum in this package to the convention
+// documented in enums.go: the zero value is reserved and must not print as
+// one of the named constants, so a field that was never explicitly set is
+// distinguishable from one that was.
+func TestZeroValueIsInvalid(t *testing.T) {
+	cases := []struct {
+		name string
+		zero stringer
+		want string
+	}{
+		{"NodeType", NodeType(0), "NodeType(0)"},
+		{"Sector", Sector(0), "Sector(0)"},
+		{"FogState", FogState(0), "FogState(0)"},
+		{"Stance", Stance(0), "Stance(0)"},
+		{"ActionKind", ActionKind(0), "ActionKind(0)"},
+		{"InfamyTier", InfamyTier(0), "InfamyTier(0)"},
+		{"ItemID", ItemID(0), "ItemID(0)"},
+		{"EventKind", EventKind(0), "EventKind(0)"},
+	}
+
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			if got := c.zero.String(); got != c.want {
+				t.Fatalf("zero value of %s = %q, want %q", c.name, got, c.want)
+			}
+		})
+	}
+}
+
+func TestFogStateOrdersForwardOnly(t *testing.T) {
+	if FogHidden >= FogRumoured || FogRumoured >= FogKnown || FogKnown >= FogInSight {
+		t.Fatalf("FogState constants are not in ascending Hidden < Rumoured < Known < InSight order")
+	}
+}
+
+func TestInfamyTierOrdersAscending(t *testing.T) {
+	if TierNobody >= TierKnown || TierKnown >= TierFeared || TierFeared >= TierLegend {
+		t.Fatalf("InfamyTier constants are not in ascending order")
+	}
+}
+
+func TestItemIDNamesMatchGDDSection12(t *testing.T) {
+	want := map[ItemID]string{
+		ItemShiv:              "Shiv",
+		ItemMuscle:            "Muscle",
+		ItemPoliceBand:        "Police Band",
+		ItemCirculationPermit: "Circulation Permit",
+		ItemTornMap:           "Torn Map",
+		ItemDecoy:             "Decoy",
+		ItemBoltHole:          "Bolt Hole",
+		ItemGuardContact:      "Guard Contact",
+	}
+
+	if len(want) != 8 {
+		t.Fatalf("test table itself is wrong: GDD §12 lists 8 items, table has %d", len(want))
+	}
+
+	for id, name := range want {
+		if got := id.String(); got != name {
+			t.Errorf("%v.String() = %q, want %q", id, got, name)
+		}
+	}
+}
