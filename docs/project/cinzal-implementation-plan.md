@@ -1,6 +1,6 @@
 # CINZAL — Implementation Roadmap
 
-**Status:** draft for review · **Revision:** p2 · **Companion docs:** `cinzal-gdd.md` **v2.16**, `cinzal-architecture-rfc.md` **RFC-001 r16**
+**Status:** draft for review · **Revision:** p2 · **Companion docs:** `cinzal-gdd.md` **v2.16**, `cinzal-architecture-rfc.md` **RFC-001 r17**
 
 *This document sequences the work. It does not re-decide anything the GDD or the RFC already decided — where it appears to, that is a spec gap and it is logged in §3 rather than resolved silently.*
 
