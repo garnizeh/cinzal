@@ -56,7 +56,7 @@ Status is `open` until a document exists here.
 | [D9](D09-node-type-rounding.md) | Node type shares do not divide at 15, 22 and 28 nodes, and no rounding rule is stated | **decided** — largest remainder, ties broken by §6.2's declaration order |
 | [D10](D10-map-layout.md) | Map generation produces no 2D layout, which the projection and the SVG both need | **decided** — coordinates generated in `rules/gen` on a fixed 1000×1000 canvas; four sectors sit in fixed quadrants, nodes placed by partial Fisher-Yates over a per-quadrant 9-point lattice |
 | [D11](D11-config-suppression-flags.md) | `Config` has no subsystem-suppression flags, which solo scenarios require | **decided** — one boolean per subsystem in a nested `SubsystemSuppression` struct (Leases, Incidents, Events, InfamyTiers, Items); no separate Pressure flag, since it's unreachable once InfamyTiers is suppressed |
-| D12 | `Decoy` is unspecified at the fog boundary | open |
+| [D12](D12-decoy-fog-writer.md) | `Decoy` is unspecified at the fog boundary | **decided** — plants a real "Cargo Taken" entry naming only the planter (self-misdirection, never another player), gated by the planter's own Infamy ≥ 3 at end-of-round resolution — row 1's existing gate, not a new one; row 12 in RFC §9.1's table |
 | D13 | `Blackout` and `Rain` distort the observation archive's denominator | open |
 | D14 | Small resolution gaps: `Torched` at zero lease, `Muscle` in a melee, buying at the hand limit, `Open Doors` stock, `Bounty` tie-break | open |
 | ~~D15~~ | Two cross-reference errors in the source documents: the non-existent "Blitz" card, and a stale post cap of 5 | **not a decision** — reclassified as a task, [#40](https://github.com/garnizeh/cinzal/issues/40) |

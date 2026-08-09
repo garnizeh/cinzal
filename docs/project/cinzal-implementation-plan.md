@@ -201,7 +201,7 @@ Blocked by: **D3–D14**. Blocks: everything.
 - `MatchState`, `Player`, `Node`, `Graph`, `Contract` (per-player instances with their own Deadline Pause flag), the four fog states, and the eight cross-round counters from RFC §6.6.
 - `Order` + `Legal()` covering every row of GDD §15.0, and the affordance metadata RFC §10.2 requires the server to render.
 - `Resolve()` as the fixed pipeline of RFC §6.7 — validate → per-step movement with crossing and collision → actions → deliveries → add-ons → trail → event/incident/pressure/upkeep — with the entry snapshot (§6.6) and both orderings (§6.5) implemented as the only two comparators in the codebase.
-- `Project()` and `PlayerView`, including the `SeatArchive` sight/trail history (§9.2), `NodeStats`, and all **eleven** authorised position writers (§9.1) — plus `Decoy` if D12 adds a twelfth.
+- `Project()` and `PlayerView`, including the `SeatArchive` sight/trail history (§9.2), `NodeStats`, and all **twelve** authorised position writers (§9.1), including Decoy's self-named row per [D12](../decisions/D12-decoy-fog-writer.md).
 - Final scoring (GDD §16) and the two-player rule set (§6.3).
 - Full test suite from RFC §16.1's matrix that does not need a database: unit, property, golden replays, **fog negative tests**, cross-round counters, lazy RNG, Torn Map, tie-breaks, entry snapshot, anchor parity, headline coherence, adversarial payloads.
 
