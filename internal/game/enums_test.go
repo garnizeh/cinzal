@@ -17,6 +17,8 @@ var (
 	_ stringer = InfamyTier(0)
 	_ stringer = ItemID(0)
 	_ stringer = EventKind(0)
+	_ stringer = CreditBand(0)
+	_ stringer = EventCategory(0)
 )
 
 // TestZeroValueIsInvalid holds every enum in this package to the convention
@@ -37,6 +39,8 @@ func TestZeroValueIsInvalid(t *testing.T) {
 		{"InfamyTier", InfamyTier(0), "InfamyTier(0)"},
 		{"ItemID", ItemID(0), "ItemID(0)"},
 		{"EventKind", EventKind(0), "EventKind(0)"},
+		{"CreditBand", CreditBand(0), "CreditBand(0)"},
+		{"EventCategory", EventCategory(0), "EventCategory(0)"},
 	}
 
 	for _, c := range cases {
@@ -79,6 +83,44 @@ func TestItemIDNamesMatchGDDSection12(t *testing.T) {
 	for id, name := range want {
 		if got := id.String(); got != name {
 			t.Errorf("%v.String() = %q, want %q", id, got, name)
+		}
+	}
+}
+
+func TestCreditBandNamesMatchGDDSection5Point1(t *testing.T) {
+	want := map[CreditBand]string{
+		BandBroke:     "Broke",
+		BandGettingBy: "Getting by",
+		BandFlush:     "Flush",
+		BandLoaded:    "Loaded",
+	}
+
+	if len(want) != 4 {
+		t.Fatalf("test table itself is wrong: GDD §5.1 lists 4 bands, table has %d", len(want))
+	}
+
+	for band, name := range want {
+		if got := band.String(); got != name {
+			t.Errorf("%v.String() = %q, want %q", band, got, name)
+		}
+	}
+}
+
+func TestEventCategoryNamesMatchGDDSection14Point2(t *testing.T) {
+	want := map[EventCategory]string{
+		CategoryPolice:     "Police",
+		CategoryEconomy:    "Economy",
+		CategoryUnderworld: "Underworld",
+		CategoryCity:       "City",
+	}
+
+	if len(want) != 4 {
+		t.Fatalf("test table itself is wrong: GDD §14.2 lists 4 categories, table has %d", len(want))
+	}
+
+	for category, name := range want {
+		if got := category.String(); got != name {
+			t.Errorf("%v.String() = %q, want %q", category, got, name)
 		}
 	}
 }

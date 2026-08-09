@@ -204,3 +204,64 @@ func (t InfamyTier) String() string {
 		return invalidEnumString("InfamyTier", int(t))
 	}
 }
+
+// CreditBand is a player's balance as disclosed to opponents (GDD §5.1):
+// never the exact figure, only which of four ranges it falls in. See
+// OpponentView.Band and, for the one exception, SelfState.Ledger.
+type CreditBand uint8
+
+const (
+	_ CreditBand = iota
+
+	BandBroke     // Cr$ 0-5 (GDD §5.1)
+	BandGettingBy // Cr$ 6-15 (GDD §5.1)
+	BandFlush     // Cr$ 16-30 (GDD §5.1)
+	BandLoaded    // Cr$ 31+ (GDD §5.1)
+)
+
+// String returns the band's GDD §5.1 label, or "CreditBand(n)" for an
+// invalid value.
+func (b CreditBand) String() string {
+	switch b {
+	case BandBroke:
+		return "Broke"
+	case BandGettingBy:
+		return "Getting by"
+	case BandFlush:
+		return "Flush"
+	case BandLoaded:
+		return "Loaded"
+	default:
+		return invalidEnumString("CreditBand", int(b))
+	}
+}
+
+// EventCategory is the global event deck's four categories (GDD §14.2),
+// disclosed by the Headline before it discloses which card (GDD §14.1).
+type EventCategory uint8
+
+const (
+	_ EventCategory = iota
+
+	CategoryPolice     // GDD §14.2
+	CategoryEconomy    // GDD §14.2
+	CategoryUnderworld // GDD §14.2
+	CategoryCity       // GDD §14.2
+)
+
+// String returns the category's GDD §14.2 name, or "EventCategory(n)" for
+// an invalid value.
+func (c EventCategory) String() string {
+	switch c {
+	case CategoryPolice:
+		return "Police"
+	case CategoryEconomy:
+		return "Economy"
+	case CategoryUnderworld:
+		return "Underworld"
+	case CategoryCity:
+		return "City"
+	default:
+		return invalidEnumString("EventCategory", int(c))
+	}
+}
