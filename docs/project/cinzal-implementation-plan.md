@@ -136,6 +136,8 @@ Action: complete the table **before** `Resolve` is written, and mandate the meth
 
 **D13 · `Blackout` and `Rain` distort the observation archive.** RFC §9.2 builds the Heat Map rate on a `Sight` denominator where "sight with no traffic" is real evidence. Under **Rain** no tracks are recorded anywhere, and under **Blackout** nobody has sight beyond their own node. If those rounds count toward the denominator, every watched node's rate is silently deflated by an event the player had no part in. Needs a rule: exclude suppressed rounds from the denominator, or surface them in the confidence flag.
 
+**Resolved by [D13](../decisions/D13-observation-denominator.md): excluded only where a real entry was actually erased by Rain or Blackout, not the whole round.** `SeatArchive` gains a parallel `Obscured` set; Vanish, Distracted Guard and Festival suppress the *acting* player's own entry by design and never populate it.
+
 **D14 · Small resolution gaps** to close while writing the pipeline, each cheap alone and each a silent bug if missed: `Torched` reducing a lease to ≤ 0 (expire, and does the public expiry trace fire?); `Muscle` loss in a 3+ melee (every non-winner loses); buying an item at the hand limit of 3; `Open Doors` letting a player "buy one item at half price" without being at a market — from which market's stock?; **`Bounty`** (highest RP) has no tie-break in RFC §6.5's table, unlike `New Boss`.
 
 **~~D15~~ · Two documented cross-reference errors** — *not a decision; reclassified as a task.* RFC §6.5's tie-break table cites a card called **"Blitz"** which does not exist in GDD §14.2 — the described behaviour (highest Infamy, hits every tied player) is **Raid**. And GDD §9.2's action table still says Stake Post is capped at "**5**", which §10.3 replaced with 4/4/4/3.
@@ -209,7 +211,7 @@ Blocked by: **D3–D14**. Blocks: everything.
 - `resolve(s, o) == resolve(s, o)` byte-identical, and a golden 15-round replay reproduces on a second machine and a second OS.
 - The RNG index count for each round matches the §6.4 table prediction **including truncation cases**.
 - Fog suite: for a state where seat A cannot see node N, `Project(s, A)` serialised to JSON contains **no occurrence of N's ID anywhere in the bytes**.
-- Anchor parity test passes against GDD §7.3's trail table, row for row.
+- Anchor parity test passes: every GDD §7.3 row with a name attached maps to its correct row of RFC §9.1's twelve-writer table (or correctly to no row, for Fresh tracks); every writer row without a §7.3 counterpart cites its source section instead (RFC §16.1).
 - A full match can be driven to final scoring from a Go test with no I/O of any kind.
 
 ---
