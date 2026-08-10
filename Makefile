@@ -107,9 +107,16 @@ generate-check: generate
 # listed as if it had. As each lands it appends itself to this line, and its
 # All four M0 gates are now listed. Anything added later appends itself here.
 #
+# generate-check is deliberately absent from this line for the same reason,
+# not an oversight: with GENERATED still empty (M3/M5 not landed), it can only
+# report VACUOUS, and listing it here would make `check`'s own success mean
+# "every gate that could run, passed" instead of "every gate passed" — exactly
+# the failure this file's own header warns against. It rejoins this line once
+# GENERATED holds real paths.
+#
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
-check: packages purity fog debug-isolation secrets lint test prod dev generate-check
+check: packages purity fog debug-isolation secrets lint test prod dev
 
 ## clean     remove build output
 clean:
