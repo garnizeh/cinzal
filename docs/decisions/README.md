@@ -65,6 +65,10 @@ Status is `open` until a document exists here.
 
 The row stays, struck through, because the numbering is cited elsewhere and a silently vanished D15 reads as an oversight. **D3–D14 are the twelve decisions that block M1.**
 
+| # | Question | Status |
+|---|---|---|
+| [D23](https://github.com/garnizeh/cinzal/issues/115) | GDD §6.1 constraint 7 says starting nodes "begin Known" along with a nearby Warehouse, but no document states which nodes exactly — surfaced while scoping [#61](https://github.com/garnizeh/cinzal/issues/61) | open |
+
 ### Blocks M5 — Playable web, and M6 — Async
 
 | # | Question | Status |

@@ -144,6 +144,8 @@ Action: complete the table **before** `Resolve` is written, and mandate the meth
 
 Both are wrong sentences rather than open questions: there is nothing to weigh and no option to reject, so they produce a pull request against the source documents rather than a document in `docs/decisions/`. Listing them here alongside twelve genuine decisions was a filing mistake, kept visible because the numbering is cited elsewhere. **The twelve decisions that block M1 are D3–D14.**
 
+**D23 · GDD §6.1 constraint 7's starting-fog seeding is unspecified.** Surfaced while scoping #61: the constraint guarantees every starting node has a Warehouse within 2 steps and says "those nodes begin Known," but not which nodes exactly — just the starting node and the nearest Warehouse, every Warehouse within 2 steps, or every node on a path to one. Blocks #63's opening-offer acceptance criteria, which need a Known Warehouse to exist for every seat at setup on every seed. See [issue #115](https://github.com/garnizeh/cinzal/issues/115).
+
 ### 3.3 Product surface — blocks **M5**/**M6**
 
 **D16 · The Recap has no cursor.** GDD §18 requires "every round since your last visit", and the RFC schema has no per-seat last-seen-round. `sessions.last_seen_at` is per session, not per match. Needs a column (`match_players.last_seen_round`) and a defined update point.
