@@ -103,3 +103,5 @@ func buildGraph(b *builder, starts []game.NodeID) Graph {
 	}
 	return Graph{Nodes: nodes, StartPositions: starts}
 }
+
+// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

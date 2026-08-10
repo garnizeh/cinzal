@@ -99,3 +99,5 @@ func (e *ExhaustedError) Error() string {
 	return fmt.Sprintf("gen: exhausted %d attempts without a graph satisfying every GDD §6.1 constraint; most frequent failure: %q (%d/%d attempts) — full breakdown: %v",
 		e.Attempts, e.MostFailed, e.Failures[e.MostFailed], e.Attempts, e.Failures)
 }
+
+// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).
