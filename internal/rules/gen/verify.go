@@ -64,3 +64,5 @@ func (b *builder) violations(chokepointCounts []int, minEdges, maxEdges int) []s
 
 	return failed
 }
+
+// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

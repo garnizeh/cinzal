@@ -425,3 +425,5 @@ func asExhausted(err error, target **ExhaustedError) bool {
 	}
 	return ok
 }
+
+// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

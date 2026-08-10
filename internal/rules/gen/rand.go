@@ -11,3 +11,5 @@ package gen
 // *rules.RNG.Next — every call site here computes n from a candidate slice
 // or a fixed range that is never empty by construction.
 type Rand func(purpose string, n int) int
+
+// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

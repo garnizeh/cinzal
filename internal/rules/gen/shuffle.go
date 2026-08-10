@@ -43,3 +43,5 @@ func randomSpanningTree[T any](rand Rand, purpose string, items []T, connect fun
 		added = append(added, child)
 	}
 }
+
+// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

@@ -61,3 +61,5 @@ func farEnoughFromAll(b *builder, candidate game.NodeID, selected []game.NodeID)
 	}
 	return true
 }
+
+// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).
