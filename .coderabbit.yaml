@@ -1,20 +1,37 @@
 # CodeRabbit repository configuration.
 #
-# reviews.path_filters exists here, and not only in the dashboard, because
-# the dashboard had accumulated a `!**/gen/**` exclusion — presumably meant
-# to skip future generated code (sqlc/templ output, arriving in M3/M5) —
-# that also matched internal/rules/gen/**, the hand-written map generator
-# and the entire subject of PR #107. That package went unreviewed across
-# every CodeRabbit pass on that PR; the pre-merge "Linked Issues" check
-# eventually surfaced it directly: "Core generator files are excluded by
-# the !**/gen/** filter, so the implementation of issue #59 constraints
-# cannot be verified."
+# reviews.path_filters exists here because CodeRabbit blocks certain paths
+# by default (a built-in list, not a per-repo dashboard setting). One of
+# those defaults matches "gen" directories and silently excluded
+# internal/rules/gen — hand-written code, not generated, and the entire
+# subject of PR #107 — from every CodeRabbit review pass on that PR. The
+# pre-merge "Linked Issues" check surfaced it directly: "Core generator
+# files are excluded by the !**/gen/** filter, so the implementation of
+# issue #59 constraints cannot be verified."
+#
+# Two fix attempts before this one, both confirmed wrong on live PRs:
+#   1. An empty path_filters (#108) — does not lift a default block, only
+#      cancels *additional* filters of our own; the default still applied
+#      (confirmed on PR #109, opened to force a fresh review: still skipped,
+#      still "excluded by !**/gen/**").
+#   2. An inclusion entry with a narrower, semantically-equivalent pattern,
+#      `internal/rules/gen/**` (still #109) — still didn't override. Every
+#      file came back "excluded by !**/gen/** and included by
+#      internal/rules/gen/**" and was *still* filtered, meaning the override
+#      isn't "does this path also match an include pattern" — the include
+#      pattern apparently has to be the identical glob text as the default
+#      block it's meant to cancel. CodeRabbit's own doc example uses that
+#      same shape: "including `**/dist/**` will override the default block
+#      on the `dist` directory."
+#
+# So the entry below repeats the exact default-block glob, `**/gen/**`, as
+# an inclusion (no leading !). If this still doesn't work, the fallback is
+# asking CodeRabbit support directly rather than guessing a fourth pattern.
 #
 # No generated code exists yet in this repo (see CLAUDE.md: generate-check
-# is VACUOUS until M3/M5), so there is nothing to exclude right now. When
-# sqlc/templ output lands, exclude their actual generated paths by name
-# (e.g. !internal/store/sqlc/**, !**/*_templ.go) — never a bare `**/gen/**`
-# pattern, which matches any hand-written package that happens to be named
-# "gen" (internal/rules/gen among them).
+# is VACUOUS until M3/M5). When sqlc/templ output lands, exclude its actual
+# generated paths by name (e.g. !internal/store/sqlc/**, !**/*_templ.go) —
+# a normal exclusion (leading !), unrelated to the override below.
 reviews:
-  path_filters: []
+  path_filters:
+    - "**/gen/**"

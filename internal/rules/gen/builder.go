@@ -125,3 +125,5 @@ func (b *builder) nodesSlice() []game.NodeID {
 	}
 	return nodes
 }
+
+// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).
