@@ -2,6 +2,7 @@ package rules
 
 import (
 	"reflect"
+	"slices"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -128,18 +129,21 @@ func TestInitialRejectsInvalidPlayerCount(t *testing.T) {
 	}
 }
 
-// TestInitialConsumesGenPurposesBeforeDeckPurposes pins RFC §6.4's required
-// draw order: gen.layout (inside gen.Generate, D10) before deck.event before
-// deck.incident, all on the one *RNG Setup shares. It is checked from the
-// outside — via what initial() actually produced — rather than duplicating
-// initial()'s internals: a deck built from a spent/rewound RNG would fail
-// the exact-count assertions TestInitialBuildsValidMatchState already
-// makes, so this test only needs to confirm every purpose in the chain
-// fired at least once for one real Setup call.
-func TestInitialConsumesEveryPhasePurpose(t *testing.T) {
+// TestInitialFollowsSetupPhaseOrder pins RFC §6.4's required draw order:
+// gen.layout (inside gen.Generate, D10) before deck.event before
+// deck.incident, all on the one *RNG Setup shares. It builds a reference
+// deck pair by hand, in that exact sequence, and asserts initial()'s own
+// output matches it card-for-card — checking initial() itself, not a
+// reimplementation of it, so a bug that reorders the phases, spins up a
+// second RNG partway through, or skips a deck build would show up as a
+// mismatch here rather than passing silently (CodeRabbit, PR #116: an
+// earlier version of this test only re-ran the sequence standalone and
+// never called initial at all, so it could not have caught any of that).
+func TestInitialFollowsSetupPhaseOrder(t *testing.T) {
 	cfg := game.DefaultConfig()
-	rng := NewRNG(testSeed(54), 0)
+	seed := testSeed(54)
 
+	rng := NewRNG(seed, 0)
 	g, err := gen.Generate(genRand(rng), gen.Params{
 		Nodes:       cfg.MapByPlayers[4].Nodes,
 		MinEdges:    cfg.MapByPlayers[4].MinEdges,
@@ -148,26 +152,26 @@ func TestInitialConsumesEveryPhasePurpose(t *testing.T) {
 		MaxAttempts: cfg.MaxGenAttempts,
 	})
 	if err != nil {
-		t.Fatalf("gen.Generate() = %v", err)
+		t.Fatalf("reference gen.Generate() = %v", err)
 	}
 	if rng.Consumed(PurposeGenLayout) == 0 {
 		t.Fatal("Consumed(gen.layout) = 0, want > 0 after gen.Generate")
 	}
+	wantEventDeck := buildEventDeck(rng)
+	wantIncidentDeck := buildIncidentDeck(rng)
 
-	graph := newGraph(g)
-	if len(graph.Nodes) != cfg.MapByPlayers[4].Nodes {
-		t.Fatalf("len(graph.Nodes) = %d, want %d", len(graph.Nodes), cfg.MapByPlayers[4].Nodes)
+	s, err := initial(seed, cfg, 4)
+	if err != nil {
+		t.Fatalf("initial() = %v", err)
+	}
+	if len(g.Nodes) != len(s.Graph.Nodes) {
+		t.Fatalf("reference graph has %d nodes, initial() produced %d", len(g.Nodes), len(s.Graph.Nodes))
 	}
 
-	eventDeck := buildEventDeck(rng)
-	incidentDeck := buildIncidentDeck(rng)
-	if len(eventDeck) != 12 || len(incidentDeck) != 13 {
-		t.Fatalf("len(eventDeck)=%d, len(incidentDeck)=%d, want 12 and 13", len(eventDeck), len(incidentDeck))
+	if !slices.Equal(s.Graph.EventDeck, wantEventDeck) {
+		t.Errorf("initial()'s EventDeck = %v, want %v (the reference sequence run on the same seed)", s.Graph.EventDeck, wantEventDeck)
 	}
-
-	for _, p := range []Purpose{PurposeDeckEventSelect, PurposeDeckEventOrder, PurposeDeckIncidentSelect, PurposeDeckIncidentOrder} {
-		if rng.Consumed(p) == 0 {
-			t.Errorf("Consumed(%s) = 0, want > 0 after the deck build", p)
-		}
+	if !slices.Equal(s.Graph.IncidentDeck, wantIncidentDeck) {
+		t.Errorf("initial()'s IncidentDeck = %v, want %v (the reference sequence run on the same seed)", s.Graph.IncidentDeck, wantIncidentDeck)
 	}
 }
