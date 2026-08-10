@@ -85,12 +85,14 @@ func TestAttemptAssignNodeTypesSucceedsOnSparseGraph(t *testing.T) {
 		neighbors[i] = []game.NodeID{game.NodeID((i - 1 + n) % n), game.NodeID((i + 1) % n)}
 	}
 
+	successes := 0
 	for seed := 0; seed < 20; seed++ {
 		rand, count := countingRand(seed)
 		types, ok := attemptAssignNodeTypes(rand, n, neighbors)
 		if !ok {
 			continue // a single walk is allowed to deadlock; assignNodeTypes retries
 		}
+		successes++
 		if *count != n {
 			t.Fatalf("seed=%d: attemptAssignNodeTypes consumed %d draws, want exactly %d", seed, *count, n)
 		}
@@ -116,6 +118,9 @@ func TestAttemptAssignNodeTypesSucceedsOnSparseGraph(t *testing.T) {
 				}
 			}
 		}
+	}
+	if successes == 0 {
+		t.Fatal("every seed deadlocked on a 10-cycle with plenty of room — the test checked nothing; a regression that always deadlocks would pass this test silently without this check")
 	}
 }
 

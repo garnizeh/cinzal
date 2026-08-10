@@ -99,9 +99,13 @@ func assignNodeTypes(rand Rand, b *builder) ([]game.NodeType, bool) {
 // attemptAssignNodeTypes is one greedy walk: one draw per node, in
 // ascending NodeID order, choosing uniformly among whichever types still
 // have quota remaining (D9) and would not create a Warehouse-Border
-// adjacency with an already-placed neighbour (GDD §6.1 constraint 6). Cost
-// is exactly n draws, always (PurposeTypeAssign), regardless of whether
-// this particular walk succeeds.
+// adjacency with an already-placed neighbour (GDD §6.1 constraint 6). A
+// successful walk costs exactly n draws (PurposeTypeAssign). A walk that
+// deadlocks costs fewer: it draws once per node successfully placed before
+// the deadlock and returns immediately, without drawing, for the node with
+// zero candidates — never one wasted draw on a node that was going to fail
+// anyway (RFC-001 §6.4's lazy-draw rule, the same discipline every
+// early-terminated draw in this engine follows).
 func attemptAssignNodeTypes(rand Rand, n int, neighbors [][]game.NodeID) ([]game.NodeType, bool) {
 	remaining := nodeTypeCounts(n)
 	types := make([]game.NodeType, n)

@@ -92,7 +92,7 @@ var ConsumptionTable = []PurposeRow{
 	{PurposeGenEdgeCount, "exactly 1, always", "rules/gen, Setup only", "Target total edge count within [MinEdges, MaxEdges]; issue #59"},
 	{PurposeGenFillEdge, "remaining-candidates-1", "rules/gen, Setup only", "Full shuffle of every remaining valid edge, degree-tiered selection to reach the target; issue #59"},
 	{PurposeGenStartSelect, "exactly Nodes-1, always", "rules/gen, Setup only", "Full shuffle of every node to select starting positions >= 4 apart with a Warehouse within 2 steps (GDD §6.1 constraints 5 and 7); issue #60"},
-	{PurposeGenTypeAssign, "Nodes per walk, times however many walks a graph attempt needed (bounded at 200)", "rules/gen, Setup only", "Per-node type choice satisfying D9's counts and GDD §6.1 constraint 6 (no Warehouse adjacent to a Border); retries a fresh walk against the same topology on a deadlock, before the caller discards the whole graph; issue #60"},
+	{PurposeGenTypeAssign, "up to Nodes per walk (fewer on a walk that deadlocks early), summed over however many walks a graph attempt needed (bounded at 200)", "rules/gen, Setup only", "Per-node type choice satisfying D9's counts and GDD §6.1 constraint 6 (no Warehouse adjacent to a Border); retries a fresh walk against the same topology on a deadlock, before the caller discards the whole graph; issue #60"},
 	{PurposeEventDragnet, "min(2, len(candidates))", "Phase 6", "Candidates: all Border nodes, sorted by NodeID"},
 	{PurposeEventBridgeDown, "min(1, len(candidates))", "Phase 6", "Candidates: navigable edges, sorted by (min(NodeID), max(NodeID))"},
 	{PurposeEventFestival, "1", "Phase 6", "Candidates: all nodes, sorted by NodeID"},

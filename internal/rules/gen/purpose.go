@@ -60,12 +60,13 @@ const (
 	// choosing that node's GDD §6.2 type among whichever of
 	// Warehouse/Border/Black Market/Alley still has quota remaining (D9)
 	// and would not create a GDD §6.1 constraint 6 Warehouse-Border
-	// adjacency with an already-placed neighbour. One such walk costs
-	// exactly Params.Nodes draws; a walk can deadlock before every node is
-	// placed, in which case up to typeAssignMaxTries further walks are
-	// retried against the same topology, so total cost per graph attempt is
-	// Params.Nodes * (walks tried), data-dependent but bounded — see
-	// nodetype.go.
+	// adjacency with an already-placed neighbour. A successful walk costs
+	// exactly Params.Nodes draws; a walk that deadlocks costs fewer — one
+	// draw per node placed before the deadlock, never a draw for the node
+	// that failed — and up to typeAssignMaxTries further walks are retried
+	// against the same topology on a deadlock. Total cost per graph attempt
+	// is therefore data-dependent, bounded above by Params.Nodes *
+	// typeAssignMaxTries but not always equal to it — see nodetype.go.
 	PurposeTypeAssign = "gen.typeassign"
 
 	// PurposeLayout is the layout pass's per-sector partial Fisher-Yates

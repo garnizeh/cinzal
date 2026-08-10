@@ -15,7 +15,8 @@ func TestHasNearbyWarehouse(t *testing.T) {
 		dist []int
 		want bool
 	}{
-		{"warehouse at distance 0", []int{0, -1, -1, -1, -1}, false}, // node 0 itself is an Alley
+		{"no reachable warehouse", []int{0, -1, -1, -1, -1}, false}, // node 0 itself is an Alley
+		{"warehouse at distance 0", []int{-1, 0, -1, -1, -1}, true}, // the candidate itself (node 1) is a Warehouse
 		{"warehouse at distance 2", []int{2, 5, 5, 5, 2}, true},
 		{"warehouse just out of range", []int{5, 3, 5, 5, 3}, false},
 		{"warehouse unreachable", []int{0, -1, 5, 5, -1}, false},
