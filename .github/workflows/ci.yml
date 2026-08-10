@@ -5,6 +5,15 @@ on:
   push:
     branches: [main]
 
+# A superseded run (an older commit on the same PR, or the same branch)
+# never needs to finish once a newer one has started — cancelling it frees
+# the runner for the run that actually matters instead of queuing behind
+# stale work. head_ref is set for pull_request events (the PR's own branch);
+# it is empty for push, where ref (refs/heads/main) is what's stable instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
