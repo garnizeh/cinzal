@@ -140,6 +140,16 @@ type Config struct {
 	// MapByPlayers is GDD §6.1's node/edge table, keyed by player count.
 	MapByPlayers map[int]MapSpec
 
+	// MaxGenAttempts bounds rules/gen's rejection-and-retry loop (GDD §6.1:
+	// "The generator rejects and retries until all hold."). GDD §6.1 states
+	// the algorithm, not its termination bound — D9's decision log is
+	// explicit that the retry count is an implementation detail for issue
+	// #59, not a rules question, but that there must be one and that
+	// exhausting it is a returned error, never a partial graph or an
+	// infinite loop. A seed that cannot produce a legal map within this
+	// many attempts is a bug worth surfacing at match creation.
+	MaxGenAttempts int
+
 	// Scavenging is the Hidden-node find table (GDD §9.1).
 	Scavenging ScavengingTable
 
@@ -178,8 +188,9 @@ func DefaultConfig() Config {
 			4: {Nodes: 25, MinEdges: 36, MaxEdges: 40},
 			5: {Nodes: 28, MinEdges: 40, MaxEdges: 45},
 		},
-		Scavenging: ScavengingTable{CashRoll: 4, CashAmount: 3, RevealRoll: 6},
-		Pressure:   PressureConfig{Threshold: 2, CashPenalty: 5, InfamyPenalty: 1},
+		MaxGenAttempts: 1000,
+		Scavenging:     ScavengingTable{CashRoll: 4, CashAmount: 3, RevealRoll: 6},
+		Pressure:       PressureConfig{Threshold: 2, CashPenalty: 5, InfamyPenalty: 1},
 		// Suppress is the zero value: an ordinary match suppresses nothing.
 	}
 }
@@ -218,6 +229,10 @@ func (c Config) Validate(players int) error {
 
 	if _, ok := c.MapByPlayers[players]; !ok {
 		return fmt.Errorf("game: no MapByPlayers entry for %d players (GDD §6.1)", players)
+	}
+
+	if c.MaxGenAttempts < 1 {
+		return fmt.Errorf("game: MaxGenAttempts must be at least 1, got %d (GDD §6.1)", c.MaxGenAttempts)
 	}
 
 	return nil
