@@ -83,8 +83,9 @@ GENERATED :=
 ## generate-check  assert the committed generated code matches what the tools produce
 generate-check: generate
 	@if [ -z "$(GENERATED)" ]; then \
-		printf 'generate-check: no generated paths declared yet — nothing to compare (M3, M5)\n'; \
-		printf '                this check is VACUOUS, not passing. See the GENERATED variable.\n'; \
+		printf 'generate-check: no generated paths declared yet — nothing to compare (M3, M5)\n' >&2; \
+		printf '                this check is VACUOUS, not passing. See the GENERATED variable.\n' >&2; \
+		exit 1; \
 	else \
 		dirty=$$(git status --porcelain -- $(GENERATED)) || { \
 			printf 'generate-check: git could not inspect the generated paths.\n' >&2; \
