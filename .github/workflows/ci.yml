@@ -5,6 +5,15 @@ on:
   push:
     branches: [main]
 
+# A superseded run (an older commit on the same PR, or the same branch)
+# never needs to finish once a newer one has started — cancelling it frees
+# the runner for the run that actually matters instead of queuing behind
+# stale work. head_ref is set for pull_request events (the PR's own branch);
+# it is empty for push, where ref (refs/heads/main) is what's stable instead.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.head_ref || github.ref }}
+  cancel-in-progress: true
+
 permissions:
   contents: read
 
@@ -174,3 +183,47 @@ jobs:
       # there is something for it to actually compare.
       - name: make check
         run: make -k check
+
+  bench:
+    name: bench
+    runs-on: ubuntu-latest
+    # Issue #112 is deliberately Phase 1 only: record real history from real
+    # CI runners, nothing more. No comparison, no threshold, and nothing here
+    # can block a merge (see the Makefile's own `bench` target comment and
+    # CONTRIBUTING.md "What is deliberately not a gate") — #113 is where that
+    # decision gets made, once there is more than one data point to reason
+    # about. Restricted to pushes to main (this workflow's push trigger only
+    # ever fires for main) rather than every pull request, both because a
+    # baseline only means something taken from the same branch every time,
+    # and because internal/rules/gen's own performance cliff (up to ~80 full
+    # graph regenerations per seed at players=5) already makes this job slow
+    # enough without multiplying it across every open PR.
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      # shell: bash is explicit, not decorative — GitHub Actions only
+      # guarantees `-o pipefail` on this step when the shell is named this
+      # way (actions/runner-images#4459); the implicit unspecified default
+      # is documented to behave the same but does not reliably in practice.
+      # Without pipefail, `make bench | tee` would report success off tee's
+      # own exit code even when make bench fails, exactly the "green when it
+      # shouldn't be" failure CONTRIBUTING.md's gates spend real effort
+      # avoiding.
+      - name: make bench
+        shell: bash
+        run: make bench | tee bench-results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-results-${{ github.sha }}
+          path: bench-results.txt
+          retention-days: 90

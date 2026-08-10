@@ -14,7 +14,7 @@ CMD     := ./cmd/...
 BIN     := bin
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test lint generate generate-check packages purity fog debug-isolation secrets check clean
+.PHONY: help dev prod test bench lint generate generate-check packages purity fog debug-isolation secrets check clean
 
 ## help      list these targets
 help:
@@ -35,6 +35,24 @@ prod:
 ## test      race-enabled tests
 test:
 	$(GO) test -race $(ALL)
+
+## bench     run the benchmark suite (issue #112) and print results
+#
+# Prints to stdout only — nothing here writes a file. For a local
+# before/after comparison, redirect yourself into a `.bench` file (gitignored
+# — see .gitignore) and diff with benchstat:
+#   make bench > before.bench
+#   ...make a change...
+#   make bench > after.bench
+#   benchstat before.bench after.bench
+#
+# -run '^$' skips every Test function so only Benchmark* runs. This is
+# advisory, not a gate (see CONTRIBUTING.md "What is deliberately not a
+# gate"): no comparison, no threshold, nothing here can block a merge — #113
+# is where that decision gets made, once CI has real history to compare
+# against.
+bench:
+	$(GO) test -run '^$$' -bench . -benchmem $(ALL)
 
 ## lint      go vet and golangci-lint
 lint: require-golangci-lint
