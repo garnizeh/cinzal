@@ -174,3 +174,38 @@ jobs:
       # there is something for it to actually compare.
       - name: make check
         run: make -k check
+
+  bench:
+    name: bench
+    runs-on: ubuntu-latest
+    # Issue #112 is deliberately Phase 1 only: record real history from real
+    # CI runners, nothing more. No comparison, no threshold, and nothing here
+    # can block a merge (see the Makefile's own `bench` target comment and
+    # CONTRIBUTING.md "What is deliberately not a gate") — #113 is where that
+    # decision gets made, once there is more than one data point to reason
+    # about. Restricted to pushes to main (this workflow's push trigger only
+    # ever fires for main) rather than every pull request, both because a
+    # baseline only means something taken from the same branch every time,
+    # and because internal/rules/gen's own performance cliff (up to ~80 full
+    # graph regenerations per seed at players=5) already makes this job slow
+    # enough without multiplying it across every open PR.
+    if: github.event_name == 'push'
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      - name: make bench
+        run: make bench | tee bench-results.txt
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v7
+        with:
+          name: bench-results-${{ github.sha }}
+          path: bench-results.txt
+          retention-days: 90

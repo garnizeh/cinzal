@@ -17,6 +17,11 @@
 coverage.*
 /testdata/tmp/
 
+# Local ad-hoc `make bench > x.bench` before/after comparisons (issue #112)
+# — a personal aid, never committed. CI's own recorded history is the
+# workflow artifact the bench job uploads, not a file in the tree.
+*.bench
+
 # Go workspace files (per-machine)
 go.work
 go.work.sum
