@@ -200,7 +200,16 @@ jobs:
           go-version-file: go.mod
           check-latest: false
 
+      # shell: bash is explicit, not decorative — GitHub Actions only
+      # guarantees `-o pipefail` on this step when the shell is named this
+      # way (actions/runner-images#4459); the implicit unspecified default
+      # is documented to behave the same but does not reliably in practice.
+      # Without pipefail, `make bench | tee` would report success off tee's
+      # own exit code even when make bench fails, exactly the "green when it
+      # shouldn't be" failure CONTRIBUTING.md's gates spend real effort
+      # avoiding.
       - name: make bench
+        shell: bash
         run: make bench | tee bench-results.txt
 
       - name: Upload benchmark results
