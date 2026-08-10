@@ -126,6 +126,104 @@ func verifyGraph(t *testing.T, seed int, p Params, g Graph) {
 	verifyEdgeCount(t, seed, p, g)
 	verifyGlobalConnectivity(t, seed, g)
 	verifyStartPositions(t, seed, p, g)
+	verifyNodeTypes(t, seed, g)
+	verifyNoWarehouseAdjacentBorder(t, seed, g)
+	verifyStartsHaveNearbyWarehouse(t, seed, g)
+	verifyLayout(t, seed, g)
+}
+
+// verifyNodeTypes is issue #60's acceptance criterion "Type counts match
+// #47's table exactly at 12, 15, 16, 20, 22, 25 and 28 nodes": every node
+// carries a valid type, and the totals match nodeTypeCounts(len(g.Nodes))
+// (D9) exactly.
+func verifyNodeTypes(t *testing.T, seed int, g Graph) {
+	t.Helper()
+
+	var counts [4]int
+	for _, n := range g.Nodes {
+		found := false
+		for ti, nt := range nodeTypeOrder {
+			if n.Type == nt {
+				counts[ti]++
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("seed=%d: node %d has invalid type %v", seed, n.ID, n.Type)
+		}
+	}
+
+	want := nodeTypeCounts(len(g.Nodes))
+	if counts != want {
+		t.Fatalf("seed=%d: node type counts = %v, want %v (D9, GDD §6.2)", seed, counts, want)
+	}
+}
+
+// verifyNoWarehouseAdjacentBorder is GDD §6.1 constraint 6: no Warehouse is
+// adjacent to a Border.
+func verifyNoWarehouseAdjacentBorder(t *testing.T, seed int, g Graph) {
+	t.Helper()
+
+	for _, n := range g.Nodes {
+		if n.Type != game.NodeWarehouse {
+			continue
+		}
+		for _, e := range n.Edges {
+			if g.Nodes[e].Type == game.NodeBorder {
+				t.Fatalf("seed=%d: Warehouse %d is adjacent to Border %d (GDD §6.1 constraint 6)", seed, n.ID, e)
+			}
+		}
+	}
+}
+
+// verifyStartsHaveNearbyWarehouse is GDD §6.1 constraint 7: every starting
+// node has at least one Warehouse within 2 steps.
+func verifyStartsHaveNearbyWarehouse(t *testing.T, seed int, g Graph) {
+	t.Helper()
+
+	dist := bfsAll(g)
+	for _, start := range g.StartPositions {
+		found := false
+		for other, d := range dist[start] {
+			if d >= 0 && d <= maxStartWarehouseDistance && g.Nodes[other].Type == game.NodeWarehouse {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Fatalf("seed=%d: start position %d has no Warehouse within %d steps (GDD §6.1 constraint 7)", seed, start, maxStartWarehouseDistance)
+		}
+	}
+}
+
+// verifyLayout is issue #60's coordinate acceptance criteria: every node
+// has coordinates, in bounds, and no coordinate is a float64 at any point —
+// enforced by the type system, since Node.X and Node.Y are declared int.
+func verifyLayout(t *testing.T, seed int, g Graph) {
+	t.Helper()
+
+	for _, n := range g.Nodes {
+		if n.X < 0 || n.X >= CanvasSize || n.Y < 0 || n.Y >= CanvasSize {
+			t.Fatalf("seed=%d: node %d coordinates (%d, %d) out of [0, %d) bounds (D10)", seed, n.ID, n.X, n.Y, CanvasSize)
+		}
+	}
+
+	// No two nodes in the same sector share a coordinate — the fixed
+	// 9-cell lattice's whole purpose is minimum separation by construction
+	// (D10), so a collision would mean the lattice or its shuffle is wrong.
+	type coord struct{ x, y int }
+	bySector := map[game.Sector]map[coord]game.NodeID{}
+	for _, n := range g.Nodes {
+		if bySector[n.Sector] == nil {
+			bySector[n.Sector] = map[coord]game.NodeID{}
+		}
+		c := coord{n.X, n.Y}
+		if other, ok := bySector[n.Sector][c]; ok {
+			t.Fatalf("seed=%d: nodes %d and %d in sector %s share coordinates (%d, %d) (D10)", seed, other, n.ID, n.Sector, n.X, n.Y)
+		}
+		bySector[n.Sector][c] = n.ID
+	}
 }
 
 func verifyDegreeAndSymmetry(t *testing.T, seed int, g Graph) {
@@ -342,6 +440,9 @@ func graphsIdentical(a, b Graph) bool {
 		if a.Nodes[i].ID != b.Nodes[i].ID || a.Nodes[i].Sector != b.Nodes[i].Sector {
 			return false
 		}
+		if a.Nodes[i].Type != b.Nodes[i].Type || a.Nodes[i].X != b.Nodes[i].X || a.Nodes[i].Y != b.Nodes[i].Y {
+			return false
+		}
 		if len(a.Nodes[i].Edges) != len(b.Nodes[i].Edges) {
 			return false
 		}
@@ -410,11 +511,11 @@ func TestGenerateExhaustsAndNamesFailedConstraint(t *testing.T) {
 	if exhausted.Attempts != p.MaxAttempts {
 		t.Errorf("Attempts = %d, want %d", exhausted.Attempts, p.MaxAttempts)
 	}
-	if exhausted.MostFailed != constraintStartDistance {
-		t.Errorf("MostFailed = %q, want %q — Failures: %v", exhausted.MostFailed, constraintStartDistance, exhausted.Failures)
+	if exhausted.MostFailed != constraintStartPlacement {
+		t.Errorf("MostFailed = %q, want %q — Failures: %v", exhausted.MostFailed, constraintStartPlacement, exhausted.Failures)
 	}
-	if exhausted.Failures[constraintStartDistance] == 0 {
-		t.Errorf("Failures[%q] = 0, want > 0", constraintStartDistance)
+	if exhausted.Failures[constraintStartPlacement] == 0 {
+		t.Errorf("Failures[%q] = 0, want > 0", constraintStartPlacement)
 	}
 }
 
@@ -425,5 +526,3 @@ func asExhausted(err error, target **ExhaustedError) bool {
 	}
 	return ok
 }
-
-// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

@@ -42,7 +42,8 @@ func Generate(rand Rand, p Params) (Graph, error) {
 		constraintGraphConnected,
 		constraintChokepointRange,
 		constraintEdgeCount,
-		constraintStartDistance,
+		constraintTypeAdjacency,
+		constraintStartPlacement,
 	} {
 		if failures[name] > mostCount {
 			mostCount = failures[name]
@@ -78,19 +79,27 @@ func attemptGenerate(rand Rand, p Params, sizes [4]int) (Graph, bool, []string) 
 		return Graph{}, false, failed
 	}
 
-	starts, ok := selectStartPositions(rand, b, p.Players)
+	types, ok := assignNodeTypes(rand, b)
 	if !ok {
-		return Graph{}, false, []string{constraintStartDistance}
+		return Graph{}, false, []string{constraintTypeAdjacency}
 	}
 
-	return buildGraph(b, starts), true, nil
+	starts, ok := selectStartPositions(rand, b, p.Players, types)
+	if !ok {
+		return Graph{}, false, []string{constraintStartPlacement}
+	}
+
+	x, y := computeLayout(rand, b)
+
+	return buildGraph(b, types, x, y, starts), true, nil
 }
 
-// buildGraph converts b's finished adjacency matrix into the exported
-// Graph shape: each node's Edges slice is built once, by ascending NodeID
-// on both the outer node and the adjacency scan — never by ranging
-// anything unordered (RFC-001 §6.3).
-func buildGraph(b *builder, starts []game.NodeID) Graph {
+// buildGraph converts b's finished adjacency matrix, plus the type and
+// layout passes' own per-node output, into the exported Graph shape: each
+// node's Edges slice is built once, by ascending NodeID on both the outer
+// node and the adjacency scan — never by ranging anything unordered
+// (RFC-001 §6.3).
+func buildGraph(b *builder, types []game.NodeType, x, y []int, starts []game.NodeID) Graph {
 	nodes := make([]Node, b.n)
 	for i := range b.n {
 		var edges []game.NodeID
@@ -99,9 +108,14 @@ func buildGraph(b *builder, starts []game.NodeID) Graph {
 				edges = append(edges, game.NodeID(j))
 			}
 		}
-		nodes[i] = Node{ID: game.NodeID(i), Sector: b.sector[i], Edges: edges}
+		nodes[i] = Node{
+			ID:     game.NodeID(i),
+			Sector: b.sector[i],
+			Type:   types[i],
+			X:      x[i],
+			Y:      y[i],
+			Edges:  edges,
+		}
 	}
 	return Graph{Nodes: nodes, StartPositions: starts}
 }
-
-// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

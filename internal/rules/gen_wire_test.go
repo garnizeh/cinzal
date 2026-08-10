@@ -24,6 +24,8 @@ func TestGenPurposeStringsMatchDeclaredConstants(t *testing.T) {
 		PurposeGenEdgeCount:        gen.PurposeEdgeCount,
 		PurposeGenFillEdge:         gen.PurposeFillEdge,
 		PurposeGenStartSelect:      gen.PurposeStartSelect,
+		PurposeGenTypeAssign:       gen.PurposeTypeAssign,
+		PurposeGenLayout:           gen.PurposeLayout,
 	}
 	for rulesPurpose, genPurpose := range pairs {
 		if string(rulesPurpose) != genPurpose {
@@ -93,6 +95,9 @@ func graphsEqual(a, b gen.Graph) bool {
 		if a.Nodes[i].ID != b.Nodes[i].ID || a.Nodes[i].Sector != b.Nodes[i].Sector {
 			return false
 		}
+		if a.Nodes[i].Type != b.Nodes[i].Type || a.Nodes[i].X != b.Nodes[i].X || a.Nodes[i].Y != b.Nodes[i].Y {
+			return false
+		}
 		if len(a.Nodes[i].Edges) != len(b.Nodes[i].Edges) {
 			return false
 		}
@@ -157,14 +162,21 @@ func TestGenerateWiredToRealRNGRecordsConsumption(t *testing.T) {
 	// total against attempts.
 	assertMultiple(t, rng, PurposeGenStartSelect, params.Nodes-1, "Nodes-1")
 
-	// PurposeGenChokepointSelect and PurposeGenFillEdge are data-dependent
-	// (candidate pool sizes, which vary with the sector assignment this
-	// attempt drew) but must still have fired at least once.
-	for _, p := range []Purpose{PurposeGenChokepointSelect, PurposeGenFillEdge} {
+	// PurposeGenChokepointSelect, PurposeGenFillEdge and PurposeGenTypeAssign
+	// are data-dependent (candidate pool sizes, or how many walks node-type
+	// placement needed against this seed's winning topology) but must still
+	// have fired at least once.
+	for _, p := range []Purpose{PurposeGenChokepointSelect, PurposeGenFillEdge, PurposeGenTypeAssign} {
 		if rng.Consumed(p) == 0 {
 			t.Errorf("Consumed(%s) = 0, want > 0 — this purpose should have drawn at least once", p)
 		}
 	}
+
+	// PurposeGenLayout only ever runs once per Generate() call — the layout
+	// pass sits after every constraint check succeeds, inside the winning
+	// attempt only, never a rejected one — so its total is exact regardless
+	// of how many attempts were tried, unlike every purpose above.
+	assertExact(t, rng, PurposeGenLayout, params.Nodes, "Nodes (the layout pass runs once, for the winning attempt only)")
 }
 
 // assertMultiple checks that purpose's total consumption is a positive

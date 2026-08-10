@@ -6,26 +6,36 @@ import (
 	"github.com/garnizeh/cinzal/internal/game"
 )
 
-// Node is one node's topology as gen constructs it: identity, sector
-// membership, and its adjacency list. Node type (Warehouse/Border/...),
-// starting-position fog seeding, and 2D layout are issue #60's job, added
-// once this graph exists — this package's own scope is GDD §6.1 constraints
-// 1-5 only; constraints 6-7 are placement questions #60 owns.
+// Node is one node's topology and placement as gen constructs it: identity,
+// sector membership, adjacency, GDD §6.2 type, and canvas coordinates (D10).
+// Fog seeding — which nodes begin Known to which player under GDD §6.1
+// constraint 7 — is internal/rules' job at Setup: this package only
+// guarantees the structural property (a Warehouse within 2 steps of every
+// starting position) that makes that seeding possible.
 type Node struct {
 	ID     game.NodeID
 	Sector game.Sector
 
+	// Type is this node's GDD §6.2 function, assigned under D9's counts and
+	// GDD §6.1 constraint 6 (no Warehouse adjacent to a Border) — see
+	// nodetype.go.
+	Type game.NodeType
+
+	// X, Y are canvas coordinates, 0-1000, generated once here and never
+	// recomputed per viewer (D10) — see layout.go.
+	X, Y int
+
 	// Edges is this node's adjacency list, ascending game.NodeID — the same
 	// convention rules.Node.Edges already uses, so converting gen's output
 	// into a rules.Node costs nothing but copying the extra fields rules.Node
-	// adds on top (Post, SinkholeRounds, layout, name).
+	// adds on top (Post, SinkholeRounds, name).
 	Edges []game.NodeID
 }
 
-// Graph is the generated topology: every node with its sector and
-// adjacency, and the player-count-many starting positions GDD §6.1
-// constraint 5 requires (mutual graph distance >= 4, GDD §6.1). Node type
-// assignment, fog seeding and 2D layout are added on top of this by #60.
+// Graph is the generated map in full: every node's sector, type, layout,
+// and adjacency, plus the player-count-many starting positions GDD §6.1
+// constraints 5 and 7 require — mutual graph distance >= 4 apart, and each
+// within 2 steps of a Warehouse.
 type Graph struct {
 	// Nodes is indexed by NodeID — Nodes[i].ID == game.NodeID(i) always,
 	// matching rules.Node's own convention (RFC-001 §6.4/§6.5's
@@ -99,5 +109,3 @@ func (e *ExhaustedError) Error() string {
 	return fmt.Sprintf("gen: exhausted %d attempts without a graph satisfying every GDD §6.1 constraint; most frequent failure: %q (%d/%d attempts) — full breakdown: %v",
 		e.Attempts, e.MostFailed, e.Failures[e.MostFailed], e.Attempts, e.Failures)
 }
-
-// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

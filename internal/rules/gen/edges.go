@@ -236,5 +236,3 @@ func fillEdges(rand Rand, b *builder, pairs []sectorPair, chokepointCounts []int
 		}
 	}
 }
-
-// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

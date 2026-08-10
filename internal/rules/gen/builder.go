@@ -117,6 +117,23 @@ func (b *builder) connectedNodes(src game.NodeID, within map[game.NodeID]bool) m
 	return seen
 }
 
+// neighborLists returns every node's adjacency list, ascending NodeID, both
+// across nodes and within each node's own list — converting the adjacency
+// matrix once for callers (assignNodeTypes) that check adjacency many times
+// against an unchanging topology, where repeatedly scanning a full n x n
+// matrix row is wasted work.
+func (b *builder) neighborLists() [][]game.NodeID {
+	lists := make([][]game.NodeID, b.n)
+	for i := range b.n {
+		for j := range b.n {
+			if b.adj[i][j] {
+				lists[i] = append(lists[i], game.NodeID(j))
+			}
+		}
+	}
+	return lists
+}
+
 // nodesSlice returns every node ID in this graph, ascending.
 func (b *builder) nodesSlice() []game.NodeID {
 	nodes := make([]game.NodeID, b.n)
@@ -125,5 +142,3 @@ func (b *builder) nodesSlice() []game.NodeID {
 	}
 	return nodes
 }
-
-// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).
