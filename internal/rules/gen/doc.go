@@ -21,5 +21,3 @@
 // re-exports this package's purpose strings as typed rules.Purpose
 // constants once it wires a real *rules.RNG to them.
 package gen
-
-// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

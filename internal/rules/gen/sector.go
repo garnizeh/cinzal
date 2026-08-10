@@ -101,5 +101,3 @@ func sectorAdjacency(rand Rand) []sectorPair {
 	})
 	return pairs
 }
-
-// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

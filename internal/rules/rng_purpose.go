@@ -38,6 +38,7 @@ const (
 	PurposeGenEdgeCount        Purpose = "gen.edgecount"
 	PurposeGenFillEdge         Purpose = "gen.filledge"
 	PurposeGenStartSelect      Purpose = "gen.startselect"
+	PurposeGenTypeAssign       Purpose = "gen.typeassign"
 	PurposeEventDragnet        Purpose = "event.dragnet"
 	PurposeEventBridgeDown     Purpose = "event.bridgedown"
 	PurposeEventFestival       Purpose = "event.festival"
@@ -82,7 +83,7 @@ var ConsumptionTable = []PurposeRow{
 	{PurposeIncidentRelocate, "1 per affected player", "Phase 7", "Snatch Job relocation"},
 	{PurposeCrateNode, "1", "", "Dead Runner, Spilled Load"},
 	{PurposeItemTornMap, "exactly min(4, hidden)", "", "Partial Fisher-Yates, mandated"},
-	{PurposeGenLayout, "exactly n per sector — total node count over the whole map", "rules/gen, Setup only", "After node-type assignment (D9), before deck shuffles"},
+	{PurposeGenLayout, "exactly n per sector — total node count over the whole map", "rules/gen, Setup only", "Partial Fisher-Yates over each sector's fixed 9-cell quadrant lattice (D10); after node-type assignment and start selection, before deck shuffles; issue #60"},
 	{PurposeGenSectorAssign, "exactly Nodes-1, always", "rules/gen, Setup only", "Full shuffle assigning every node to a sector slot (GDD §6.1 constraint 3); issue #59"},
 	{PurposeGenSectorTree, "2*size-3 per sector, summed over the four sectors", "rules/gen, Setup only", "Per-sector random spanning tree for internal connectivity (GDD §6.1 constraint 3); issue #59"},
 	{PurposeGenAdjacency, "exactly 5, always", "rules/gen, Setup only", "Spanning tree over the four sectors choosing which 3 pairs carry chokepoints (D8 fixes sector count at four); issue #59"},
@@ -90,7 +91,8 @@ var ConsumptionTable = []PurposeRow{
 	{PurposeGenChokepointSelect, "candidates-1 per pair, summed over 3 pairs", "rules/gen, Setup only", "Full shuffle of each pair's cross-sector candidates, degree-tiered selection; issue #59"},
 	{PurposeGenEdgeCount, "exactly 1, always", "rules/gen, Setup only", "Target total edge count within [MinEdges, MaxEdges]; issue #59"},
 	{PurposeGenFillEdge, "remaining-candidates-1", "rules/gen, Setup only", "Full shuffle of every remaining valid edge, degree-tiered selection to reach the target; issue #59"},
-	{PurposeGenStartSelect, "exactly Nodes-1, always", "rules/gen, Setup only", "Full shuffle of every node to select starting positions >= 4 apart (GDD §6.1 constraint 5); issue #59"},
+	{PurposeGenStartSelect, "exactly Nodes-1, always", "rules/gen, Setup only", "Full shuffle of every node to select starting positions >= 4 apart with a Warehouse within 2 steps (GDD §6.1 constraints 5 and 7); issue #60"},
+	{PurposeGenTypeAssign, "up to Nodes per walk (fewer on a walk that deadlocks early), summed over however many walks a graph attempt needed (bounded at 200)", "rules/gen, Setup only", "Per-node type choice satisfying D9's counts and GDD §6.1 constraint 6 (no Warehouse adjacent to a Border); retries a fresh walk against the same topology on a deadlock, before the caller discards the whole graph; issue #60"},
 	{PurposeEventDragnet, "min(2, len(candidates))", "Phase 6", "Candidates: all Border nodes, sorted by NodeID"},
 	{PurposeEventBridgeDown, "min(1, len(candidates))", "Phase 6", "Candidates: navigable edges, sorted by (min(NodeID), max(NodeID))"},
 	{PurposeEventFestival, "1", "Phase 6", "Candidates: all nodes, sorted by NodeID"},

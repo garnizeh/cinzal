@@ -167,6 +167,10 @@ jobs:
       # Locally `make check` stops at the first failure, which is what you want
       # while iterating; this is the one place the two differ, and deliberately.
       #
-      # generate-check is a prerequisite of check and needs no separate step.
+      # generate-check is NOT a prerequisite of check: GENERATED is empty
+      # until M3/M5 declare real generated paths, and a gate that can only
+      # report VACUOUS stays out of the aggregate rather than passing by not
+      # running (see the Makefile's own comment on `check`). It rejoins once
+      # there is something for it to actually compare.
       - name: make check
         run: make -k check

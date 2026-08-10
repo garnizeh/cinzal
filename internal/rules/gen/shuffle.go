@@ -16,6 +16,22 @@ func fullShuffle[T any](rand Rand, purpose string, items []T) {
 	}
 }
 
+// partialShuffle performs a partial Fisher-Yates, selecting k of len(items)
+// elements uniformly without replacement into items[:k], consuming exactly
+// k draws under purpose (RFC-001 §6.4's mandated partial-shuffle shape,
+// docs/decisions/D10-map-layout.md). Unlike fullShuffle, it never skips the
+// last iteration: callers that pass k == len(items) pay one extra
+// single-choice draw on the final index, which fullShuffle's own loop bound
+// exists specifically to avoid — this package's only current caller
+// (computeLayout) always calls with k < len(items), since D8 caps every
+// sector at 8 nodes against a 9-cell lattice.
+func partialShuffle[T any](rand Rand, purpose string, items []T, k int) {
+	for i := 0; i < k; i++ {
+		j := i + rand(purpose, len(items)-i)
+		items[i], items[j] = items[j], items[i]
+	}
+}
+
 // randomSpanningTree builds a random spanning tree over items (already in a
 // stable, deterministic order), rooted at items[0]: shuffle items[1:]
 // fully, then attach each in turn to a uniformly random member of the
@@ -43,5 +59,3 @@ func randomSpanningTree[T any](rand Rand, purpose string, items []T, connect fun
 		added = append(added, child)
 	}
 }
-
-// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).

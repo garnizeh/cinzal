@@ -51,9 +51,28 @@ const (
 	PurposeFillEdge = "gen.filledge"
 
 	// PurposeStartSelect is the full shuffle of every node used to select
-	// GDD §6.1 constraint 5's starting positions: exactly Params.Nodes-1
-	// draws, always.
+	// GDD §6.1 constraints 5 and 7's starting positions (mutual distance
+	// >= 4, a Warehouse within 2 steps): exactly Params.Nodes-1 draws,
+	// always.
 	PurposeStartSelect = "gen.startselect"
-)
 
-// Touched only to verify CodeRabbit review now reaches this package (see #108, #109).
+	// PurposeTypeAssign is one draw per node, in ascending NodeID order,
+	// choosing that node's GDD §6.2 type among whichever of
+	// Warehouse/Border/Black Market/Alley still has quota remaining (D9)
+	// and would not create a GDD §6.1 constraint 6 Warehouse-Border
+	// adjacency with an already-placed neighbour. A successful walk costs
+	// exactly Params.Nodes draws; a walk that deadlocks costs fewer — one
+	// draw per node placed before the deadlock, never a draw for the node
+	// that failed — and up to typeAssignMaxTries further walks are retried
+	// against the same topology on a deadlock. Total cost per graph attempt
+	// is therefore data-dependent, bounded above by Params.Nodes *
+	// typeAssignMaxTries but not always equal to it — see nodetype.go.
+	PurposeTypeAssign = "gen.typeassign"
+
+	// PurposeLayout is the layout pass's per-sector partial Fisher-Yates
+	// over the fixed 9-cell quadrant lattice (D10): exactly one draw per
+	// node in that sector, so exactly Params.Nodes draws overall, always —
+	// D8 caps every sector at 8 nodes, comfortably under the 9-cell
+	// lattice, so this never truncates or retries. See layout.go.
+	PurposeLayout = "gen.layout"
+)
