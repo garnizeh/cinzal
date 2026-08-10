@@ -131,25 +131,36 @@ func TestGenerateWiredToRealRNGRecordsConsumption(t *testing.T) {
 
 	// *RNG.Consumed is cumulative across every attempt Generate made before
 	// it succeeded (rejected attempts' draws are never rolled back — see
-	// generate.go), and PurposeGenStartSelect only fires on an attempt that
-	// already cleared every structural check (constraints 1-4), which can
-	// be fewer attempts than PurposeGenSectorAssign saw (constraints 1-4
-	// can reject an attempt before it ever reaches start selection). So
-	// each purpose's total is checked against its own known per-attempt
-	// cost as a multiple, not against one shared attempt count.
+	// generate.go). PurposeGenSectorAssign fires exactly once per attempt,
+	// unconditionally (assignSectors runs before any constraint check), so
+	// dividing its total by its own known per-attempt cost recovers the
+	// exact number of attempts Generate made.
+	attempts := rng.Consumed(PurposeGenSectorAssign) / (params.Nodes - 1)
 	assertMultiple(t, rng, PurposeGenSectorAssign, params.Nodes-1, "Nodes-1")
+
+	// PurposeGenSectorTree, PurposeGenAdjacency, PurposeGenChokepointCount
+	// and PurposeGenEdgeCount all fire unconditionally on every attempt,
+	// before the violations check that can reject one (generate.go's
+	// attemptGenerate), each at a cost the consumption table fixes exactly
+	// regardless of Nodes or the seed's later choices — so, unlike
+	// PurposeGenStartSelect below, their totals are checked exactly against
+	// attempts, not merely as a multiple.
+	sectorTreePerAttempt := 2*params.Nodes - 12 // 2*size-3 per sector, summed over the four sectors
+	assertExact(t, rng, PurposeGenSectorTree, attempts*sectorTreePerAttempt, "attempts*(2*Nodes-12)")
+	assertExact(t, rng, PurposeGenAdjacency, attempts*5, "attempts*5 (D8 fixes sector count at four)")
+	assertExact(t, rng, PurposeGenChokepointCount, attempts*3, "attempts*3 (one draw per adjacent sector pair)")
+	assertExact(t, rng, PurposeGenEdgeCount, attempts*1, "attempts (exactly 1 draw per attempt, always)")
+
+	// PurposeGenStartSelect only fires on an attempt that already cleared
+	// every structural check (constraints 1-4), which can be fewer attempts
+	// than the ones above saw — so it stays a multiple check, not an exact
+	// total against attempts.
 	assertMultiple(t, rng, PurposeGenStartSelect, params.Nodes-1, "Nodes-1")
 
-	// PurposeGenAdjacency and PurposeGenChokepointCount are fixed by D8's
-	// four-sector guarantee: 5 draws and 3 draws per attempt, always,
-	// regardless of Nodes or the seed.
-	assertMultiple(t, rng, PurposeGenAdjacency, 5, "5 (D8 fixes sector count at four)")
-	assertMultiple(t, rng, PurposeGenChokepointCount, 3, "3 (one draw per adjacent sector pair)")
-
-	// Every other gen purpose is data-dependent (candidate pool sizes,
-	// which vary with the sector assignment this attempt drew) but must
-	// still have fired at least once.
-	for _, p := range []Purpose{PurposeGenSectorTree, PurposeGenChokepointSelect, PurposeGenEdgeCount, PurposeGenFillEdge} {
+	// PurposeGenChokepointSelect and PurposeGenFillEdge are data-dependent
+	// (candidate pool sizes, which vary with the sector assignment this
+	// attempt drew) but must still have fired at least once.
+	for _, p := range []Purpose{PurposeGenChokepointSelect, PurposeGenFillEdge} {
 		if rng.Consumed(p) == 0 {
 			t.Errorf("Consumed(%s) = 0, want > 0 — this purpose should have drawn at least once", p)
 		}
@@ -165,5 +176,17 @@ func assertMultiple(t *testing.T, rng *RNG, purpose Purpose, perAttempt int, lab
 	got := rng.Consumed(purpose)
 	if got == 0 || got%perAttempt != 0 {
 		t.Errorf("Consumed(%s) = %d, want a positive multiple of %s (%d)", purpose, got, label, perAttempt)
+	}
+}
+
+// assertExact checks that purpose's total consumption exactly matches want —
+// the shape every purpose the D03 consumption table fixes at a constant
+// per-attempt cost takes once every attempt (not just successful ones) is
+// accounted for (see the comment on TestGenerateWiredToRealRNGRecordsConsumption).
+func assertExact(t *testing.T, rng *RNG, purpose Purpose, want int, label string) {
+	t.Helper()
+	got := rng.Consumed(purpose)
+	if got != want {
+		t.Errorf("Consumed(%s) = %d, want exactly %s (%d)", purpose, got, label, want)
 	}
 }
