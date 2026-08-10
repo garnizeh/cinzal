@@ -1,0 +1,20 @@
+# CodeRabbit repository configuration.
+#
+# reviews.path_filters exists here, and not only in the dashboard, because
+# the dashboard had accumulated a `!**/gen/**` exclusion — presumably meant
+# to skip future generated code (sqlc/templ output, arriving in M3/M5) —
+# that also matched internal/rules/gen/**, the hand-written map generator
+# and the entire subject of PR #107. That package went unreviewed across
+# every CodeRabbit pass on that PR; the pre-merge "Linked Issues" check
+# eventually surfaced it directly: "Core generator files are excluded by
+# the !**/gen/** filter, so the implementation of issue #59 constraints
+# cannot be verified."
+#
+# No generated code exists yet in this repo (see CLAUDE.md: generate-check
+# is VACUOUS until M3/M5), so there is nothing to exclude right now. When
+# sqlc/templ output lands, exclude their actual generated paths by name
+# (e.g. !internal/store/sqlc/**, !**/*_templ.go) — never a bare `**/gen/**`
+# pattern, which matches any hand-written package that happens to be named
+# "gen" (internal/rules/gen among them).
+reviews:
+  path_filters: []
