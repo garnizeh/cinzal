@@ -10,5 +10,14 @@
 // deliberate. GDD §7.1 gives a Rumoured node a position on the map but no
 // edges, so coordinates are part of what the projection discloses. They must be
 // derived from the seed and stable across fog states, or a node's dot would
-// move when it went Rumoured to Known (docs/decisions, D10 — still open).
+// move when it went Rumoured to Known (docs/decisions/D10-map-layout.md).
+//
+// This package does not import internal/rules, even though internal/rules
+// will import this one: rules.MatchState's initial construction needs a
+// generated Graph, so the dependency runs rules -> gen, and Go forbids the
+// reverse. Concretely, that means this package cannot name *rules.RNG or
+// rules.Purpose directly — Generate takes its randomness as the Rand
+// function type instead (see rand.go), and internal/rules/rng_purpose.go
+// re-exports this package's purpose strings as typed rules.Purpose
+// constants once it wires a real *rules.RNG to them.
 package gen

@@ -115,6 +115,18 @@ func TestDefaultConfigMatchesGDDMapTable(t *testing.T) {
 	}
 }
 
+// TestValidateRejectsZeroMaxGenAttempts guards the bounded-retry, fail-loudly
+// discipline D9's decision log requires of rules/gen (#59): a Config that
+// cannot bound the generator's retry loop must not validate.
+func TestValidateRejectsZeroMaxGenAttempts(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.MaxGenAttempts = 0
+
+	if err := cfg.Validate(4); err == nil {
+		t.Fatal("Validate() = nil for MaxGenAttempts=0, want an error")
+	}
+}
+
 // TestSuppressZeroValueSuppressesNothing guards D11's decision that an
 // ordinary match's Suppress field must be all-false by construction, not by
 // convention at each call site.
