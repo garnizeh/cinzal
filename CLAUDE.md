@@ -9,10 +9,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 **M0 is closed. M1 — Rules core is in progress, decisions all resolved.** `internal/game` (vocabulary) and part of `internal/rules` (RNG, `MatchState`, orderings, graph generation) are implemented; the rest of `internal/rules` and every other `internal/` package are still `doc.go` only.
 
 ```text
-docs/project/cinzal-gdd.md                  — Game Design Document (v2.16)
+docs/project/cinzal-gdd.md                  — Game Design Document (v2.17)
 docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r19)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
-docs/decisions/                             — Decision log; D1–D14 decided (D15 reclassified as a task, #40), D16–D22 open (block M5/M6)
+docs/decisions/                             — Decision log; D1–D14 and D23–D24 decided (D15 reclassified as a task, #40), D16–D22 open (block M5/M6)
 ```
 
 `make check` runs everything CI runs — all four gates (purity, fog boundary, debug isolation, gitleaks) are live and required on `main`. `generate-check` is not part of `check` yet: `GENERATED` is still empty until M3/M5 land real generated paths, and a gate that can only report VACUOUS stays out of the aggregate rather than passing by not running — run `make generate-check` standalone if you want to see that message.

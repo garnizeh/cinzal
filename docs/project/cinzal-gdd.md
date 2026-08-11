@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.16 (scope-locked for prototype)
+## Game Design Document — v2.17 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -150,6 +150,11 @@
 >
 > **Changelog v2.15 → v2.16** — map generation produced no 2D layout (D10)
 > - **§7.1 discloses a Rumoured node's "position on the map", and nothing in §6 ever generated one.** Added §6.4: node coordinates are generated once, deterministically from the seed, as part of map generation — never recomputed per viewer, so a node's dot never moves as it goes Rumoured → Known. The four sectors each render as one contiguous region of the canvas, which is what §9.1's Pushing On sector bias needs to be a real choice rather than a bias over confetti. Exact canvas size, lattice, and RNG cost live in RFC §6.4 — full reasoning in [D10](../decisions/D10-map-layout.md).
+>
+> **Changelog v2.16 → v2.17** — constraint 7 guaranteed an origin but never a destination (D24)
+> - **The opening contract offer was not, in fact, "possible in every match."** Measured: it fails for **7.1% of two-player seats** (and 0.6–1.3% at 3–5 players) over 1000 seeds. §6.1 constraint 7 guaranteed a Known **Warehouse** near every start and stopped there — but a contract is a *pair*, and a Warehouse with no Border at a distance inside Tier I's 3–4 band cannot originate one. Two independent causes, both invisible from §8.1's side: constraint 6's "every delivery costs at least 3 steps" is not what its own first sentence enforces (non-adjacency only forces distance ≥ 2, which is below *every* tier's band), and §8.1's fallback ladder cascades within the tiers your **Infamy** allows — which, at setup, is Tier I alone, a band two steps wide, not the full 3+ union the ladder's reasoning assumes.
+> - **Constraint 7 now requires the nearby Warehouse to be *contractable*** — to have a Border at 3–4 steps, so the pair the opening offer needs provably exists. This makes §8.1's guarantee structural rather than statistical: 0 failures in 14 000 seats across the same sweep. Nothing about contracts changed — no tier, payout, eligibility or fallback rule moves, and the opening contract a player receives is an ordinary Tier I job.
+> - **§8.2's empty-pool sentence was wrong and is corrected.** "This can only happen if every Warehouse you Know is presently unreachable" missed the commoner mid-match cause: every reachable pair sitting outside the bands your current Infamy entitles you to. Full reasoning in [D24](../decisions/D24-opening-offer-guarantee.md).
 
 ---
 
@@ -325,7 +330,9 @@ Undirected graph, generated procedurally per match from a recorded seed (needed 
 4. Between any two adjacent sectors there are **at least 3 and at most 5 edges**. These are the **chokepoints** — where ambushes happen and where a post is worth its lease.
 5. Minimum graph distance of 4 between any two starting positions.
 6. No Warehouse is adjacent to a Border. Every delivery costs at least 3 steps.
-7. **Every starting node has at least one Warehouse within 2 steps.** Those nodes begin **Known** to that player. Without this, the opening contract offer cannot be generated at all — see §8.1.
+7. **Every starting node has at least one Warehouse within 2 steps that itself has a Border 3–4 steps away** — a *contractable* Warehouse, at Tier I's distance band (§8.3). Those nodes begin **Known** to that player. Without this, the opening contract offer cannot be generated at all — see §8.1.
+
+    *(v2.17: the second clause is new. "A Warehouse within 2 steps" guarantees an **origin**; a contract is a pair, and a Warehouse with no Border inside the only band a Nobody is eligible for cannot originate one. Measured before the fix, 7.1% of two-player seats opened with no offer available. See [D24](../decisions/D24-opening-offer-guarantee.md).)*
 
 ### 6.2 Node types
 
@@ -539,6 +546,10 @@ Revealing the destination fixes it without giving anything away that matters. **
 
 Constraint 7 (§6) then guarantees a **Known** Warehouse to originate from — genuinely Known, and genuinely reachable. A Warehouse at distance 2 sits behind exactly one intermediate node, and that node is adjacent to your start, so it is already Known from opening sight. The path start → intermediate → Warehouse is Known end to end, with no gap to plot around.
 
+Constraint 7 guarantees the other half of the pair too: that Warehouse has a Border **3 to 4 steps away**, which is Tier I's band (§8.3), and Tier I is the tier every player is eligible for at Infamy 0. So a valid `(origin, destination)` at your own tier provably exists on round 1, on every seed — not merely a Known Warehouse to hope one can be built from.
+
+*(v2.17: the second half is new. Until then constraint 7 stopped at the origin, and the offer failed for 7.1% of two-player seats — the same class of bug as the v1.8 deadlock above, one step further along. See [D24](../decisions/D24-opening-offer-guarantee.md).)*
+
 Exploration keeps its return, too — a wider Known map means more origins available, which means more and better offers.
 
 **Fallback when the pool is short (D7).** Constraint 7 guarantees a valid opening offer; nothing guarantees one later — a player who explores little Knows few Warehouses, and `Bridge Down` can push a pair permanently out of range. If a slot's target tier has fewer than one valid (origin, destination) pair, the generator drops to the next-lower tier's distance band and tries again — **never** to a higher tier, and never by widening a band or relaxing the Known-origin rule — repeating down to Tier I. A slot still empty after Tier I is dropped rather than filled with an invalid contract: an offer of one or two contracts is honest, and declining an offer entirely is already a documented outcome. The offer names the reason ("fewer contracts than usual") rather than staying silent — you already know your own fog, so nothing is disclosed that you couldn't already work out. See §8.2 for what happens when the pool empties out completely.
@@ -560,7 +571,9 @@ The cooldown starts the round you accept or decline an offer. It is **always dis
 
 If you're at 2 active contracts when the cooldown elapses, the offer is **held and delivered at the next offer phase in which you have a free slot**. The cooldown does not restart while an offer is held — the moment a slot opens, the offer is waiting.
 
-**The same hold applies when the pool itself is empty (D7)** — every eligible tier's fallback cascade (§8.1) coming up with nothing. This can only happen if every Warehouse you Know is presently unreachable from every Border on the navigable graph, most likely a `Bridge Down` that severed the last path. The cooldown does not restart; the offer is delivered, at whatever size the pool then supports, the moment any pair becomes valid again. A held-for-full-slots offer and a held-for-empty-pool offer compose — the round waits on both conditions clearing.
+**The same hold applies when the pool itself is empty (D7)** — every eligible tier's fallback cascade (§8.1) coming up with nothing. This happens when no Warehouse you Know reaches any Border at a distance inside a tier you are **eligible** for: either the pair is unreachable on the navigable graph (most likely a `Bridge Down` that severed the last path), or every reachable pair sits outside the bands your current Infamy entitles you to. Constraint 7 rules this out at setup; nothing rules it out later. The cooldown does not restart; the offer is delivered, at whatever size the pool then supports, the moment any pair becomes valid again.
+
+*(v2.17 corrected this. It previously read "can only happen if... unreachable", which missed the commoner cause: a low-Infamy player's eligible bands are narrow — Tier I alone is two steps wide — so a perfectly reachable pair can sit outside all of them. Reachability was never the only way to empty the pool. See [D24](../decisions/D24-opening-offer-guarantee.md).)* A held-for-full-slots offer and a held-for-empty-pool offer compose — the round waits on both conditions clearing.
 
 *(Read literally, "the moment a slot frees" would mean an offer arriving mid-resolution — after a delivery in Phase 5, say. That cannot work: orders for the round are already submitted, so an offer you cannot act on is not an offer, and generating one would mean drawing cards against a slot count the engine has no way to know at Phase 2. Offers are evaluated once per round, at Phase 2, against the state at the close of the previous round.)*
 
