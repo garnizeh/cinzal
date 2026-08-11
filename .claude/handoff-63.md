@@ -2,8 +2,11 @@
 
 **Branch:** `task/63-contracts`, based on `main` @ `140a53a` (D23 — starting-fog
 seeding, docs-only).
-**Status:** WIP, NOT merge-ready. Blocked on a new decision (D24, to be
-filed) before the acceptance criteria can actually be satisfied.
+**Status:** WIP, NOT merge-ready. Blocked on
+[D24 (issue #120)](https://github.com/garnizeh/cinzal/issues/120), filed
+and open, before the acceptance criteria can actually be satisfied.
+Issues #63 and #85 have been updated to reference it; #73 (Word of Work,
+which will reuse `GenerateOffer`) got a cross-reference comment.
 **Delete this file** before opening the real PR for #63 — it's a handoff
 note for whichever agent/session resumes this branch, not project
 documentation.
@@ -165,57 +168,48 @@ lost while the decision resolves. This commit is that.
 
 ## Next steps (in order)
 
-1. **File the decision as a GitHub issue** — next available ID is **D24**
-   (D23 is the highest used; D16–D22 are open placeholders with no doc
-   yet). Follow the exact template issue #115 (D23) used: `**Decision
-   ID:**`, `**Blocks:** M1 — Rules core`, `## The question`, `## Why it is
-   open`, `## Options`, `## What the decision must state`, `##
-   Consequences` — no `## Decision`/`## Reasoning` yet, those get added
-   when it's actually resolved. Labels: `decision`, `area:rules`.
+1. ~~File the decision as a GitHub issue~~ **Done — [D24 is issue #120](https://github.com/garnizeh/cinzal/issues/120)**,
+   open, labels `decision`+`area:rules`, options A/B/C/D drafted (accept
+   the gap / widen the cascade generally / fix map-gen's constraint 6 /
+   scope the fix to the opening offer only — see the issue for full text).
+   No `## Decision`/`## Reasoning` yet — add those, plus a
+   `docs/decisions/D24-*.md` file, once the maintainer actually rules on
+   it.
 
-   Suggested options to include (draft, not yet vetted with the user):
-   - **A — Accept the gap.** The opening offer (and any narrow-eligible
-     offer) may legitimately hold/empty. Weakens #63's own acceptance
-     criterion and contradicts GDD §8.1's changelog framing that v1.9 made
-     the opening offer "mathematically ...possible in every match" — a
-     silently-empty opener on some seeds isn't fully that.
-   - **B — Widen the *guaranteed* slot's cascade above the eligible-tier
-     ceiling**, generally, whenever the full eligible-tier union still
-     leaves a reachable pair uncovered. Directly contradicts D7's explicit
-     "never t+1 or above" and its stated reasoning ("cascading up would pay
-     them") — would need to formally amend/supersede that text, not just
-     add to it.
-   - **C — Strengthen `rules/gen`'s constraint 6** so every Warehouse D23
-     surfaces is guaranteed a Border within `[3,4]`, not just non-adjacent.
-     Reopens a closed, tested subsystem (#59/#60); riskier, and not
-     obviously achievable within the existing retry-loop bound for every
-     player count.
-   - **D — Scope the exception to the *opening* offer only.** GDD §8.1's
-     actual proof/claim is about the very first offer, not about every
-     narrow-eligible-tier offer throughout the match — D7's general "held"
-     mechanism was built deliberately for the ordinary mid-match case.
-     Round 1's guaranteed slot searches the full reachable pool (any tier)
-     rather than being capped at the player's current Infamy eligibility;
-     every later offer keeps D7's rules exactly as decided. Smallest,
-     most surgical change; needs to state precisely what tier a
-     pool-widened opening contract is priced/labelled at.
+2. **Deliberately NOT done — catalogue rows deferred.** Checked D23's
+   actual history (not just the written convention): its filing commit
+   (`6a98d63`) created `D23-starting-fog-seeding.md` with `Status: decided`
+   directly, updated the README/plan.md catalogue, and closed its issue —
+   all in **one** PR, never passing through a separately-committed "open"
+   row. D16–D22's bare-text "open" rows are a one-time bootstrap
+   (`4824d8f`, project start), not the pattern a mid-implementation
+   decision like this one actually follows. So: no `docs/decisions/`
+   catalogue edit now — issue #120 alone is the "this is open" record in
+   the meantime, matching how D20–D22 work today. (An earlier version of
+   this session's work *did* commit a catalogue-row edit for D24 and even
+   drafted a second, separate PR to land it on `main` ahead of the
+   decision — reverted, on the user's call, once the D23 precedent above
+   was actually checked instead of assumed.)
 
-   (D was the option this session leaned toward as most defensible, but
-   the user hasn't seen or ruled on these draft options yet — don't treat
-   this list as decided, present it fresh.)
+3. ~~Update dependent issues~~ **Done** — #63 and #85 both note the new
+   block in their bodies; #73 (Word of Work, which will reuse
+   `GenerateOffer`) got a cross-reference comment, not a body edit (it's
+   informational, not a hard block on starting #73).
 
-2. Add a placeholder row for D24 to `docs/decisions/README.md`'s catalogue
-   (M1 section, status `open`, no doc link yet — matches how D20–D22 are
-   listed) and a corresponding paragraph to
-   `docs/project/cinzal-implementation-plan.md` §3.2 (matches the D16–D22
-   one-paragraph style, or D10/D13/D23's "surfaced while... / resolved
-   by..." two-paragraph style once it's actually resolved).
-
-3. Once D24 is decided: implement whatever it settles on (likely a small
-   change to `GenerateOffer`'s guaranteed-slot logic in `contracts.go`),
-   fix `TestGenerateOfferOpeningOfferNeverEmpty` if its assertion needs to
-   change shape, rerun the full sweep, then proceed to `make check` / `make
-   test` (full, not the fast subset) and open the real PR.
+4. **Once D24 is decided, one PR does everything** (matching `6a98d63`
+   exactly): write `docs/decisions/D24-*.md` (status `decided`,
+   `## Decision` + `## Reasoning` filled in), add its catalogue row to
+   `docs/decisions/README.md` and `docs/project/cinzal-implementation-plan.md`
+   §3.2 already as `decided` (never an intermediate `open` commit), close
+   #120, implement whatever it settles on (most likely a small change to
+   `GenerateOffer`'s guaranteed-slot logic in `contracts.go`), fix
+   `TestGenerateOfferOpeningOfferNeverEmpty` if its assertion needs to
+   change shape, rerun the full sweep, then proceed to `make check` /
+   `make test` (full, not the fast subset) and open the real PR for #63.
+   Also resolve #63's and #85's bodies back to a clean
+   "blocked by" list (drop the inline explanation paragraph, since the
+   issue link + closed-decision convention carries it from there, matching
+   how #115/D23 reads on #63 today) and delete this handoff file.
 
 ## Gotchas hit this session, worth not re-learning
 
