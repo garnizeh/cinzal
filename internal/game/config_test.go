@@ -83,10 +83,10 @@ func TestValidateFailsClosedOnEmptyConfig(t *testing.T) {
 // test, not a silent drift.
 func TestDefaultConfigMatchesGDDContractTable(t *testing.T) {
 	want := [4]ContractTier{
-		{InfamyRequired: 0, MinDistance: 3, MaxDistance: 4, Payment: 8, RP: 2, Deadline: 4, Penalty: 3, PenaltyInfamy: 0},
-		{InfamyRequired: 3, MinDistance: 4, MaxDistance: 6, Payment: 14, RP: 3, Deadline: 5, Penalty: 5, PenaltyInfamy: 0},
-		{InfamyRequired: 6, MinDistance: 5, MaxDistance: 8, Payment: 20, RP: 5, Deadline: 5, Penalty: 8, PenaltyInfamy: 0},
-		{InfamyRequired: 9, MinDistance: 6, MaxDistance: 0, Payment: 30, RP: 8, Deadline: 6, Penalty: 12, PenaltyInfamy: 2},
+		{InfamyRequired: 0, MinDistance: 3, MaxDistance: 4, Payment: 8, RP: 2, Deadline: 4, Penalty: 3, PenaltyInfamy: 0, OfferWeight: 1},
+		{InfamyRequired: 3, MinDistance: 4, MaxDistance: 6, Payment: 14, RP: 3, Deadline: 5, Penalty: 5, PenaltyInfamy: 0, OfferWeight: 1},
+		{InfamyRequired: 6, MinDistance: 5, MaxDistance: 8, Payment: 20, RP: 5, Deadline: 5, Penalty: 8, PenaltyInfamy: 0, OfferWeight: 1},
+		{InfamyRequired: 9, MinDistance: 6, MaxDistance: 0, Payment: 30, RP: 8, Deadline: 6, Penalty: 12, PenaltyInfamy: 2, OfferWeight: 1},
 	}
 
 	got := DefaultConfig().Contracts
@@ -124,6 +124,21 @@ func TestValidateRejectsZeroMaxGenAttempts(t *testing.T) {
 
 	if err := cfg.Validate(4); err == nil {
 		t.Fatal("Validate() = nil for MaxGenAttempts=0, want an error")
+	}
+}
+
+// TestValidateRejectsNonPositiveOfferWeight guards D6's construction-time
+// requirement: an offer-weight of zero or less must never validate, so "every
+// eligible tier has zero weight" cannot occur as a runtime case the weighted
+// offer draw would otherwise need an undefined fallback for.
+func TestValidateRejectsNonPositiveOfferWeight(t *testing.T) {
+	for _, weight := range []int{0, -1} {
+		cfg := DefaultConfig()
+		cfg.Contracts[1].OfferWeight = weight
+
+		if err := cfg.Validate(4); err == nil {
+			t.Errorf("Validate() = nil for Contracts[1].OfferWeight = %d, want an error", weight)
+		}
 	}
 }
 

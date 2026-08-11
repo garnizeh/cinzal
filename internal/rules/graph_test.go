@@ -1,0 +1,124 @@
+package rules
+
+import (
+	"testing"
+
+	"github.com/garnizeh/cinzal/internal/game"
+)
+
+// buildGraph constructs a Graph of n nodes from an adjacency map, mirroring
+// every edge both directions (the map's own convention — Node.Edges lists
+// both endpoints' adjacency, GDD §6.2). Nodes not named in edges have none.
+func buildGraph(n int, edges map[game.NodeID][]game.NodeID) Graph {
+	nodes := make([]Node, n)
+	for i := range nodes {
+		nodes[i] = Node{ID: game.NodeID(i), Edges: edges[game.NodeID(i)]}
+	}
+	return Graph{Nodes: nodes}
+}
+
+// TestDistancesFromSrcIsZero pins the base case every other assertion here
+// builds on.
+func TestDistancesFromSrcIsZero(t *testing.T) {
+	g := buildGraph(3, map[game.NodeID][]game.NodeID{0: {1}, 1: {0, 2}, 2: {1}})
+
+	if got := g.distances(0)[0]; got != 0 {
+		t.Errorf("distances(0)[0] = %d, want 0", got)
+	}
+}
+
+// TestDistancesWalksShortestPath asserts a plain BFS shortest-path count on
+// a line graph 0-1-2-3.
+func TestDistancesWalksShortestPath(t *testing.T) {
+	g := buildGraph(4, map[game.NodeID][]game.NodeID{
+		0: {1},
+		1: {0, 2},
+		2: {1, 3},
+		3: {2},
+	})
+
+	dist := g.distances(0)
+	want := []int{0, 1, 2, 3}
+	for i, w := range want {
+		if dist[i] != w {
+			t.Errorf("distances(0)[%d] = %d, want %d", i, dist[i], w)
+		}
+	}
+}
+
+// TestDistancesPrefersShortestOfSeveralPaths asserts BFS, not an arbitrary
+// walk: node 3 is reachable in 2 steps (0-1-3) and in 3 (0-2-4-3); the
+// shorter must win.
+func TestDistancesPrefersShortestOfSeveralPaths(t *testing.T) {
+	g := buildGraph(5, map[game.NodeID][]game.NodeID{
+		0: {1, 2},
+		1: {0, 3},
+		2: {0, 4},
+		3: {1},
+		4: {2, 3},
+	})
+
+	if got := g.distances(0)[3]; got != 2 {
+		t.Errorf("distances(0)[3] = %d, want 2 (via 0-1-3, shorter than 0-2-4-3)", got)
+	}
+}
+
+// TestDistancesUnreachableIsNegativeOne asserts a disconnected node reports
+// -1, not 0 or an out-of-range panic — GenerateOffer's distance-band check
+// (contracts.go) depends on this sentinel to exclude it rather than
+// mistaking it for "adjacent."
+func TestDistancesUnreachableIsNegativeOne(t *testing.T) {
+	g := buildGraph(3, map[game.NodeID][]game.NodeID{0: {1}, 1: {0}, 2: {}})
+
+	if got := g.distances(0)[2]; got != -1 {
+		t.Errorf("distances(0)[2] = %d, want -1 (node 2 has no edge to the rest of the graph)", got)
+	}
+}
+
+// TestDistancesExcludesSinkholedNodes asserts GDD §9.1a item 0: the
+// navigable graph excludes nodes SinkholeRounds > 0 makes impassable, not
+// just edges Bridge Down destroys. A direct 0-1-2 path exists, but node 1
+// is Sinkholed, so the only route left is the longer 0-3-2.
+func TestDistancesExcludesSinkholedNodes(t *testing.T) {
+	g := buildGraph(4, map[game.NodeID][]game.NodeID{
+		0: {1, 3},
+		1: {0, 2},
+		2: {1, 3},
+		3: {0, 2},
+	})
+	g.Nodes[1].SinkholeRounds = 3
+
+	dist := g.distances(0)
+	if dist[1] != -1 {
+		t.Errorf("distances(0)[1] = %d, want -1 (node 1 is Sinkholed, so it is never entered even as itself reachable-but-blocking)", dist[1])
+	}
+	if dist[2] != 2 {
+		t.Errorf("distances(0)[2] = %d, want 2 (via 0-3-2; the direct 0-1-2 path is blocked by node 1's Sinkhole)", dist[2])
+	}
+}
+
+// TestDistancesRespectsBridgeDown asserts a destroyed edge (simply absent
+// from both endpoints' Edges, per Node's own convention — Bridge Down never
+// leaves a one-directional stub) forces the longer remaining path, the same
+// property GDD §9.1a item 0 requires for the live navigable graph as
+// opposed to the static setup graph.
+func TestDistancesRespectsBridgeDown(t *testing.T) {
+	beforeBridgeDown := buildGraph(3, map[game.NodeID][]game.NodeID{
+		0: {1, 2},
+		1: {0},
+		2: {0},
+	})
+	if got := beforeBridgeDown.distances(0)[1]; got != 1 {
+		t.Fatalf("before Bridge Down: distances(0)[1] = %d, want 1", got)
+	}
+
+	// Bridge Down destroys the 0-1 edge: gone from both endpoints.
+	afterBridgeDown := buildGraph(3, map[game.NodeID][]game.NodeID{
+		0: {2},
+		1: {2},
+		2: {0, 1},
+	})
+	if got := afterBridgeDown.distances(0)[1]; got != 2 {
+		t.Errorf("after Bridge Down: distances(0)[1] = %d, want 2 (only remaining path is 0-2-1)", got)
+	}
+}

@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r19 · **Companion doc:** `cinzal-gdd.md` **v2.16**
+**Status:** draft for review · **Revision:** r20 · **Companion doc:** `cinzal-gdd.md` **v2.16**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -102,6 +102,11 @@
 > - **Vanish, Distracted Guard and Festival need no special case.** All three suppress the *acting* player's own entry as a designed, successful evasion, not a world-level event — a watcher's "nothing here" stays an honest zero, never `Obscured`.
 > - **No pipeline change.** `writeTrail()` still runs before `globalEvent()` per §6.7, but the event deck is fixed at Setup and Phase 1's Headline peek is non-consuming (§6.4) — `writeTrail` re-reads the same peek to know whether Rain is this round's card, rather than needing a retroactive correction after `globalEvent()` pops it.
 > - Full reasoning, including why Rain's suppression is narrower than "the round doesn't count" and why Riot doesn't raise the same problem, in [D13](../decisions/D13-observation-denominator.md).
+>
+> **Changelog r19 → r20** — the `contract.offer` row split, landing with #63 as D6 and D7 each deferred it to
+> - **§6.4's single `contract.offer` row (fixed at "3 per offering seat") is now two rows**, `contract.offer.tier` and `contract.offer.pick`, matching the tier-mix guarantee and pool fallback GDD §8.1/§8.2 already state as player-facing rules (D6, D7). `contract.offer.tier` costs exactly 2 draws per offering seat whenever generation is attempted — slot 1's target is a pure function of Infamy, never drawn; slots 2 and 3 are each one weighted, independent draw over the eligible tier set, drawn even when only one tier is eligible. `contract.offer.pick` costs 0-3, one draw per filled slot, as D7's cascade fills it — never a redraw of a tier already found empty.
+> - **`ContractTier` gains `OfferWeight int`** (D6), the per-tier weight backing slots 2 and 3's draw; `Config.Validate` rejects a non-positive value, the same discipline already applied to `Rounds`.
+> - No further rule change: this is the table/struct edit both D6 and D7 explicitly deferred to whoever implemented the contract subsystem, not a new decision.
 
 ---
 
@@ -299,7 +304,8 @@ Every consumer must be enumerated, because an unaccounted draw is a replay diver
 
 | Consumer | Purpose string | Indices consumed | Notes |
 |---|---|---|---|
-| Contract offer | `contract.offer` | 3 per offering seat | Phase 2 |
+| Contract offer — tier mix | `contract.offer.tier` | 2 per offering seat, always | Phase 2 |
+| Contract offer — pool pick | `contract.offer.pick` | 0-3 per offering seat, one per filled slot | Phase 2 |
 | Market stock | `market.stock` | 3 per market refreshed | Phase 3, every 2 rounds |
 | Confrontation D6 | `confront.d6` | **1 per participant, per confrontation** | Not per confrontation |
 | Tie-break coin | `confront.tiebreak` | 1, only at the fourth level | GDD §15 |

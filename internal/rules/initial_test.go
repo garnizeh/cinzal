@@ -75,11 +75,14 @@ func TestInitialSeatsPlayers(t *testing.T) {
 	}
 }
 
-// TestInitialFogAllHidden guards the game.FogState zero-value trap directly:
-// enums.go reserves FogState's zero value as invalid, so every entry must be
-// explicitly set to game.FogHidden — a plain make([]game.FogState, n) would
-// silently leave every node at the invalid zero value instead.
-func TestInitialFogAllHidden(t *testing.T) {
+// TestInitialFogSeededByD23 guards the game.FogState zero-value trap
+// (enums.go reserves FogState's zero value as invalid, so every entry must
+// be explicitly set, never left at a plain make([]game.FogState, n)'s zero)
+// and asserts D23's exact shape: the starting node and its neighbours are
+// FogInSight (GDD §7.2 applied at round 0), every Warehouse within graph
+// distance <= 2 of the start is at least FogKnown, and every other node is
+// still FogHidden.
+func TestInitialFogSeededByD23(t *testing.T) {
 	cfg := game.DefaultConfig()
 	s, err := initial(testSeed(51), cfg, 3)
 	if err != nil {
@@ -90,9 +93,33 @@ func TestInitialFogAllHidden(t *testing.T) {
 		if len(p.Fog) != len(s.Graph.Nodes) {
 			t.Fatalf("Players[%d]: len(Fog) = %d, want %d (one per node)", i, len(p.Fog), len(s.Graph.Nodes))
 		}
-		for node, fog := range p.Fog {
-			if fog != game.FogHidden {
-				t.Errorf("Players[%d].Fog[%d] = %v, want FogHidden", i, node, fog)
+
+		start := p.Position
+		if p.Fog[start] != game.FogInSight {
+			t.Errorf("Players[%d]: Fog[start=%d] = %v, want FogInSight", i, start, p.Fog[start])
+		}
+
+		inSight := map[game.NodeID]bool{start: true}
+		for _, n := range s.Graph.Nodes[start].Edges {
+			inSight[n] = true
+			if p.Fog[n] != game.FogInSight {
+				t.Errorf("Players[%d]: Fog[neighbour=%d] = %v, want FogInSight", i, n, p.Fog[n])
+			}
+		}
+
+		dist := s.Graph.distances(start)
+		for _, n := range s.Graph.Nodes {
+			switch {
+			case inSight[n.ID]:
+				// already checked above
+			case n.Type == game.NodeWarehouse && dist[n.ID] >= 0 && dist[n.ID] <= 2:
+				if p.Fog[n.ID] < game.FogKnown {
+					t.Errorf("Players[%d]: Fog[warehouse=%d, dist=%d] = %v, want >= FogKnown", i, n.ID, dist[n.ID], p.Fog[n.ID])
+				}
+			default:
+				if p.Fog[n.ID] != game.FogHidden {
+					t.Errorf("Players[%d]: Fog[%d] = %v, want FogHidden (not start, not a neighbour, not a Warehouse within 2)", i, n.ID, p.Fog[n.ID])
+				}
 			}
 		}
 	}

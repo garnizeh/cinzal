@@ -52,7 +52,7 @@ func initial(seed [32]byte, cfg game.Config, players int) (MatchState, error) {
 	return MatchState{
 		Round:   0,
 		Graph:   graph,
-		Players: seatPlayers(g, cfg, players),
+		Players: seatPlayers(g, graph, cfg, players),
 	}, nil
 }
 
@@ -81,23 +81,46 @@ func newGraph(g gen.Graph) Graph {
 // value, matching RFC §6.6's own framing of the eight cross-round counters
 // as "end of the previous round" state — there is no previous round yet.
 //
-// Fog starts all game.FogHidden for every seat (GDD §7.1's zero-information
-// state) — never the zero game.FogState, which enums.go reserves as
-// invalid. GDD §6.1 constraint 7 additionally promises that a player's
-// starting node, and every Warehouse within 2 steps of it — at least one of
-// which has a Border inside Tier I's contract band, so it can originate the
-// opening offer (D24) — begin Known. D23 (issue #115) decided the seeding
-// algorithm; writing it here is not this function's job yet, so no fog is
-// seeded rather than a guessed rule being seeded.
-func seatPlayers(g gen.Graph, cfg game.Config, players int) []Player {
+// Fog is seeded by D23's two composed mechanisms, run once per seat against
+// graph (the same converted Graph MatchState.Graph holds, so distances()
+// walks the identical topology this match will navigate — Bridge Down and
+// Sinkhole cannot have happened yet at Setup, so the setup graph and the
+// navigable graph coincide here):
+//
+//  1. Opening sight (GDD §7.2, applied once at round 0 with the starting
+//     position standing in for "ending position"): FogInSight on the
+//     starting node and every node adjacent to it.
+//  2. Constraint 7 (GDD §6.1): FogKnown on every Warehouse within graph
+//     distance <= 2 of the starting node that step 1 left FogHidden. At
+//     least one such Warehouse has a Border inside Tier I's contract band
+//     (D24), so the opening offer can always originate. Nothing already
+//     FogInSight is downgraded. No tie-break is needed — every qualifying
+//     Warehouse is seeded, not just the nearest.
+//
+// See docs/decisions/D23-starting-fog-seeding.md. g still supplies
+// StartPositions; graph is what makes the distance and Warehouse-type checks
+// possible without re-deriving them from gen's own node/edge shape.
+func seatPlayers(g gen.Graph, graph Graph, cfg game.Config, players int) []Player {
 	out := make([]Player, players)
 	for i := range players {
-		fog := make([]game.FogState, len(g.Nodes))
+		start := g.StartPositions[i]
+
+		fog := make([]game.FogState, len(graph.Nodes))
 		for j := range fog {
 			fog[j] = game.FogHidden
 		}
+		fog[start] = game.FogInSight
+		for _, n := range graph.Nodes[start].Edges {
+			fog[n] = game.FogInSight
+		}
 
-		start := g.StartPositions[i]
+		dist := graph.distances(start)
+		for _, n := range graph.Nodes {
+			if n.Type == game.NodeWarehouse && dist[n.ID] >= 0 && dist[n.ID] <= 2 && fog[n.ID] == game.FogHidden {
+				fog[n.ID] = game.FogKnown
+			}
+		}
+
 		out[i] = Player{
 			Seat:        game.SeatID(i),
 			Balance:     cfg.StartingBalance,

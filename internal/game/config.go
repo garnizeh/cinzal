@@ -38,6 +38,18 @@ type ContractTier struct {
 	// PenaltyInfamy is additional Infamy lost on a missed deadline, on top
 	// of Penalty. 0 for every tier except IV, which also costs −2 Infamy.
 	PenaltyInfamy int
+
+	// OfferWeight is this tier's weight in the two non-guaranteed offer
+	// slots' independent draw (GDD §8.1, D6): the first of a three-contract
+	// offer always targets the player's highest eligible tier outright, no
+	// draw; the other two are a weighted draw over every eligible tier,
+	// weighted by this field. Must be positive — Config.Validate rejects
+	// zero or negative, the same discipline RFC §6.2 already holds Rounds
+	// to, so "every eligible tier has zero weight" can never occur as a
+	// runtime case the draw needs an undefined fallback for. Default 1 for
+	// every tier (DefaultConfig), i.e. an even split, until M2's simulation
+	// harness gives a reason to move it.
+	OfferWeight int
 }
 
 // MapSpec is one row of GDD §6.1's node/edge table. Config.MapByPlayers
@@ -177,10 +189,10 @@ func DefaultConfig() Config {
 		GateFee:           1,
 		StartingBalance:   12,
 		Contracts: [4]ContractTier{
-			{InfamyRequired: 0, MinDistance: 3, MaxDistance: 4, Payment: 8, RP: 2, Deadline: 4, Penalty: 3, PenaltyInfamy: 0},
-			{InfamyRequired: 3, MinDistance: 4, MaxDistance: 6, Payment: 14, RP: 3, Deadline: 5, Penalty: 5, PenaltyInfamy: 0},
-			{InfamyRequired: 6, MinDistance: 5, MaxDistance: 8, Payment: 20, RP: 5, Deadline: 5, Penalty: 8, PenaltyInfamy: 0},
-			{InfamyRequired: 9, MinDistance: 6, MaxDistance: 0, Payment: 30, RP: 8, Deadline: 6, Penalty: 12, PenaltyInfamy: 2},
+			{InfamyRequired: 0, MinDistance: 3, MaxDistance: 4, Payment: 8, RP: 2, Deadline: 4, Penalty: 3, PenaltyInfamy: 0, OfferWeight: 1},
+			{InfamyRequired: 3, MinDistance: 4, MaxDistance: 6, Payment: 14, RP: 3, Deadline: 5, Penalty: 5, PenaltyInfamy: 0, OfferWeight: 1},
+			{InfamyRequired: 6, MinDistance: 5, MaxDistance: 8, Payment: 20, RP: 5, Deadline: 5, Penalty: 8, PenaltyInfamy: 0, OfferWeight: 1},
+			{InfamyRequired: 9, MinDistance: 6, MaxDistance: 0, Payment: 30, RP: 8, Deadline: 6, Penalty: 12, PenaltyInfamy: 2, OfferWeight: 1},
 		},
 		MapByPlayers: map[int]MapSpec{
 			2: {Nodes: 15, MinEdges: 21, MaxEdges: 23},
@@ -233,6 +245,12 @@ func (c Config) Validate(players int) error {
 
 	if c.MaxGenAttempts < 1 {
 		return fmt.Errorf("game: MaxGenAttempts must be at least 1, got %d (GDD §6.1)", c.MaxGenAttempts)
+	}
+
+	for i, tier := range c.Contracts {
+		if tier.OfferWeight < 1 {
+			return fmt.Errorf("game: Contracts[%d].OfferWeight must be positive, got %d (GDD §8.1, D6)", i, tier.OfferWeight)
+		}
 	}
 
 	return nil
