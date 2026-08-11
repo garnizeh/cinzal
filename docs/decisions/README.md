@@ -68,6 +68,7 @@ The row stays, struck through, because the numbering is cited elsewhere and a si
 | # | Question | Status |
 |---|---|---|
 | [D23](D23-starting-fog-seeding.md) | GDD §6.1 constraint 7 says starting nodes "begin Known" along with a nearby Warehouse, but no document states which nodes exactly — surfaced while scoping [#61](https://github.com/garnizeh/cinzal/issues/61) | **decided** — two composed mechanisms: §7.2's ordinary sight rule applied at round 0 (starting node + neighbours), plus constraint 7 seeding every still-Hidden Warehouse within 2 steps as Known (never downgrading one already in sight); no tie-break needed either way |
+| [D24](D24-opening-offer-guarantee.md) | D7 claims reachability alone guarantees a non-empty opening contract offer, but that assumes a 3-step Warehouse/Border floor GDD §6.1 constraint 6 does not actually provide (only 2, non-adjacency), and a Nobody's eligible tier set (Tier I alone) doesn't span D7's own "bands cover everything ≥3" argument — surfaced while implementing [#63](https://github.com/garnizeh/cinzal/issues/63), confirmed with a concrete counterexample | **decided** — the fix belongs in constraint 7, not the contract rules: a start position now needs a Warehouse within 2 steps that itself has a Border 3–4 steps away (Tier I's band), so the pair the opening offer needs provably exists; 7.10%→0.00% of two-player seats over 1000 seeds, D6/D7/D23 unamended, no RNG change |
 
 ### Blocks M5 — Playable web, and M6 — Async
 
