@@ -145,11 +145,13 @@ func TestInitialFollowsSetupPhaseOrder(t *testing.T) {
 
 	rng := NewRNG(seed, 0)
 	g, err := gen.Generate(genRand(rng), gen.Params{
-		Nodes:       cfg.MapByPlayers[4].Nodes,
-		MinEdges:    cfg.MapByPlayers[4].MinEdges,
-		MaxEdges:    cfg.MapByPlayers[4].MaxEdges,
-		Players:     4,
-		MaxAttempts: cfg.MaxGenAttempts,
+		Nodes:              cfg.MapByPlayers[4].Nodes,
+		MinEdges:           cfg.MapByPlayers[4].MinEdges,
+		MaxEdges:           cfg.MapByPlayers[4].MaxEdges,
+		Players:            4,
+		MaxAttempts:        cfg.MaxGenAttempts,
+		OpeningMinDistance: cfg.Contracts[0].MinDistance,
+		OpeningMaxDistance: cfg.Contracts[0].MaxDistance,
 	})
 	if err != nil {
 		t.Fatalf("reference gen.Generate() = %v", err)

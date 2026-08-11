@@ -52,8 +52,10 @@ const (
 
 	// PurposeStartSelect is the full shuffle of every node used to select
 	// GDD §6.1 constraints 5 and 7's starting positions (mutual distance
-	// >= 4, a Warehouse within 2 steps): exactly Params.Nodes-1 draws,
-	// always.
+	// >= 4; a Warehouse within 2 steps that itself has a Border inside
+	// Tier I's contract band, D24): exactly Params.Nodes-1 draws, always.
+	// The constraint-7 predicate draws nothing, so strengthening it changed
+	// how many attempts are rejected, never this cost.
 	PurposeStartSelect = "gen.startselect"
 
 	// PurposeTypeAssign is one draw per node, in ascending NodeID order,

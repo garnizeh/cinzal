@@ -209,10 +209,12 @@ func testParams(players int) Params {
 	cfg := game.DefaultConfig()
 	spec := cfg.MapByPlayers[players]
 	return Params{
-		Nodes:       spec.Nodes,
-		MinEdges:    spec.MinEdges,
-		MaxEdges:    spec.MaxEdges,
-		Players:     players,
-		MaxAttempts: cfg.MaxGenAttempts,
+		Nodes:              spec.Nodes,
+		MinEdges:           spec.MinEdges,
+		MaxEdges:           spec.MaxEdges,
+		Players:            players,
+		MaxAttempts:        cfg.MaxGenAttempts,
+		OpeningMinDistance: cfg.Contracts[0].MinDistance,
+		OpeningMaxDistance: cfg.Contracts[0].MaxDistance,
 	}
 }

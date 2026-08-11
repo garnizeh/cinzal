@@ -10,8 +10,9 @@ import (
 // sector membership, adjacency, GDD §6.2 type, and canvas coordinates (D10).
 // Fog seeding — which nodes begin Known to which player under GDD §6.1
 // constraint 7 — is internal/rules' job at Setup: this package only
-// guarantees the structural property (a Warehouse within 2 steps of every
-// starting position) that makes that seeding possible.
+// guarantees the structural property (within 2 steps of every starting
+// position, a Warehouse that itself has a Border inside Tier I's contract
+// band) that makes that seeding useful — see D24.
 type Node struct {
 	ID     game.NodeID
 	Sector game.Sector
@@ -35,7 +36,8 @@ type Node struct {
 // Graph is the generated map in full: every node's sector, type, layout,
 // and adjacency, plus the player-count-many starting positions GDD §6.1
 // constraints 5 and 7 require — mutual graph distance >= 4 apart, and each
-// within 2 steps of a Warehouse.
+// within 2 steps of a Warehouse that itself has a Border inside Tier I's
+// contract band (D24).
 type Graph struct {
 	// Nodes is indexed by NodeID — Nodes[i].ID == game.NodeID(i) always,
 	// matching rules.Node's own convention (RFC-001 §6.4/§6.5's
@@ -60,6 +62,21 @@ type Params struct {
 	Players  int
 
 	MaxAttempts int
+
+	// OpeningMinDistance and OpeningMaxDistance are Tier I's contract band
+	// (GDD §8.3): constraint 7 requires a Border at a graph distance within
+	// the inclusive range [OpeningMinDistance, OpeningMaxDistance] of a
+	// Warehouse near a starting position, for that Warehouse to be able to
+	// originate the opening contract offer (D24).
+	//
+	// They arrive as parameters rather than gen constants for the same
+	// reason every other number in this struct does: gen must not import
+	// game.Config — that boundary is why Params exists — and a hard-coded
+	// 3/4 would let a §8.3 band edit silently stop satisfying the
+	// constraint that exists to serve it. internal/rules fills them from
+	// cfg.Contracts[0].MinDistance/.MaxDistance.
+	OpeningMinDistance int
+	OpeningMaxDistance int
 }
 
 // minSupportedNodes is D8's four-sectors-of-at-least-three floor (D8,
@@ -82,6 +99,13 @@ func (p Params) validate() error {
 	}
 	if p.MaxAttempts < 1 {
 		return fmt.Errorf("gen: MaxAttempts must be at least 1, got %d", p.MaxAttempts)
+	}
+	// An unset band would make constraint 7 unsatisfiable (no Border sits at
+	// distance <= 0 from a Warehouse), which would surface as an exhausted
+	// MaxAttempts — a generation failure reported for a caller error. It
+	// fails here instead, loudly and before the first attempt (D24).
+	if p.OpeningMinDistance < 1 || p.OpeningMaxDistance < p.OpeningMinDistance {
+		return fmt.Errorf("gen: OpeningMinDistance/OpeningMaxDistance must satisfy 1 <= OpeningMinDistance <= OpeningMaxDistance, got [%d, %d]", p.OpeningMinDistance, p.OpeningMaxDistance)
 	}
 	return nil
 }

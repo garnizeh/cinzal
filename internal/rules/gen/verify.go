@@ -13,7 +13,7 @@ const (
 	constraintChokepointRange = "chokepoint-range (constraint 4: 3-5 edges)"
 	constraintEdgeCount       = "edge-count (out of MinEdges/MaxEdges range)"
 	constraintTypeAdjacency   = "type-adjacency (constraint 6: no Warehouse adjacent to a Border)"
-	constraintStartPlacement  = "start-placement (constraint 5: min distance 4; constraint 7: Warehouse within 2 steps)"
+	constraintStartPlacement  = "start-placement (constraint 5: min distance 4; constraint 7: a Warehouse within 2 steps with a Border inside Tier I's contract band)"
 )
 
 // violations runs every structural check GDD §6.1 constraints 1-4 require
