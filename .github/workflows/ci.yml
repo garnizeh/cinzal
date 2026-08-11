@@ -43,6 +43,11 @@ env:
   # because the archive is unpacked into a directory on PATH and then run in a
   # job that can read the repository.
   GITLEAKS_SHA256: 551f6fc83ea457d62a0d98237cbad105af8d557003051f41f3e7ca7b3f2470eb
+  # golang.org/x/perf, benchstat's module, ships no tagged releases — only
+  # pseudo-versions — so the pin is a commit, not a semver tag like the
+  # others above. Same reasoning as those: a tool release (here, a commit)
+  # should not change what CI does without a reviewed change to this file.
+  BENCHSTAT_VERSION: v0.0.0-20260709024250-82a0b07e230d
 
 jobs:
   check:
@@ -187,17 +192,20 @@ jobs:
   bench:
     name: bench
     runs-on: ubuntu-latest
-    # Issue #112 is deliberately Phase 1 only: record real history from real
-    # CI runners, nothing more. No comparison, no threshold, and nothing here
-    # can block a merge (see the Makefile's own `bench` target comment and
-    # CONTRIBUTING.md "What is deliberately not a gate") — #113 is where that
-    # decision gets made, once there is more than one data point to reason
-    # about. Restricted to pushes to main (this workflow's push trigger only
+    # Records real history from real CI runners on every push to main —
+    # issue #112. Restricted to pushes (this workflow's push trigger only
     # ever fires for main) rather than every pull request, both because a
     # baseline only means something taken from the same branch every time,
     # and because internal/rules/gen's own performance cliff (up to ~80 full
     # graph regenerations per seed at players=5) already makes this job slow
     # enough without multiplying it across every open PR.
+    #
+    # bench-baseline (not bench) since #113: BENCH_COUNT=10 repeated samples
+    # here are what let the bench-compare job below (pull_request only) run
+    # a real benchstat comparison against this artifact rather than a bare
+    # percentage diff against one prior number — see
+    # scripts/check-bench-regression.sh's own header for why that matters on
+    # a shared runner.
     if: github.event_name == 'push'
     steps:
       - uses: actions/checkout@v7
@@ -209,21 +217,131 @@ jobs:
           go-version-file: go.mod
           check-latest: false
 
-      # shell: bash is explicit, not decorative — GitHub Actions only
-      # guarantees `-o pipefail` on this step when the shell is named this
-      # way (actions/runner-images#4459); the implicit unspecified default
-      # is documented to behave the same but does not reliably in practice.
-      # Without pipefail, `make bench | tee` would report success off tee's
-      # own exit code even when make bench fails, exactly the "green when it
-      # shouldn't be" failure CONTRIBUTING.md's gates spend real effort
-      # avoiding.
-      - name: make bench
-        shell: bash
-        run: make bench | tee bench-results.txt
+      - name: make bench-baseline
+        run: make bench-baseline
 
-      - name: Upload benchmark results
+      - name: Upload benchmark baseline
         uses: actions/upload-artifact@v7
         with:
           name: bench-results-${{ github.sha }}
-          path: bench-results.txt
+          path: baseline.bench
           retention-days: 90
+
+  bench-compare:
+    name: bench-compare
+    runs-on: ubuntu-latest
+    # Issue #113: catches a regression before merge by comparing the pull
+    # request's own benchmark numbers against the most recent baseline
+    # recorded by the bench job above.
+    #
+    # ADVISORY, NOT A GATE — deliberate, and recorded here rather than left
+    # implicit in a `continue-on-error: true` on the comparison step. This
+    # job is allowed to fail for real (see the last step): a red X here is
+    # an honest, useful signal, not noise dressed up as green. What makes it
+    # non-blocking is that "bench-compare" is not, and must not become,
+    # a required status check in this repository's branch protection — only
+    # `check` is. See scripts/check-bench-regression.sh's own header for the
+    # full reasoning: two data points (before/after #61) is not enough yet
+    # to characterise real CI-runner noise, and CONTRIBUTING.md's "What is
+    # deliberately not a gate" is explicit that a required check which can
+    # go red on noise teaches contributors a red check might be nothing —
+    # the same failure this project already spent real effort undoing for
+    # CodeRabbit's own green-on-skip behaviour. Promote this once the
+    # false-positive rate is actually known, not before.
+    #
+    # Every step below is gated on the previous one having found a reason to
+    # keep going (internal/rules/gen actually changed, a baseline actually
+    # exists) rather than the job simply failing partway — a skip here is a
+    # legitimate outcome, not a defect.
+    if: github.event_name == 'pull_request'
+    permissions:
+      contents: read
+      actions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Needed to diff base...head below to decide whether this pull
+          # request touches internal/rules/gen at all — the default shallow
+          # clone would not contain the base commit to diff against.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Check whether this PR touches internal/rules/gen
+        id: changed
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          if git diff --quiet "$BASE_SHA" -- internal/rules/gen; then
+            echo "touched=false" >> "$GITHUB_OUTPUT"
+            echo "internal/rules/gen unchanged — nothing for bench-compare to do"
+          else
+            echo "touched=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-go@v7
+        if: steps.changed.outputs.touched == 'true'
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      - name: Install benchstat
+        if: steps.changed.outputs.touched == 'true'
+        run: go install "golang.org/x/perf/cmd/benchstat@${BENCHSTAT_VERSION}"
+
+      # Finds the most recent successful push-to-main run of this workflow
+      # and downloads the bench-results artifact it uploaded — the same
+      # artifact the bench job above produces. gh's GITHUB_TOKEN needs
+      # actions:read for both the API query and the download, hence this
+      # job's own `permissions:` block above (the workflow-level default is
+      # contents:read only).
+      - name: Find the latest main baseline
+        id: baseline
+        if: steps.changed.outputs.touched == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          run_id=$(gh api "repos/${{ github.repository }}/actions/workflows/ci.yml/runs?branch=main&event=push&status=success&per_page=1" \
+            --jq '.workflow_runs[0].id // empty')
+          if [ -z "$run_id" ]; then
+            echo "found=false" >> "$GITHUB_OUTPUT"
+            echo "no successful push-to-main run found yet — nothing to compare against"
+          else
+            echo "found=true" >> "$GITHUB_OUTPUT"
+            echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download the baseline
+        if: steps.changed.outputs.touched == 'true' && steps.baseline.outputs.found == 'true'
+        uses: actions/download-artifact@v7
+        with:
+          github-token: ${{ github.token }}
+          run-id: ${{ steps.baseline.outputs.run_id }}
+          pattern: bench-results-*
+          path: baseline
+          merge-multiple: true
+
+      # The downloaded artifact can exist but predate #113's baseline.bench
+      # format (any bench-results-* artifact recorded before this merges —
+      # e.g. #114's or #116's own push runs — holds the old bench-results.txt
+      # instead). Treated the same as "no baseline found": one push to main
+      # after this merges produces a compatible one, so this is a one-time
+      # bootstrap gap, not a real failure to surface as a job failure.
+      - name: make bench-compare
+        if: steps.changed.outputs.touched == 'true' && steps.baseline.outputs.found == 'true'
+        run: |
+          if [ ! -s baseline/baseline.bench ]; then
+            {
+              echo "### Benchmark comparison (issue #113, advisory)"
+              echo "Latest main artifact predates issue #113's baseline.bench format — nothing to compare yet. Resolves itself after the next push to main."
+            } >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+          make bench-compare BASELINE=baseline/baseline.bench
+
+      - name: No baseline available
+        if: steps.changed.outputs.touched == 'true' && steps.baseline.outputs.found != 'true'
+        run: |
+          echo "### Benchmark comparison (issue #113, advisory)" >> "$GITHUB_STEP_SUMMARY"
+          echo "No prior push-to-main baseline exists yet — nothing was compared." >> "$GITHUB_STEP_SUMMARY"
