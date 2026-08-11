@@ -46,7 +46,7 @@ No existing decision covers this. D10 (map layout) and D12 (Decoy) both deal in 
 
 As an algorithm `initial(seed, cfg)` can implement directly:
 
-```
+```text
 fog[start] = FogInSight
 for n in graph.Nodes[start].Edges:
     fog[n] = FogInSight

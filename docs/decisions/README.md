@@ -67,7 +67,7 @@ The row stays, struck through, because the numbering is cited elsewhere and a si
 
 | # | Question | Status |
 |---|---|---|
-| [D23](D23-starting-fog-seeding.md) | GDD §6.1 constraint 7 says starting nodes "begin Known" along with a nearby Warehouse, but no document states which nodes exactly — surfaced while scoping [#61](https://github.com/garnizeh/cinzal/issues/61) | **decided** — two composed mechanisms: §7.2's ordinary sight rule applied at round 0 (starting node + neighbours), plus constraint 7 seeding every Warehouse within 2 steps as Known; no tie-break needed either way |
+| [D23](D23-starting-fog-seeding.md) | GDD §6.1 constraint 7 says starting nodes "begin Known" along with a nearby Warehouse, but no document states which nodes exactly — surfaced while scoping [#61](https://github.com/garnizeh/cinzal/issues/61) | **decided** — two composed mechanisms: §7.2's ordinary sight rule applied at round 0 (starting node + neighbours), plus constraint 7 seeding every still-Hidden Warehouse within 2 steps as Known (never downgrading one already in sight); no tie-break needed either way |
 
 ### Blocks M5 — Playable web, and M6 — Async
 
