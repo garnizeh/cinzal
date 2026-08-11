@@ -96,14 +96,43 @@ type SelfState struct {
 
 	// StepAllowance is this round's step budget, computed server-side from
 	// the full modifier chain (GDD §9.1a) so the HUD number can never
-	// disagree with the server's (GDD §19.2, RFC §10.2).
+	// disagree with the server's (GDD §19.2, RFC §10.2). Project sets this
+	// from rules.Steps(view, cfg); it is never read by rules.Steps itself —
+	// StepModifiers below is that function's actual input.
 	StepAllowance int
+
+	// StepModifiers is the entry-snapshot-frozen input to rules.Steps (GDD
+	// §9.1a, RFC §6.6). Kept on the view, not folded into StepAllowance,
+	// because RFC §10.1 requires the formula itself to be computable from
+	// the fog-safe view alone (WASM parity) — StepAllowance is the cached
+	// result, this is what produces it.
+	StepModifiers StepModifiers
 
 	// RoundsToNextOffer is the HUD's "rounds until next contract offer"
 	// invariant (GDD §8.2, §19.2). Computed server-side: the hold rules on
 	// a full hand or an empty pool (D7) are not a client computation (RFC
 	// §10.2).
 	RoundsToNextOffer int
+}
+
+// StepModifiers are GDD §9.1a's step-allowance formula inputs beyond the
+// Infamy-tier base, frozen at the entry snapshot (RFC §6.6) exactly like
+// Flagged and EvasiveStepPenalty already are on rules.SeatSnapshot. Zero
+// value is "no modifiers apply" — the common case.
+//
+// Curfew, DistractedGuard, Scaffolding, Retainer, and StreetsBlocked have no
+// producer yet: event and sector-incident resolution are later work. They
+// exist now so rules.Steps has a stable, WASM-computable input shape (RFC
+// §10.1) rather than being retrofitted once that work lands — see issue #62.
+// They default to false until a future Project populates them.
+type StepModifiers struct {
+	Flagged            bool // GDD §13 debt
+	EvasiveStepPenalty bool // GDD §15 Evasive loss last round
+	Curfew             bool // GDD §14.2 global event, -1 for everyone this round
+	DistractedGuard    bool // GDD §14.3 incident boon, +1 this round
+	Scaffolding        bool // GDD §14.2 global event, +1 this round in this sector
+	Retainer           bool // GDD §14.2 global event, +2 this round if carrying no cargo
+	StreetsBlocked     bool // GDD §14.3 incident hazard, hard cap = 1 this round
 }
 
 // CarriedCargo is the one cargo a seat may carry (GDD §5, §8.4).
