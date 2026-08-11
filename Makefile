@@ -13,8 +13,17 @@ ALL     := ./...
 CMD     := ./cmd/...
 BIN     := bin
 
+# bash, with pipefail, rather than make's default /bin/sh: bench-baseline and
+# bench-compare pipe `go test` into `tee` below, and without pipefail that
+# pipeline's exit status is tee's, so a failing benchmark run would still
+# report success — the same failure CI's own bench step already guards
+# against explicitly (see .github/workflows/ci.yml), just reached here via
+# make's default shell instead of the workflow's.
+SHELL := bash
+.SHELLFLAGS := -o pipefail -c
+
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench lint generate generate-check packages purity fog debug-isolation secrets check clean
+.PHONY: help dev prod test bench bench-baseline bench-compare lint generate generate-check packages purity fog debug-isolation secrets check clean
 
 ## help      list these targets
 help:
@@ -38,21 +47,50 @@ test:
 
 ## bench     run the benchmark suite (issue #112) and print results
 #
-# Prints to stdout only — nothing here writes a file. For a local
-# before/after comparison, redirect yourself into a `.bench` file (gitignored
-# — see .gitignore) and diff with benchstat:
-#   make bench > before.bench
-#   ...make a change...
-#   make bench > after.bench
-#   benchstat before.bench after.bench
+# Prints to stdout only — nothing here writes a file, and a single sample
+# is not enough for a real before/after comparison. Use bench-baseline and
+# bench-compare below for that.
 #
-# -run '^$' skips every Test function so only Benchmark* runs. This is
-# advisory, not a gate (see CONTRIBUTING.md "What is deliberately not a
-# gate"): no comparison, no threshold, nothing here can block a merge — #113
-# is where that decision gets made, once CI has real history to compare
-# against.
+# -run '^$' skips every Test function so only Benchmark* runs.
 bench:
 	$(GO) test -run '^$$' -bench . -benchmem $(ALL)
+
+# Repeated samples are what makes bench-compare's comparison statistically
+# meaningful rather than a bare percentage diff against one prior number —
+# exactly what issue #113's acceptance criteria rules out, because a shared
+# CI runner is noisy enough to make that read as a regression when nothing
+# regressed. 10 matches benchstat's own commonly recommended minimum, and
+# was verified against this suite specifically: repeated comparisons of
+# identical code at this count produced no false positive, where a shorter
+# -benchtime alone did (see check-bench-regression.sh's header).
+BENCH_COUNT ?= 10
+BASELINE    ?= baseline.bench
+
+## bench-baseline  record BENCH_COUNT samples of the suite to baseline.bench
+#
+# What CI's bench job runs on every push to main (issue #113) to produce the
+# artifact bench-compare pulls down and compares pull requests against, and
+# what a developer runs locally before making a change they want to measure.
+# `*.bench` is gitignored (see .gitignore) — this is recorded CI history or
+# a personal local aid, never something to commit.
+bench-baseline:
+	$(GO) test -run '^$$' -bench . -benchmem -count=$(BENCH_COUNT) $(ALL) | tee baseline.bench
+
+## bench-compare  compare BENCH_COUNT fresh samples against BASELINE (issue #113)
+#
+# Advisory only, deliberately not part of `check` — see
+# scripts/check-bench-regression.sh's own header for the reasoning, and
+# CONTRIBUTING.md "What is deliberately not a gate". Locally:
+#   make bench-baseline
+#   ...make a change...
+#   make bench-compare
+# In CI, BASELINE is the most recent successful push-to-main artifact,
+# downloaded by the bench-compare workflow job before this target runs (see
+# .github/workflows/ci.yml) — everything after that download is this one
+# target, so a flagged regression reproduces locally with the same command.
+bench-compare: require-benchstat
+	$(GO) test -run '^$$' -bench . -benchmem -count=$(BENCH_COUNT) $(ALL) | tee candidate.bench
+	./scripts/check-bench-regression.sh $(BASELINE) candidate.bench
 
 ## lint      go vet and golangci-lint
 lint: require-golangci-lint
@@ -132,6 +170,11 @@ generate-check: generate
 # "every gate that could run, passed" instead of "every gate passed" — exactly
 # the failure this file's own header warns against. It rejoins this line once
 # GENERATED holds real paths.
+#
+# bench-compare is deliberately absent from this line too, but for the
+# opposite reason: it can run, and deciding it should still not block is the
+# point of issue #113 — see bench-compare's own comment and
+# CONTRIBUTING.md "What is deliberately not a gate".
 #
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
