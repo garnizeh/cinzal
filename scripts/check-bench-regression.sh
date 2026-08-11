@@ -122,7 +122,15 @@ regressions="$(printf '%s\n' "$csv" | awk -F',' -v threshold="$THRESHOLD" '
 ')"
 
 if [ "$comparable_rows" -eq 0 ]; then
-	verdict="check-bench-regression: no comparable sec/op rows between $BASELINE and $CANDIDATE — inconclusive, not clean (mismatched benchmark names or metadata?)"
+	# benchstat pairs rows on the benchmark name AND on the configuration
+	# lines above it (goos, goarch, pkg, cpu), so a differing cpu: line alone
+	# empties this count while both files look perfectly fine to a reader.
+	# That is what #125 was: the two samples came from different hosted
+	# runners. CI now measures both sides on one runner, so a mismatch here
+	# means something else — a renamed or deleted benchmark, or a baseline
+	# taken from another machine — and either way this is inconclusive, which
+	# is not clean.
+	verdict="check-bench-regression: no comparable sec/op rows between $BASELINE and $CANDIDATE — inconclusive, not clean (renamed benchmark, or differing goos/goarch/pkg/cpu metadata — compare the two files' headers)"
 	status=1
 elif [ -n "$regressions" ]; then
 	verdict="check-bench-regression: possible regression(s) detected (sec/op, vs $BASELINE):

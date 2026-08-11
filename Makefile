@@ -68,9 +68,10 @@ BASELINE    ?= baseline.bench
 
 ## bench-baseline  record BENCH_COUNT samples of the suite to baseline.bench
 #
-# What CI's bench job runs on every push to main (issue #113) to produce the
-# artifact bench-compare pulls down and compares pull requests against, and
-# what a developer runs locally before making a change they want to measure.
+# Three callers: CI's bench job, recording main's history as an artifact on
+# every push (issue #112); CI's bench-compare job, measuring a pull request's
+# base commit before measuring its head on the same runner (issue #125); and
+# a developer locally, before making a change they want to measure.
 # `*.bench` is gitignored (see .gitignore) — this is recorded CI history or
 # a personal local aid, never something to commit.
 bench-baseline:
@@ -84,10 +85,12 @@ bench-baseline:
 #   make bench-baseline
 #   ...make a change...
 #   make bench-compare
-# In CI, BASELINE is the most recent successful push-to-main artifact,
-# downloaded by the bench-compare workflow job before this target runs (see
-# .github/workflows/ci.yml) — everything after that download is this one
-# target, so a flagged regression reproduces locally with the same command.
+# In CI, BASELINE is base.bench: the pull request's own base commit, checked
+# out and benchmarked by the bench-compare workflow job on the same runner
+# immediately before this target runs (see .github/workflows/ci.yml, and
+# issue #125 for why it must be the same runner) — everything after that
+# checkout is this one target, so a flagged regression reproduces locally
+# with the same command.
 bench-compare: require-benchstat
 	$(GO) test -run '^$$' -bench . -benchmem -count=$(BENCH_COUNT) $(ALL) | tee candidate.bench
 	./scripts/check-bench-regression.sh $(BASELINE) candidate.bench
