@@ -74,7 +74,7 @@ BASELINE    ?= baseline.bench
 # `*.bench` is gitignored (see .gitignore) — this is recorded CI history or
 # a personal local aid, never something to commit.
 bench-baseline:
-	$(GO) test -run '^$$' -bench . -benchmem -count=$(BENCH_COUNT) $(ALL) | tee baseline.bench
+	$(GO) test -run '^$$' -bench . -benchmem -count=$(BENCH_COUNT) $(ALL) | tee "$(BASELINE)"
 
 ## bench-compare  compare BENCH_COUNT fresh samples against BASELINE (issue #113)
 #

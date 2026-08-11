@@ -71,10 +71,29 @@ echo
 # benchstat could not compute a CI for, not a failure of this script.
 csv="$(benchstat -format=csv "$BASELINE" "$CANDIDATE" 2>/dev/null)"
 
+# Counted separately from the regression scan below: a benchmark that
+# exists in only one of the two files (disjoint names, or metadata
+# benchstat can't line up) has no candidate-side value, so its CSV row is
+# short a field and $(NF-1) resolves to something else entirely rather than
+# a "vs base" percentage — that row must not count as compared. Requiring
+# NF >= 7 (name,base,baseCI,cand,candCI,vs,P) and a genuine vs value ("~" or
+# a signed percentage) is what makes "0 comparable rows" mean what it says.
+# Zero comparable rows is inconclusive, not clean — the same "a check that
+# did not run must not report success" rule this repo's other gates hold to.
+comparable_rows="$(printf '%s\n' "$csv" | awk -F',' '
+	/^,sec\/op,/ { intable = 1; next }
+	intable && /^$/ { intable = 0 }
+	intable && $1 != "" && $1 != "geomean" && NF >= 7 {
+		vs = $(NF - 1)
+		if (vs == "~" || vs ~ /^[+-][0-9.]+%$/) count++
+	}
+	END { print count + 0 }
+')"
+
 regressions="$(printf '%s\n' "$csv" | awk -F',' -v threshold="$THRESHOLD" '
 	/^,sec\/op,/ { intable = 1; next }
 	intable && /^$/ { intable = 0 }
-	intable && $1 != "" && $1 != "geomean" {
+	intable && $1 != "" && $1 != "geomean" && NF >= 7 {
 		vs = $(NF - 1)
 		if (vs != "~" && vs ~ /^\+/) {
 			pct = vs
@@ -86,12 +105,15 @@ regressions="$(printf '%s\n' "$csv" | awk -F',' -v threshold="$THRESHOLD" '
 	}
 ')"
 
-if [ -n "$regressions" ]; then
+if [ "$comparable_rows" -eq 0 ]; then
+	verdict="check-bench-regression: no comparable sec/op rows between $BASELINE and $CANDIDATE — inconclusive, not clean (mismatched benchmark names or metadata?)"
+	status=1
+elif [ -n "$regressions" ]; then
 	verdict="check-bench-regression: possible regression(s) detected (sec/op, vs $BASELINE):
 $regressions"
 	status=1
 else
-	verdict="check-bench-regression: no sec/op regression past ${THRESHOLD}% vs $BASELINE"
+	verdict="check-bench-regression: no sec/op regression past ${THRESHOLD}% vs $BASELINE ($comparable_rows row(s) compared)"
 	status=0
 fi
 
