@@ -45,6 +45,22 @@ BASELINE="$1"
 CANDIDATE="$2"
 THRESHOLD="${CINZAL_BENCH_THRESHOLD:-20}" # percent, slower-than-base, see header
 
+# A non-numeric THRESHOLD silently disables this whole check rather than
+# erroring: awk's `pct + 0 > threshold` falls back to a string comparison
+# against anything that isn't a POSIX numeric string — and that includes
+# something that merely looks numeric, like "1.2.3" — and every percentage
+# this script prints ("85.69" and friends) sorts below a non-numeric string
+# lexicographically — verified directly:
+# awk -v threshold=invalid 'BEGIN { print (85.69 > threshold) }' prints 0.
+# That means every regression, at any magnitude, would silently stop being
+# flagged — the opposite of "fail closed". Matched with bash's =~ rather
+# than a case glob for exactly that reason: a glob like *[!0-9.]* accepts
+# "1.2.3", which still hits the same bug once it reaches awk.
+if ! [[ "$THRESHOLD" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+	echo "check-bench-regression: CINZAL_BENCH_THRESHOLD must be a non-negative number, got '$THRESHOLD'" >&2
+	exit 1
+fi
+
 for f in "$BASELINE" "$CANDIDATE"; do
 	if [ ! -s "$f" ]; then
 		echo "check-bench-regression: $f is missing or empty — nothing to compare" >&2
