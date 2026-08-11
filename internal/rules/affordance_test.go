@@ -131,3 +131,31 @@ func TestAffordanceMaxLeaseBlocksAndStakeClampToBalance(t *testing.T) {
 		t.Fatalf("MaxStake = %d, want 6 (GDD §9.3's per-round maximum)", got.MaxStake)
 	}
 }
+
+// TestAffordanceMaxLeaseBlocksReservesSelectedLedgerCost: a selected Ledger
+// purchase must reserve its cost before MaxLeaseBlocks is computed, so the
+// two stay jointly affordable — otherwise the affordance layer could offer a
+// lease-block count that, combined with BuyLedger, Legal then rejects.
+func TestAffordanceMaxLeaseBlocksReservesSelectedLedgerCost(t *testing.T) {
+	v := legalTestView()
+	cfg := legalTestConfig() // LedgerCost: 3, LeaseCostPerBlock: 3
+	v.You.Balance = 5
+
+	withoutLedger := Affordances(v, cfg, game.Order{})
+	if withoutLedger.MaxLeaseBlocks != 1 {
+		t.Fatalf("MaxLeaseBlocks (no ledger) = %d, want 1 (floor(5/3))", withoutLedger.MaxLeaseBlocks)
+	}
+
+	withLedger := Affordances(v, cfg, game.Order{AddOns: game.AddOns{BuyLedger: true}})
+	if withLedger.MaxLeaseBlocks != 0 {
+		t.Fatalf("MaxLeaseBlocks (ledger selected) = %d, want 0 (balance 5 - ledger 3 = 2, floor(2/3))", withLedger.MaxLeaseBlocks)
+	}
+
+	// The clamp must never go negative even when the ledger cost exceeds
+	// the balance outright.
+	v.You.Balance = 1
+	broke := Affordances(v, cfg, game.Order{AddOns: game.AddOns{BuyLedger: true}})
+	if broke.MaxLeaseBlocks != 0 {
+		t.Fatalf("MaxLeaseBlocks (balance 1, ledger selected) = %d, want 0, not negative", broke.MaxLeaseBlocks)
+	}
+}

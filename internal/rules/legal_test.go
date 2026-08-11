@@ -219,6 +219,33 @@ func TestLegalRejectsDealAtHandLimit(t *testing.T) {
 	wantReason(t, Legal(v, o, legalTestConfig()), ReasonHandLimitExceeded)
 }
 
+// TestLegalRejectsDiscardOfUnheldItem: a discard declared for an item this
+// seat does not hold must not be able to free a hand-limit slot it never
+// occupied.
+func TestLegalRejectsDiscardOfUnheldItem(t *testing.T) {
+	v := legalTestView()
+	v.Nodes[0] = game.NodeView{Fog: game.FogKnown, Type: game.NodeBlackMarket, Edges: []game.NodeID{1, 4}}
+	v.You.Items = []game.ItemID{game.ItemShiv, game.ItemMuscle, game.ItemPoliceBand}
+	o := game.Order{
+		Action: game.ActionOrder{Kind: game.ActionDeal},
+		Items:  []game.ItemDiscard{{Item: game.ItemTornMap}}, // not in v.You.Items
+	}
+	wantReason(t, Legal(v, o, legalTestConfig()), ReasonInvalidDiscard)
+}
+
+// TestLegalRejectsDuplicateDiscardOfSameItem: declaring the same held item
+// twice must not free two slots for one physical item.
+func TestLegalRejectsDuplicateDiscardOfSameItem(t *testing.T) {
+	v := legalTestView()
+	v.Nodes[0] = game.NodeView{Fog: game.FogKnown, Type: game.NodeBlackMarket, Edges: []game.NodeID{1, 4}}
+	v.You.Items = []game.ItemID{game.ItemShiv, game.ItemMuscle, game.ItemPoliceBand}
+	o := game.Order{
+		Action: game.ActionOrder{Kind: game.ActionDeal},
+		Items:  []game.ItemDiscard{{Item: game.ItemShiv}, {Item: game.ItemShiv}}, // only one held
+	}
+	wantReason(t, Legal(v, o, legalTestConfig()), ReasonInvalidDiscard)
+}
+
 // TestLegalAcceptsDealAtHandLimitWithComposedDiscard confirms D14's
 // resolution: a same-round Field 4 discard frees the slot a same-round Deal
 // needs, because Field 4 discards resolve before movement while Deal

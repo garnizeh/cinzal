@@ -61,6 +61,11 @@ const (
 	// ReasonHandLimitExceeded is a Deal that would exceed the hand limit
 	// after this order's own Field 4 discards (D14, issue #52).
 	ReasonHandLimitExceeded
+
+	// ReasonInvalidDiscard is a declared item discard for an item this seat
+	// doesn't hold, or declared more times than the hand holds copies of it
+	// (GDD §9.4: "discard any number of items you hold" — not more).
+	ReasonInvalidDiscard
 )
 
 // String returns the reason's short name, or "Reason(n)" for an invalid
@@ -85,6 +90,8 @@ func (r Reason) String() string {
 		return "route through a node not known to this player"
 	case ReasonHandLimitExceeded:
 		return "hand limit exceeded"
+	case ReasonInvalidDiscard:
+		return "discard for an item not held"
 	default:
 		return fmt.Sprintf("Reason(%d)", uint8(r))
 	}
@@ -136,6 +143,10 @@ func Legal(v game.PlayerView, o game.Order, cfg game.Config) error {
 	}
 
 	if err := legalPostCap(v, o, cfg); err != nil {
+		return err
+	}
+
+	if err := legalDiscards(v, o); err != nil {
 		return err
 	}
 
@@ -333,9 +344,33 @@ func legalPostCap(v game.PlayerView, o game.Order, cfg game.Config) error {
 	return nil
 }
 
+// legalDiscards checks that every declared item discard (GDD §9.4) names an
+// item this seat actually holds, and that no item is discarded more times
+// than the hand holds copies of it. This must run before legalHandLimit,
+// which otherwise trusts len(o.Items) at face value — a discard for an item
+// not held, or the same item declared twice over, would let a fabricated
+// order free hand slots that were never really occupied.
+func legalDiscards(v game.PlayerView, o game.Order) error {
+	held := make(map[game.ItemID]int, len(v.You.Items))
+	for _, item := range v.You.Items {
+		held[item]++
+	}
+
+	for _, d := range o.Items {
+		held[d.Item]--
+		if held[d.Item] < 0 {
+			return illegal(ReasonInvalidDiscard,
+				fmt.Sprintf("discard declares item %s beyond what this seat holds", d.Item))
+		}
+	}
+
+	return nil
+}
+
 // legalHandLimit checks D14/#52's rule: a Deal is illegal if, after this
 // order's own Field 4 discards free up slots, the resulting hand would
-// exceed handLimit.
+// exceed handLimit. legalDiscards must run first — it is what makes
+// len(o.Items) trustworthy here.
 func legalHandLimit(v game.PlayerView, o game.Order) error {
 	if o.Action.Kind != game.ActionDeal {
 		return nil

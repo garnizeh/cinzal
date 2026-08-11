@@ -70,8 +70,15 @@ func Affordances(v game.PlayerView, cfg game.Config, draft game.Order) Affordanc
 		a.ExpiringPost = expiringPost(v.You.Posts)
 	}
 
+	// A selected Ledger purchase reserves its cost first, so the two clamps
+	// stay jointly affordable — otherwise the affordance layer could offer a
+	// lease-block count that, combined with BuyLedger, Legal then rejects.
+	availableBalance := v.You.Balance
+	if draft.AddOns.BuyLedger {
+		availableBalance -= cfg.LedgerCost
+	}
 	if cfg.LeaseCostPerBlock > 0 {
-		a.MaxLeaseBlocks = min(4, v.You.Balance/cfg.LeaseCostPerBlock)
+		a.MaxLeaseBlocks = max(0, min(4, availableBalance/cfg.LeaseCostPerBlock))
 	}
 	a.MaxStake = min(6, v.You.Balance)
 
