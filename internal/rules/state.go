@@ -31,6 +31,13 @@ type Node struct {
 	// §10.4).
 	Post *Post
 
+	// Market is this Black Market's 3 currently rolled items, nil for every
+	// other node type (GDD §12). RefreshMarkets (market.go) is the only
+	// writer; it replaces this wholesale every refresh, never merges into
+	// it — a stale item lingering across a refresh is exactly the kind of
+	// silent bug RFC §6.6 warns about.
+	Market []game.ItemID
+
 	// SinkholeRounds is rounds remaining before this node is passable
 	// again, 0 meaning passable right now (GDD §14.3: "One random node in
 	// the sector is impassable for 3 rounds."). Upkeep step 3 decrements

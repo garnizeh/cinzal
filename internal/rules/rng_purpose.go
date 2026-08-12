@@ -74,7 +74,7 @@ type PurposeRow struct {
 var ConsumptionTable = []PurposeRow{
 	{PurposeContractOfferTier, "2 per offering seat, always", "Phase 2", "D6: slot 2 and 3's target tier — a weighted, independent draw over the eligible tier set, drawn even when only one tier is eligible"},
 	{PurposeContractOfferPick, "0-3 per offering seat — one draw per filled slot", "Phase 2", "D6/D7: filled is 0-3, per-slot cascade pick; slot 1 (the guaranteed highest-eligible-tier slot) cascades first, so it gets first claim on the shared, without-replacement candidate pool"},
-	{PurposeMarketStock, "3 per market refreshed", "Phase 3, every 2 rounds", ""},
+	{PurposeMarketStock, "3 per market refreshed", "Phase 3, odd rounds only (1, 3, ..., 15)", "Distinct items, partial Fisher-Yates (D25)"},
 	{PurposeConfrontD6, "1 per participant, per confrontation", "", "Not per confrontation"},
 	{PurposeConfrontTiebreak, "1, only at the fourth level", "", "GDD §15"},
 	{PurposePushbackHop, "1 per hop — a second hop if Evasive", "", "GDD §15; the case r1 missed"},

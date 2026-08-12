@@ -66,6 +66,20 @@ const (
 	// doesn't hold, or declared more times than the hand holds copies of it
 	// (GDD §9.4: "discard any number of items you hold" — not more).
 	ReasonInvalidDiscard
+
+	// ReasonItemNotDiscardable is a declared Field 4 discard for Muscle,
+	// which GDD §9.4 states plainly is "not a discard... permanent while
+	// held" — no order may ever declare it, independent of whether the
+	// seat holds it.
+	ReasonItemNotDiscardable
+
+	// ReasonInvalidItemTarget is a declared item target failing that
+	// item's own fog or distance requirement: Decoy naming a node this
+	// seat doesn't have at FogKnown (GDD §9.4, D12/#50), Police Band
+	// naming a node this seat is FogHidden to (D25), or Bolt Hole naming
+	// one that isn't FogKnown and exactly 2 steps away on this seat's own
+	// known subgraph (D25).
+	ReasonInvalidItemTarget
 )
 
 // String returns the reason's short name, or "Reason(n)" for an invalid
@@ -92,6 +106,10 @@ func (r Reason) String() string {
 		return "hand limit exceeded"
 	case ReasonInvalidDiscard:
 		return "discard for an item not held"
+	case ReasonItemNotDiscardable:
+		return "item is not a discard"
+	case ReasonInvalidItemTarget:
+		return "invalid item target"
 	default:
 		return fmt.Sprintf("Reason(%d)", uint8(r))
 	}
@@ -147,6 +165,10 @@ func Legal(v game.PlayerView, o game.Order, cfg game.Config) error {
 	}
 
 	if err := legalDiscards(v, o); err != nil {
+		return err
+	}
+
+	if err := legalItemTargets(v, o); err != nil {
 		return err
 	}
 
@@ -382,4 +404,84 @@ func legalHandLimit(v game.PlayerView, o game.Order) error {
 	}
 
 	return nil
+}
+
+// legalItemTargets checks GDD §9.4/D12/D25's per-item target rules for
+// every declared Field 4 discard. Muscle may never be declared at all —
+// GDD §9.4 states it is "not a discard", so this rejects it independent of
+// whether legalDiscards would otherwise accept it as held. Decoy's target
+// must be FogKnown (GDD §9.4, D12/#50). Police Band's target must not be
+// FogHidden — any node this seat has at least heard of qualifies (D25).
+// Bolt Hole's target must be FogKnown and exactly graph-distance 2 from
+// this seat's current position, computed only on this seat's own known
+// subgraph (D25) — never the full server-side graph, which Legal has no
+// access to in the first place.
+func legalItemTargets(v game.PlayerView, o game.Order) error {
+	for _, d := range o.Items {
+		switch d.Item {
+		case game.ItemMuscle:
+			return illegal(ReasonItemNotDiscardable,
+				"Muscle is not a discard and can never be declared in Field 4")
+
+		case game.ItemDecoy:
+			view, known := v.Nodes[d.Target]
+			if !known || view.Fog < game.FogKnown {
+				return illegal(ReasonInvalidItemTarget,
+					fmt.Sprintf("Decoy's target node %d is not Known to this seat", d.Target))
+			}
+
+		case game.ItemPoliceBand:
+			if _, known := v.Nodes[d.Target]; !known {
+				return illegal(ReasonInvalidItemTarget,
+					fmt.Sprintf("Police Band's target node %d is Hidden to this seat", d.Target))
+			}
+
+		case game.ItemBoltHole:
+			view, known := v.Nodes[d.Target]
+			if !known || view.Fog < game.FogKnown {
+				return illegal(ReasonInvalidItemTarget,
+					fmt.Sprintf("Bolt Hole's target node %d is not Known to this seat", d.Target))
+			}
+			if knownSubgraphDistance(v, d.Target) != 2 {
+				return illegal(ReasonInvalidItemTarget,
+					fmt.Sprintf("Bolt Hole's target node %d is not exactly 2 steps away on this seat's known subgraph", d.Target))
+			}
+		}
+	}
+
+	return nil
+}
+
+// knownSubgraphDistance returns the shortest-path distance from v.You's
+// current position to target, walking only nodes this seat has at FogKnown
+// or better (GDD §7.1: a Rumoured node "has no edges, so you cannot plot a
+// route through or into it") — the player's own known subgraph, never the
+// server's true graph, which Legal has no access to. Returns -1 when
+// target is unreachable on that subgraph, including when target itself is
+// not FogKnown.
+func knownSubgraphDistance(v game.PlayerView, target game.NodeID) int {
+	dist := map[game.NodeID]int{v.You.Position: 0}
+	queue := []game.NodeID{v.You.Position}
+
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+
+		view, known := v.Nodes[cur]
+		if !known || view.Fog < game.FogKnown {
+			continue
+		}
+		for _, next := range view.Edges {
+			if _, seen := dist[next]; seen {
+				continue
+			}
+			dist[next] = dist[cur] + 1
+			queue = append(queue, next)
+		}
+	}
+
+	if d, ok := dist[target]; ok {
+		return d
+	}
+	return -1
 }
