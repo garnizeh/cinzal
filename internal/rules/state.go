@@ -1,6 +1,10 @@
 package rules
 
-import "github.com/garnizeh/cinzal/internal/game"
+import (
+	"maps"
+
+	"github.com/garnizeh/cinzal/internal/game"
+)
 
 // Node is one node of the match's graph, exactly as it stands mid-match —
 // topology, sector, layout, and the state Bridge Down and Sinkhole change,
@@ -289,4 +293,162 @@ func (s MatchState) Snapshot() EntrySnapshot {
 		}
 	}
 	return EntrySnapshot{Seats: seats}
+}
+
+// clone returns a deep copy of s: every slice and pointer field, at every
+// level, is a fresh allocation. Resolve's own acceptance criterion (#67) is
+// "Resolve never mutates its argument; the returned state is new and the
+// input is byte-identical afterwards" — a plain `next := s` copies the
+// struct but leaves every slice and pointer aliased to the original, so a
+// write anywhere inside Resolve (Graph.Nodes[i].Post, a Player's Contracts,
+// the Fog slice, ...) would reach back into the caller's s. clone is called
+// exactly once, at the top of Resolve, before anything else touches state.
+func (s MatchState) clone() MatchState {
+	var players []Player
+	if s.Players != nil {
+		players = make([]Player, len(s.Players))
+		for i, p := range s.Players {
+			players[i] = p.clone()
+		}
+	}
+	return MatchState{
+		Round:   s.Round,
+		Graph:   s.Graph.clone(),
+		Players: players,
+	}
+}
+
+// clone returns a deep copy of g. See MatchState.clone.
+func (g Graph) clone() Graph {
+	var nodes []Node
+	if g.Nodes != nil {
+		nodes = make([]Node, len(g.Nodes))
+		for i, n := range g.Nodes {
+			nodes[i] = n.clone()
+		}
+	}
+
+	var cargo []Cargo
+	if g.Cargo != nil {
+		cargo = make([]Cargo, len(g.Cargo))
+		copy(cargo, g.Cargo)
+	}
+
+	var eventDeck []EventCardID
+	if g.EventDeck != nil {
+		eventDeck = make([]EventCardID, len(g.EventDeck))
+		copy(eventDeck, g.EventDeck)
+	}
+
+	var incidentDeck []IncidentCardID
+	if g.IncidentDeck != nil {
+		incidentDeck = make([]IncidentCardID, len(g.IncidentDeck))
+		copy(incidentDeck, g.IncidentDeck)
+	}
+
+	return Graph{
+		Nodes:        nodes,
+		Cargo:        cargo,
+		EventDeck:    eventDeck,
+		IncidentDeck: incidentDeck,
+	}
+}
+
+// clone returns a deep copy of n — Edges and Market copied, Post
+// reallocated so the clone owns its own lease record. See MatchState.clone.
+func (n Node) clone() Node {
+	clone := n
+
+	if n.Edges != nil {
+		clone.Edges = make([]game.NodeID, len(n.Edges))
+		copy(clone.Edges, n.Edges)
+	}
+
+	if n.Post != nil {
+		post := *n.Post
+		clone.Post = &post
+	}
+
+	if n.Market != nil {
+		clone.Market = make([]game.ItemID, len(n.Market))
+		copy(clone.Market, n.Market)
+	}
+
+	return clone
+}
+
+// clone returns a deep copy of p — every slice, the carried-cargo pointer,
+// and the archive's own maps and slice are all fresh. See MatchState.clone.
+func (p Player) clone() Player {
+	clone := p
+
+	if p.Cargo != nil {
+		cargo := *p.Cargo
+		clone.Cargo = &cargo
+	}
+
+	if p.Contracts != nil {
+		clone.Contracts = make([]Contract, len(p.Contracts))
+		copy(clone.Contracts, p.Contracts)
+	}
+
+	if p.Items != nil {
+		clone.Items = make([]game.ItemID, len(p.Items))
+		copy(clone.Items, p.Items)
+	}
+
+	if p.Posts != nil {
+		clone.Posts = make([]game.NodeID, len(p.Posts))
+		copy(clone.Posts, p.Posts)
+	}
+
+	if p.Fog != nil {
+		clone.Fog = make([]game.FogState, len(p.Fog))
+		copy(clone.Fog, p.Fog)
+	}
+
+	clone.Archive = cloneArchive(p.Archive)
+
+	return clone
+}
+
+// cloneArchive returns a deep copy of a. RoundSet is an immutable value
+// type (rng_purpose.go-style named integer), so the two maps only need
+// fresh backing storage, not per-value cloning — but TrailEntry inside
+// StampedTrailEntry carries three pointer fields (Actor, Target, Item,
+// game/view.go), which do need reallocating or two seats' archives could
+// end up sharing one *SeatID a later, unrelated mutation reaches through.
+func cloneArchive(a game.SeatArchive) game.SeatArchive {
+	clone := game.SeatArchive{}
+
+	if a.Sight != nil {
+		clone.Sight = make(map[game.NodeID]game.RoundSet, len(a.Sight))
+		maps.Copy(clone.Sight, a.Sight)
+	}
+
+	if a.Obscured != nil {
+		clone.Obscured = make(map[game.NodeID]game.RoundSet, len(a.Obscured))
+		maps.Copy(clone.Obscured, a.Obscured)
+	}
+
+	if a.Trail != nil {
+		clone.Trail = make([]game.StampedTrailEntry, len(a.Trail))
+		for i, e := range a.Trail {
+			clone.Trail[i] = e
+			if e.Actor != nil {
+				actor := *e.Actor
+				clone.Trail[i].Actor = &actor
+			}
+			if e.Target != nil {
+				target := *e.Target
+				clone.Trail[i].Target = &target
+			}
+			if e.Item != nil {
+				item := *e.Item
+				clone.Trail[i].Item = &item
+			}
+		}
+	}
+
+	return clone
 }

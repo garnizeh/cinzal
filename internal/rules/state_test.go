@@ -162,3 +162,345 @@ func TestStateTypeGraphHasNoFloatOrMap(t *testing.T) {
 	walk(reflect.TypeFor[MatchState]())
 	walk(reflect.TypeFor[EntrySnapshot]())
 }
+
+// cloneTestState builds a MatchState with every slice and pointer field
+// clone() must deep-copy populated with a distinct value, so a mutation
+// through the clone has somewhere real to land if aliasing slipped in.
+func cloneTestState() MatchState {
+	post := Post{Owner: 1, RoundsRemaining: 3}
+	cargo := &game.CarriedCargo{Bound: true, Contract: 7}
+	actor := game.SeatID(0)
+	target := game.SeatID(1)
+	item := game.ItemShiv
+
+	return MatchState{
+		Round: 2,
+		Graph: Graph{
+			Nodes: []Node{
+				{
+					ID:     0,
+					Edges:  []game.NodeID{1, 2},
+					Post:   &post,
+					Market: []game.ItemID{game.ItemShiv, game.ItemMuscle},
+				},
+			},
+			Cargo:        []Cargo{{Node: 0, Bound: true, Origin: 0, Destination: 1}},
+			EventDeck:    []EventCardID{1, 2, 3},
+			IncidentDeck: []IncidentCardID{4, 5, 6},
+		},
+		Players: []Player{
+			{
+				Seat:      0,
+				Cargo:     cargo,
+				Contracts: []Contract{{ID: 1, Origin: 0, Destination: 1, Tier: 2}},
+				Items:     []game.ItemID{game.ItemDecoy},
+				Posts:     []game.NodeID{0},
+				Fog:       []game.FogState{game.FogKnown, game.FogRumoured},
+				Archive: game.SeatArchive{
+					Sight:    map[game.NodeID]game.RoundSet{0: 0b101},
+					Obscured: map[game.NodeID]game.RoundSet{1: 0b010},
+					Trail: []game.StampedTrailEntry{{
+						TrailEntry: game.TrailEntry{
+							Kind:   game.EventConfrontation,
+							Node:   0,
+							Actor:  &actor,
+							Target: &target,
+							Item:   &item,
+						},
+						Round: 1,
+					}},
+				},
+			},
+		},
+	}
+}
+
+// TestNodeClone is a focused, direct test of Node.clone() — Edges and
+// Market copied, Post reallocated so the clone owns its own lease record.
+func TestNodeClone(t *testing.T) {
+	post := Post{Owner: 1, RoundsRemaining: 3}
+	original := Node{
+		ID:     0,
+		Edges:  []game.NodeID{1, 2},
+		Post:   &post,
+		Market: []game.ItemID{game.ItemShiv, game.ItemMuscle},
+	}
+	want := Node{
+		ID:     0,
+		Edges:  []game.NodeID{1, 2},
+		Post:   &post,
+		Market: []game.ItemID{game.ItemShiv, game.ItemMuscle},
+	}
+
+	got := original.clone()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Node.clone() = %+v, want a value-equal copy %+v", got, want)
+	}
+	if got.Post == original.Post {
+		t.Fatal("Node.clone().Post aliases the original's Post pointer")
+	}
+
+	got.Edges[0] = 99
+	got.Edges = append(got.Edges, 100)
+	got.Post.RoundsRemaining = 99
+	got.Market[0] = game.ItemBoltHole
+
+	if !reflect.DeepEqual(original, want) {
+		t.Fatalf("mutating Node.clone()'s result reached the original:\ngot  %+v\nwant %+v", original, want)
+	}
+}
+
+// TestNodeCloneHandlesNilFields checks the nil-Edges/nil-Post/nil-Market
+// case doesn't panic and preserves nil (see TestMatchStateCloneHandlesNilFields
+// for why nil vs. empty matters here).
+func TestNodeCloneHandlesNilFields(t *testing.T) {
+	got := Node{}.clone()
+	if !reflect.DeepEqual(got, Node{}) {
+		t.Fatalf("Node{}.clone() = %+v, want the zero value", got)
+	}
+}
+
+// TestGraphClone is a focused, direct test of Graph.clone() — every one of
+// its four slice fields copied, and each Node inside Nodes cloned in turn
+// rather than shared with the original.
+func TestGraphClone(t *testing.T) {
+	original := Graph{
+		Nodes:        []Node{{ID: 0, Edges: []game.NodeID{1}}},
+		Cargo:        []Cargo{{Node: 0, Bound: true, Origin: 0, Destination: 1}},
+		EventDeck:    []EventCardID{1, 2},
+		IncidentDeck: []IncidentCardID{3, 4},
+	}
+	want := Graph{
+		Nodes:        []Node{{ID: 0, Edges: []game.NodeID{1}}},
+		Cargo:        []Cargo{{Node: 0, Bound: true, Origin: 0, Destination: 1}},
+		EventDeck:    []EventCardID{1, 2},
+		IncidentDeck: []IncidentCardID{3, 4},
+	}
+
+	got := original.clone()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Graph.clone() = %+v, want a value-equal copy %+v", got, want)
+	}
+
+	got.Nodes[0].Edges[0] = 99
+	got.Nodes = append(got.Nodes, Node{ID: 1})
+	got.Cargo[0].Node = 99
+	got.EventDeck[0] = 99
+	got.IncidentDeck[0] = 99
+
+	if !reflect.DeepEqual(original, want) {
+		t.Fatalf("mutating Graph.clone()'s result reached the original:\ngot  %+v\nwant %+v", original, want)
+	}
+}
+
+// TestGraphCloneHandlesNilFields checks the all-nil case doesn't panic and
+// preserves nil.
+func TestGraphCloneHandlesNilFields(t *testing.T) {
+	got := Graph{}.clone()
+	if !reflect.DeepEqual(got, Graph{}) {
+		t.Fatalf("Graph{}.clone() = %+v, want the zero value", got)
+	}
+}
+
+// TestPlayerClone is a focused, direct test of Player.clone() — every
+// slice, the carried-cargo pointer, and the archive all copied
+// independently of the original.
+func TestPlayerClone(t *testing.T) {
+	cargo := &game.CarriedCargo{Bound: true, Contract: 7}
+	archive := game.SeatArchive{Sight: map[game.NodeID]game.RoundSet{0: 0b101}}
+
+	original := Player{
+		Seat:      0,
+		Cargo:     cargo,
+		Contracts: []Contract{{ID: 1, Origin: 0, Destination: 1, Tier: 2}},
+		Items:     []game.ItemID{game.ItemDecoy},
+		Posts:     []game.NodeID{0},
+		Fog:       []game.FogState{game.FogKnown},
+		Archive:   archive,
+	}
+	want := Player{
+		Seat:      0,
+		Cargo:     &game.CarriedCargo{Bound: true, Contract: 7},
+		Contracts: []Contract{{ID: 1, Origin: 0, Destination: 1, Tier: 2}},
+		Items:     []game.ItemID{game.ItemDecoy},
+		Posts:     []game.NodeID{0},
+		Fog:       []game.FogState{game.FogKnown},
+		Archive:   game.SeatArchive{Sight: map[game.NodeID]game.RoundSet{0: 0b101}},
+	}
+
+	got := original.clone()
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("Player.clone() = %+v, want a value-equal copy %+v", got, want)
+	}
+	if got.Cargo == original.Cargo {
+		t.Fatal("Player.clone().Cargo aliases the original's Cargo pointer")
+	}
+
+	got.Cargo.Contract = 99
+	got.Contracts[0].Tier = 99
+	got.Items[0] = game.ItemGuardContact
+	got.Posts[0] = 99
+	got.Fog[0] = game.FogInSight
+	got.Archive.Sight[0] = 0b111
+
+	if !reflect.DeepEqual(original, want) {
+		t.Fatalf("mutating Player.clone()'s result reached the original:\ngot  %+v\nwant %+v", original, want)
+	}
+}
+
+// TestPlayerCloneHandlesNilFields checks the all-nil/all-zero case doesn't
+// panic and preserves nil.
+func TestPlayerCloneHandlesNilFields(t *testing.T) {
+	got := Player{}.clone()
+	if !reflect.DeepEqual(got, Player{}) {
+		t.Fatalf("Player{}.clone() = %+v, want the zero value", got)
+	}
+}
+
+// TestMatchStateCloneIsIndependentOfOriginal is the deep-copy half of
+// Resolve's own acceptance criterion (#67: "Resolve never mutates its
+// argument"), tested directly against clone() rather than only indirectly
+// through TestResolveDoesNotMutateInput — the stub pipeline in this issue
+// never actually writes to most of these fields (Post, Market, Contracts,
+// Items, Fog, Archive), so a bug in clone() aliasing any of them would not
+// yet be caught by a Resolve-level test alone. TestNodeClone, TestGraphClone,
+// TestPlayerClone, and TestCloneArchive elsewhere in this file already
+// cover each nested clone() in isolation; this is the integration case — the whole
+// MatchState, cloned once, mutated everywhere at once — proving
+// MatchState.clone() actually wires all four together rather than, say,
+// forgetting to call Graph.clone() at all. This mutates every nested
+// slice, map, and pointer on the clone and asserts the original — compared
+// against a fresh, unmutated cloneTestState() — is untouched.
+func TestMatchStateCloneIsIndependentOfOriginal(t *testing.T) {
+	original := cloneTestState()
+	want := cloneTestState()
+
+	got := original.clone()
+
+	// Mutate every nested field reachable from the clone.
+	got.Graph.Nodes[0].Edges[0] = 99
+	got.Graph.Nodes[0].Edges = append(got.Graph.Nodes[0].Edges, 100)
+	got.Graph.Nodes[0].Post.RoundsRemaining = 99
+	got.Graph.Nodes[0].Market[0] = game.ItemBoltHole
+	got.Graph.Cargo[0].Node = 99
+	got.Graph.EventDeck[0] = 99
+	got.Graph.IncidentDeck[0] = 99
+
+	got.Players[0].Cargo.Contract = 99
+	got.Players[0].Contracts[0].Tier = 99
+	got.Players[0].Items[0] = game.ItemGuardContact
+	got.Players[0].Posts[0] = 99
+	got.Players[0].Fog[0] = game.FogInSight
+	got.Players[0].Archive.Sight[0] = 0b111
+	got.Players[0].Archive.Obscured[1] = 0b111
+	got.Players[0].Archive.Trail[0].Round = 99
+	*got.Players[0].Archive.Trail[0].Actor = 99
+	*got.Players[0].Archive.Trail[0].Target = 99
+	*got.Players[0].Archive.Trail[0].Item = game.ItemGuardContact
+
+	if !reflect.DeepEqual(original, want) {
+		t.Fatalf("mutating the clone reached the original:\ngot  %+v\nwant %+v", original, want)
+	}
+}
+
+// TestMatchStateCloneEqualsOriginalBeforeMutation checks clone() actually
+// copies every value across — a helper that zeroed everything instead of
+// aliasing it would pass the independence test above for the wrong
+// reason.
+func TestMatchStateCloneEqualsOriginalBeforeMutation(t *testing.T) {
+	s := cloneTestState()
+	got := s.clone()
+	if !reflect.DeepEqual(got, s) {
+		t.Fatalf("clone() = %+v, want a value-equal copy of %+v", got, s)
+	}
+}
+
+// TestCloneArchive is a focused, direct test of cloneArchive — the
+// MatchState-level tests above already exercise it as part of a full
+// Player clone, but game.SeatArchive is the one field in this whole type
+// graph with both maps and pointer-carrying slice elements at once
+// (game.TrailEntry's Actor/Target/Item), so it gets its own dedicated
+// case rather than relying solely on the larger, indirect one.
+func TestCloneArchive(t *testing.T) {
+	actor := game.SeatID(0)
+	target := game.SeatID(1)
+	item := game.ItemShiv
+
+	original := game.SeatArchive{
+		Sight:    map[game.NodeID]game.RoundSet{0: 0b101, 1: 0b010},
+		Obscured: map[game.NodeID]game.RoundSet{2: 0b001},
+		Trail: []game.StampedTrailEntry{{
+			TrailEntry: game.TrailEntry{
+				Kind:   game.EventConfrontation,
+				Node:   0,
+				Actor:  &actor,
+				Target: &target,
+				Item:   &item,
+			},
+			Round: 1,
+		}},
+	}
+	want := game.SeatArchive{
+		Sight:    map[game.NodeID]game.RoundSet{0: 0b101, 1: 0b010},
+		Obscured: map[game.NodeID]game.RoundSet{2: 0b001},
+		Trail: []game.StampedTrailEntry{{
+			TrailEntry: game.TrailEntry{
+				Kind:   game.EventConfrontation,
+				Node:   0,
+				Actor:  &actor,
+				Target: &target,
+				Item:   &item,
+			},
+			Round: 1,
+		}},
+	}
+
+	got := cloneArchive(original)
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("cloneArchive() = %+v, want a value-equal copy %+v", got, want)
+	}
+
+	// Mutate every nested map and pointer on the clone; the original must
+	// not move.
+	got.Sight[0] = 0b111
+	got.Sight[99] = 0b1 // a key never in the original — proves the map itself is a new one
+	got.Obscured[2] = 0b111
+	got.Trail[0].Round = 99
+	*got.Trail[0].Actor = 99
+	*got.Trail[0].Target = 99
+	*got.Trail[0].Item = game.ItemGuardContact
+
+	if !reflect.DeepEqual(original, want) {
+		t.Fatalf("mutating cloneArchive's result reached the original:\ngot  %+v\nwant %+v", original, want)
+	}
+}
+
+// TestCloneArchiveHandlesNilFields checks the nil case doesn't panic and
+// preserves nil rather than substituting an empty map or slice (see
+// TestMatchStateCloneHandlesNilFields for why that distinction matters
+// here).
+func TestCloneArchiveHandlesNilFields(t *testing.T) {
+	got := cloneArchive(game.SeatArchive{})
+	if !reflect.DeepEqual(got, game.SeatArchive{}) {
+		t.Fatalf("cloneArchive(zero value) = %+v, want the zero value", got)
+	}
+}
+
+// TestMatchStateCloneHandlesNilFields checks clone() does not panic on the
+// zero-value/nil case for every field TestMatchStateCloneIsIndependentOfOriginal
+// otherwise populates, and preserves nil rather than substituting an empty
+// slice or map — both are valid Go zero values but reflect.DeepEqual
+// treats nil and empty as distinct, and Snapshot() and every other
+// MatchState-shaped value in this package is built and compared the same
+// way.
+func TestMatchStateCloneHandlesNilFields(t *testing.T) {
+	s := MatchState{
+		Graph:   Graph{Nodes: []Node{{}}},
+		Players: []Player{{}},
+	}
+
+	got := s.clone()
+	if !reflect.DeepEqual(got, s) {
+		t.Fatalf("clone() of an all-nil-fields MatchState = %+v, want %+v", got, s)
+	}
+}
