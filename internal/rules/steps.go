@@ -3,21 +3,13 @@ package rules
 import "github.com/garnizeh/cinzal/internal/game"
 
 // infamyTierIndex maps an Infamy score (0-10) to Config.StepsByTier's index
-// (0-3). It is deliberately not game.InfamyTier's own ordinal: that enum
-// reserves 0 as an invalid sentinel (its constants start at 1), while
-// Config.StepsByTier is documented and indexed 0=Nobody..3=Legend — using
-// int(game.TierNobody) here would silently read the wrong array slot.
+// (0-3), built on TierOf (infamy.go) rather than its own copy of the
+// boundary table. It is deliberately not game.InfamyTier's own ordinal:
+// that enum reserves 0 as an invalid sentinel (its constants start at 1),
+// while Config.StepsByTier is documented and indexed 0=Nobody..3=Legend —
+// using int(game.TierNobody) here would silently read the wrong array slot.
 func infamyTierIndex(infamy int) int {
-	switch {
-	case infamy <= 2:
-		return 0 // Nobody
-	case infamy <= 5:
-		return 1 // Known
-	case infamy <= 8:
-		return 2 // Feared
-	default:
-		return 3 // Legend
-	}
+	return int(TierOf(infamy)) - 1
 }
 
 // Steps computes this round's step allowance, GDD §9.1a's exact order of
