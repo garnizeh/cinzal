@@ -118,6 +118,19 @@ func TestRenewedRoundsRemainingClampsAtTwelve(t *testing.T) {
 	}
 }
 
+// TestRenewedRoundsRemainingGuardsZeroLeaseBlockRounds: a malformed
+// LeaseBlockRounds must never zero out (or otherwise shrink) a live lease —
+// RenewalBlockCap already treats this config as permitting no renewal, so
+// this function must leave current untouched rather than computing a
+// zero-or-negative ceiling and clamping down to it.
+func TestRenewedRoundsRemainingGuardsZeroLeaseBlockRounds(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.LeaseBlockRounds = 0
+	if got := RenewedRoundsRemaining(7, 2, cfg); got != 7 {
+		t.Fatalf("RenewedRoundsRemaining with LeaseBlockRounds=0 = %d, want 7 (current, unchanged)", got)
+	}
+}
+
 // TestDecrementLeaseExpiresExactlyAtZero: Upkeep step 2's ordinary
 // decrement (RFC §6.7, D5) crosses to zero once, on the round it happens,
 // never a round early or late.

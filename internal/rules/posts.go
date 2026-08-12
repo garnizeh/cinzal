@@ -68,6 +68,9 @@ func RenewalBlockCap(currentRoundsRemaining int, cfg game.Config) int {
 // affordance layer from ever offering a wasteful count of in the first
 // place; this is resolution's own defensive floor under that same ceiling.
 func RenewedRoundsRemaining(current, blocks int, cfg game.Config) int {
+	if cfg.LeaseBlockRounds <= 0 {
+		return current
+	}
 	ceiling := maxLeaseBlocks * cfg.LeaseBlockRounds
 	return min(ceiling, current+blocks*cfg.LeaseBlockRounds)
 }
