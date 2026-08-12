@@ -15,7 +15,7 @@ import (
 // deck.incident each get one — so round 1 must be a refresh round, and
 // "every 2 rounds" measured from there lands on odd rounds, not even ones.
 func MarketRefreshDue(round game.RoundNumber) bool {
-	return round%2 == 1
+	return round >= 1 && round <= 15 && round%2 == 1
 }
 
 // RollMarketStock draws 3 distinct items for one Black Market's refreshed

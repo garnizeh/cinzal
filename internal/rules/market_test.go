@@ -18,6 +18,18 @@ func TestMarketRefreshDueOddRoundsOnly(t *testing.T) {
 	}
 }
 
+// TestMarketRefreshDueBoundedToMatchLength confirms the odd-round rule
+// stays inside GDD §4's fixed 15-round match — an out-of-range round (0, or
+// past 15) is never due, even though it would satisfy the bare "odd"
+// arithmetic.
+func TestMarketRefreshDueBoundedToMatchLength(t *testing.T) {
+	for _, round := range []int{0, -1, 16, 17, 101} {
+		if got := MarketRefreshDue(game.RoundNumber(round)); got {
+			t.Errorf("MarketRefreshDue(%d) = true, want false (outside the 15-round match)", round)
+		}
+	}
+}
+
 // TestRollMarketStockDrawsThreeDistinctItems is D25's ruling: 3 distinct
 // items per roll, never a repeat, via the RFC §6.4-mandated partial
 // Fisher-Yates shape — and RFC §6.4's market.stock row's exact index cost.
