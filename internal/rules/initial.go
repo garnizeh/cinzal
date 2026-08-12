@@ -33,6 +33,13 @@ func initial(seed [32]byte, cfg game.Config, players int) (MatchState, error) {
 		MaxEdges:    spec.MaxEdges,
 		Players:     players,
 		MaxAttempts: cfg.MaxGenAttempts,
+
+		// GDD §6.1 constraint 7 needs Tier I's band to know which
+		// Warehouses can originate the opening offer (D24). gen takes it
+		// as a parameter rather than reading Config — which it must not
+		// import — so it travels the same way MapByPlayers' own fields do.
+		OpeningMinDistance: cfg.Contracts[0].MinDistance,
+		OpeningMaxDistance: cfg.Contracts[0].MaxDistance,
 	})
 	if err != nil {
 		return MatchState{}, err
@@ -77,8 +84,11 @@ func newGraph(g gen.Graph) Graph {
 // Fog starts all game.FogHidden for every seat (GDD §7.1's zero-information
 // state) — never the zero game.FogState, which enums.go reserves as
 // invalid. GDD §6.1 constraint 7 additionally promises that a player's
-// starting node, and a nearby Warehouse, begin Known; seeding that promise
-// is left open pending D23 (issue #115) rather than guessed here.
+// starting node, and every Warehouse within 2 steps of it — at least one of
+// which has a Border inside Tier I's contract band, so it can originate the
+// opening offer (D24) — begin Known. D23 (issue #115) decided the seeding
+// algorithm; writing it here is not this function's job yet, so no fog is
+// seeded rather than a guessed rule being seeded.
 func seatPlayers(g gen.Graph, cfg game.Config, players int) []Player {
 	out := make([]Player, players)
 	for i := range players {

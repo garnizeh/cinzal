@@ -35,13 +35,16 @@ func TestGenPurposeStringsMatchDeclaredConstants(t *testing.T) {
 }
 
 func testGenParams(players int) gen.Params {
-	spec := game.DefaultConfig().MapByPlayers[players]
+	cfg := game.DefaultConfig()
+	spec := cfg.MapByPlayers[players]
 	return gen.Params{
-		Nodes:       spec.Nodes,
-		MinEdges:    spec.MinEdges,
-		MaxEdges:    spec.MaxEdges,
-		Players:     players,
-		MaxAttempts: game.DefaultConfig().MaxGenAttempts,
+		Nodes:              spec.Nodes,
+		MinEdges:           spec.MinEdges,
+		MaxEdges:           spec.MaxEdges,
+		Players:            players,
+		MaxAttempts:        cfg.MaxGenAttempts,
+		OpeningMinDistance: cfg.Contracts[0].MinDistance,
+		OpeningMaxDistance: cfg.Contracts[0].MaxDistance,
 	}
 }
 

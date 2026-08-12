@@ -84,7 +84,7 @@ func attemptGenerate(rand Rand, p Params, sizes [4]int) (Graph, bool, []string) 
 		return Graph{}, false, []string{constraintTypeAdjacency}
 	}
 
-	starts, ok := selectStartPositions(rand, b, p.Players, types)
+	starts, ok := selectStartPositions(rand, b, p.Players, types, p.OpeningMinDistance, p.OpeningMaxDistance)
 	if !ok {
 		return Graph{}, false, []string{constraintStartPlacement}
 	}

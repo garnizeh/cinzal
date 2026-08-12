@@ -50,11 +50,13 @@ func propertyCases() []propertyCase {
 		cases = append(cases, propertyCase{
 			name: "players=" + itoa(players),
 			params: Params{
-				Nodes:       spec.Nodes,
-				MinEdges:    spec.MinEdges,
-				MaxEdges:    spec.MaxEdges,
-				Players:     players,
-				MaxAttempts: cfg.MaxGenAttempts,
+				Nodes:              spec.Nodes,
+				MinEdges:           spec.MinEdges,
+				MaxEdges:           spec.MaxEdges,
+				Players:            players,
+				MaxAttempts:        cfg.MaxGenAttempts,
+				OpeningMinDistance: cfg.Contracts[0].MinDistance,
+				OpeningMaxDistance: cfg.Contracts[0].MaxDistance,
 			},
 			seeds: 1000,
 		})
@@ -62,16 +64,25 @@ func propertyCases() []propertyCase {
 	cases = append(cases,
 		propertyCase{
 			name:   "D8-nodes=12",
-			params: Params{Nodes: 12, MinEdges: 17, MaxEdges: 19, Players: 2, MaxAttempts: cfg.MaxGenAttempts},
+			params: withOpeningBand(Params{Nodes: 12, MinEdges: 17, MaxEdges: 19, Players: 2, MaxAttempts: cfg.MaxGenAttempts}, cfg),
 			seeds:  1000,
 		},
 		propertyCase{
 			name:   "D8-nodes=16",
-			params: Params{Nodes: 16, MinEdges: 23, MaxEdges: 25, Players: 2, MaxAttempts: cfg.MaxGenAttempts},
+			params: withOpeningBand(Params{Nodes: 16, MinEdges: 23, MaxEdges: 25, Players: 2, MaxAttempts: cfg.MaxGenAttempts}, cfg),
 			seeds:  1000,
 		},
 	)
 	return cases
+}
+
+// withOpeningBand fills constraint 7's Tier I band (D24) from cfg's own
+// contract table rather than a literal 3/4 — the same reason gen.Params
+// carries the band at all: a GDD §8.3 edit must move these tests with it.
+func withOpeningBand(p Params, cfg game.Config) Params {
+	p.OpeningMinDistance = cfg.Contracts[0].MinDistance
+	p.OpeningMaxDistance = cfg.Contracts[0].MaxDistance
+	return p
 }
 
 func itoa(n int) string {
@@ -92,6 +103,11 @@ func itoa(n int) string {
 // check here is independent of gen's own internal verify.go — it walks
 // Graph's exported shape directly, so a bug in verify.go's own bookkeeping
 // cannot hide a real constraint violation from this test.
+//
+// The Generate error check is load-bearing on its own, not just plumbing to
+// reach verifyGraph: D24's strengthened constraint 7 rejects strictly more
+// start-placement attempts than the old one, and this asserts that on none
+// of these 6000 seeds does it reject all of them within MaxAttempts.
 func TestGenerateSatisfiesConstraints(t *testing.T) {
 	for _, tc := range propertyCases() {
 		t.Run(tc.name, func(t *testing.T) {
@@ -128,7 +144,7 @@ func verifyGraph(t *testing.T, seed int, p Params, g Graph) {
 	verifyStartPositions(t, seed, p, g)
 	verifyNodeTypes(t, seed, g)
 	verifyNoWarehouseAdjacentBorder(t, seed, g)
-	verifyStartsHaveNearbyWarehouse(t, seed, g)
+	verifyStartsHaveContractableWarehouse(t, seed, p, g)
 	verifyLayout(t, seed, g)
 }
 
@@ -177,24 +193,53 @@ func verifyNoWarehouseAdjacentBorder(t *testing.T, seed int, g Graph) {
 	}
 }
 
-// verifyStartsHaveNearbyWarehouse is GDD §6.1 constraint 7: every starting
-// node has at least one Warehouse within 2 steps.
-func verifyStartsHaveNearbyWarehouse(t *testing.T, seed int, g Graph) {
+// verifyStartsHaveContractableWarehouse is GDD §6.1 constraint 7 as
+// strengthened by D24: every starting node has at least one Warehouse within
+// 2 steps that itself has a Border at a distance inside Tier I's contract
+// band. Both halves are asserted — a Warehouse with no Border in the band
+// satisfies the constraint's old text and fails its stated purpose, which is
+// the gap D24 closed.
+//
+// The failure message names the Warehouses it did find and why each was
+// rejected: a start with no Warehouse at all and a start whose only
+// Warehouses are uncontractable are different bugs, and the pre-D24 code
+// would have passed the second.
+func verifyStartsHaveContractableWarehouse(t *testing.T, seed int, p Params, g Graph) {
 	t.Helper()
 
 	dist := bfsAll(g)
 	for _, start := range g.StartPositions {
+		var nearby []game.NodeID
 		found := false
 		for other, d := range dist[start] {
-			if d >= 0 && d <= maxStartWarehouseDistance && g.Nodes[other].Type == game.NodeWarehouse {
+			if d < 0 || d > maxStartWarehouseDistance || g.Nodes[other].Type != game.NodeWarehouse {
+				continue
+			}
+			w := game.NodeID(other)
+			nearby = append(nearby, w)
+			if borderInBand(p, g, dist[w]) {
 				found = true
 				break
 			}
 		}
 		if !found {
-			t.Fatalf("seed=%d: start position %d has no Warehouse within %d steps (GDD §6.1 constraint 7)", seed, start, maxStartWarehouseDistance)
+			t.Fatalf("seed=%d: start position %d has no Warehouse within %d steps with a Border at distance [%d, %d] (GDD §6.1 constraint 7, D24) — nearby Warehouses: %v",
+				seed, start, maxStartWarehouseDistance, p.OpeningMinDistance, p.OpeningMaxDistance, nearby)
 		}
 	}
+}
+
+// borderInBand reports whether dist (one Warehouse's distances to every
+// other node) reaches a Border inside [OpeningMinDistance,
+// OpeningMaxDistance] — Tier I's band, the distances an opening contract
+// from that Warehouse could be drawn at (GDD §8.3).
+func borderInBand(p Params, g Graph, dist []int) bool {
+	for other, d := range dist {
+		if d >= p.OpeningMinDistance && d <= p.OpeningMaxDistance && g.Nodes[other].Type == game.NodeBorder {
+			return true
+		}
+	}
+	return false
 }
 
 // verifyLayout is issue #60's coordinate acceptance criteria: every node
@@ -464,14 +509,17 @@ func graphsIdentical(a, b Graph) bool {
 // behavior — a caller error, not a generation failure, never counts against
 // MaxAttempts.
 func TestGenerateRejectsInvalidParams(t *testing.T) {
-	base := Params{Nodes: 15, MinEdges: 21, MaxEdges: 23, Players: 2, MaxAttempts: 100}
+	base := Params{Nodes: 15, MinEdges: 21, MaxEdges: 23, Players: 2, MaxAttempts: 100, OpeningMinDistance: 3, OpeningMaxDistance: 4}
 
 	cases := map[string]Params{
-		"too few nodes":     withNodes(base, 11),
-		"min > max edges":   withEdges(base, 23, 21),
-		"zero edges":        withEdges(base, 0, 0),
-		"zero players":      withPlayers(base, 0),
-		"zero max attempts": withMaxAttempts(base, 0),
+		"too few nodes":        withNodes(base, 11),
+		"min > max edges":      withEdges(base, 23, 21),
+		"zero edges":           withEdges(base, 0, 0),
+		"zero players":         withPlayers(base, 0),
+		"zero max attempts":    withMaxAttempts(base, 0),
+		"unset opening band":   withOpeningDistances(base, 0, 0),
+		"min > max opening":    withOpeningDistances(base, 4, 3),
+		"zero opening minimum": withOpeningDistances(base, 0, 4),
 	}
 	for name, p := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -486,6 +534,10 @@ func withNodes(p Params, n int) Params       { p.Nodes = n; return p }
 func withEdges(p Params, lo, hi int) Params  { p.MinEdges, p.MaxEdges = lo, hi; return p }
 func withPlayers(p Params, n int) Params     { p.Players = n; return p }
 func withMaxAttempts(p Params, n int) Params { p.MaxAttempts = n; return p }
+func withOpeningDistances(p Params, lo, hi int) Params {
+	p.OpeningMinDistance, p.OpeningMaxDistance = lo, hi
+	return p
+}
 
 // TestGenerateExhaustsAndNamesFailedConstraint is issue #59's acceptance
 // criterion: "Exhausted retries return an error naming the constraint that
@@ -497,7 +549,7 @@ func withMaxAttempts(p Params, n int) Params { p.MaxAttempts = n; return p }
 // attempts reach and fail constraint 5 specifically, rather than an earlier
 // structural check.
 func TestGenerateExhaustsAndNamesFailedConstraint(t *testing.T) {
-	p := Params{Nodes: 25, MinEdges: 36, MaxEdges: 40, Players: 25, MaxAttempts: 50}
+	p := Params{Nodes: 25, MinEdges: 36, MaxEdges: 40, Players: 25, MaxAttempts: 50, OpeningMinDistance: 3, OpeningMaxDistance: 4}
 
 	g, err := Generate(newTestRand(0), p)
 	if err == nil {
