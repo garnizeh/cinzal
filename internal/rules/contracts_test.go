@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -59,25 +60,53 @@ func offerTestState(infamy int, contracts []Contract, lastOfferRound, round game
 // seeding is what makes this possible (a Known Warehouse at setup); this
 // test exercises it through the actual GenerateOffer path rather than
 // re-checking fog state alone.
+// offerSweepBatches splits [0, total) into this many contiguous,
+// equal-sized (last one absorbs the remainder) seed ranges, so the sweep
+// below can run each range as its own parallel subtest.
+const offerSweepBatches = 8
+
 func TestGenerateOfferOpeningOfferNeverEmpty(t *testing.T) {
 	cfg := game.DefaultConfig()
 
+	// Both player count and seed range are split into parallel subtests:
+	// initial() + GenerateOffer over 1000 seeds does a full map generation
+	// per seed (D24's stricter constraint 7 means more attemptGenerate
+	// retries before a start placement is accepted, especially at the
+	// largest player count's 28-node map), and running that serially under
+	// -race blows past go test's default 10-minute per-package timeout —
+	// measured at ~19 minutes for players=5 alone. Splitting each player
+	// count's 1000 seeds into offerSweepBatches ranges cut that to ~4.5
+	// minutes on a 28-core box. This doesn't weaken the assertion — every
+	// seed at every player count is still checked — it only changes how
+	// the checking is scheduled.
+	const total = 1000
+	batchSize := total / offerSweepBatches
 	for _, players := range []int{2, 3, 4, 5} {
-		for seed := range 1000 {
-			matchSeed := seedFromInt(seed)
-			s, err := initial(matchSeed, cfg, players)
-			if err != nil {
-				t.Fatalf("players=%d seed=%d: initial() = %v", players, seed, err)
+		for b := range offerSweepBatches {
+			start := b * batchSize
+			end := start + batchSize
+			if b == offerSweepBatches-1 {
+				end = total
 			}
+			t.Run(fmt.Sprintf("players=%d/batch=%d", players, b), func(t *testing.T) {
+				t.Parallel()
+				for seed := start; seed < end; seed++ {
+					matchSeed := seedFromInt(seed)
+					s, err := initial(matchSeed, cfg, players)
+					if err != nil {
+						t.Fatalf("players=%d seed=%d: initial() = %v", players, seed, err)
+					}
 
-			rng := NewRNG(matchSeed, 1)
-			for seat := range s.Players {
-				offer, delivered := GenerateOffer(s, game.SeatID(seat), cfg, rng)
-				if !delivered || len(offer) == 0 {
-					t.Fatalf("players=%d seed=%d seat=%d: delivered=%v offer=%v, want a delivered offer with >= 1 contract (GDD §8.1 deadlock)",
-						players, seed, seat, delivered, offer)
+					rng := NewRNG(matchSeed, 1)
+					for seat := range s.Players {
+						offer, delivered := GenerateOffer(s, game.SeatID(seat), cfg, rng)
+						if !delivered || len(offer) == 0 {
+							t.Fatalf("players=%d seed=%d seat=%d: delivered=%v offer=%v, want a delivered offer with >= 1 contract (GDD §8.1 deadlock)",
+								players, seed, seat, delivered, offer)
+						}
+					}
 				}
-			}
+			})
 		}
 	}
 }
