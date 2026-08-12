@@ -159,3 +159,37 @@ func TestAffordanceMaxLeaseBlocksReservesSelectedLedgerCost(t *testing.T) {
 		t.Fatalf("MaxLeaseBlocks (balance 1, ledger selected) = %d, want 0, not negative", broke.MaxLeaseBlocks)
 	}
 }
+
+// TestAffordanceMaxLeaseBlocksClampedByRenewalCeiling: GDD §10.4 — a
+// renewal against a post already close to the 12-round ceiling must not be
+// offered more blocks than fit under it, even when the balance alone would
+// afford more. This is the acceptance bar's "the clamp is visible in the
+// affordance metadata": the number itself is the clamp, not a separate flag.
+func TestAffordanceMaxLeaseBlocksClampedByRenewalCeiling(t *testing.T) {
+	v := legalTestView()
+	cfg := legalTestConfig() // LeaseCostPerBlock: 3, LeaseBlockRounds: 3
+	v.You.Balance = 100      // affordable well past the block cap on its own
+	v.You.Posts = []game.Post{{Node: 9, RoundsRemaining: 9}}
+
+	draft := game.Order{AddOns: game.AddOns{RenewPost: 9, RenewBlocks: 1}}
+	got := Affordances(v, cfg, draft)
+	if got.MaxLeaseBlocks != 1 {
+		t.Fatalf("MaxLeaseBlocks (renewing a post at 9/12 remaining) = %d, want 1 (only 1 more block fits under the 12-round ceiling)", got.MaxLeaseBlocks)
+	}
+
+	// A post already at the ceiling: renewal offers no further blocks.
+	v.You.Posts = []game.Post{{Node: 9, RoundsRemaining: 12}}
+	atCeiling := Affordances(v, cfg, draft)
+	if atCeiling.MaxLeaseBlocks != 0 {
+		t.Fatalf("MaxLeaseBlocks (renewing a post already at 12) = %d, want 0", atCeiling.MaxLeaseBlocks)
+	}
+
+	// A target the seat does not hold — most commonly the node this same
+	// order is staking new — is not an existing lease to clamp against, so
+	// the balance-based cap alone applies.
+	fresh := game.Order{AddOns: game.AddOns{RenewPost: 42, RenewBlocks: 1}}
+	notHeld := Affordances(v, cfg, fresh)
+	if notHeld.MaxLeaseBlocks != maxLeaseBlocks {
+		t.Fatalf("MaxLeaseBlocks (RenewPost not currently held) = %d, want %d (unclamped)", notHeld.MaxLeaseBlocks, maxLeaseBlocks)
+	}
+}
