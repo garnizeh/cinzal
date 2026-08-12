@@ -330,13 +330,12 @@ func legalPostCap(v game.PlayerView, o game.Order, cfg game.Config) error {
 	}
 
 	players := len(v.Others) + 1
-	postCap, ok := cfg.PostCapByPlayers[players]
-	if !ok {
+	if _, ok := cfg.PostCapByPlayers[players]; !ok {
 		return illegal(ReasonPostCapExceeded,
 			fmt.Sprintf("no post cap configured for %d players", players))
 	}
 
-	if len(v.You.Posts) >= postCap {
+	if postCap, reached := PostCapReached(len(v.You.Posts), players, cfg); reached {
 		return illegal(ReasonPostCapExceeded,
 			fmt.Sprintf("already holding %d posts, at the cap of %d", len(v.You.Posts), postCap))
 	}

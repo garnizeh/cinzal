@@ -67,7 +67,7 @@ func Affordances(v game.PlayerView, cfg game.Config, draft game.Order) Affordanc
 	players := len(v.Others) + 1
 	if postCap, ok := cfg.PostCapByPlayers[players]; ok && len(v.You.Posts) >= postCap {
 		a.StakePostAtCap = true
-		a.ExpiringPost = expiringPost(v.You.Posts)
+		a.ExpiringPost, _ = SelectLeaseByFewestRounds(v.You.Posts)
 	}
 
 	// A selected Ledger purchase reserves its cost first, so the two clamps
@@ -78,26 +78,35 @@ func Affordances(v game.PlayerView, cfg game.Config, draft game.Order) Affordanc
 		availableBalance -= cfg.LedgerCost
 	}
 	if cfg.LeaseCostPerBlock > 0 {
-		a.MaxLeaseBlocks = max(0, min(4, availableBalance/cfg.LeaseCostPerBlock))
+		a.MaxLeaseBlocks = max(0, min(maxLeaseBlocks, availableBalance/cfg.LeaseCostPerBlock))
 	}
+
+	// A declared renewal against a post this seat already holds must not
+	// offer more blocks than GDD §10.4's 12-round ceiling has headroom for —
+	// "renewals may top a post back up to 12 remaining rounds," never past
+	// it. A target the seat does not (yet) hold — most commonly the node
+	// this same order is staking new — has no existing lease to clamp
+	// against, so RenewalBlockCap's own zero-current case (the full
+	// maxLeaseBlocks) applies and this is a no-op.
+	if draft.AddOns.RenewBlocks > 0 {
+		if current, held := renewTargetRounds(v.You.Posts, draft.AddOns.RenewPost); held {
+			a.MaxLeaseBlocks = min(a.MaxLeaseBlocks, RenewalBlockCap(current, cfg))
+		}
+	}
+
 	a.MaxStake = min(6, v.You.Balance)
 
 	return a
 }
 
-// expiringPost picks the post with the fewest RoundsRemaining, breaking ties
-// by the lowest NodeID.
-func expiringPost(posts []game.Post) game.NodeID {
-	if len(posts) == 0 {
-		return 0
-	}
-
-	best := posts[0]
-	for _, p := range posts[1:] {
-		if p.RoundsRemaining < best.RoundsRemaining ||
-			(p.RoundsRemaining == best.RoundsRemaining && p.Node < best.Node) {
-			best = p
+// renewTargetRounds finds target among posts (v.You.Posts) and reports its
+// current RoundsRemaining — RenewalBlockCap's input. false when target names
+// a post this seat does not currently hold.
+func renewTargetRounds(posts []game.Post, target game.NodeID) (int, bool) {
+	for _, p := range posts {
+		if p.Node == target {
+			return p.RoundsRemaining, true
 		}
 	}
-	return best.Node
+	return 0, false
 }
