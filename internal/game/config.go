@@ -247,10 +247,20 @@ func (c Config) Validate(players int) error {
 		return fmt.Errorf("game: MaxGenAttempts must be at least 1, got %d (GDD §6.1)", c.MaxGenAttempts)
 	}
 
+	const maxInt = int(^uint(0) >> 1)
+	totalWeight := 0
 	for i, tier := range c.Contracts {
 		if tier.OfferWeight < 1 {
 			return fmt.Errorf("game: Contracts[%d].OfferWeight must be positive, got %d (GDD §8.1, D6)", i, tier.OfferWeight)
 		}
+		// weightedTierDraw (rules/contracts.go) sums the eligible tiers'
+		// OfferWeight into RNG.Next's n argument — reject here, at the
+		// config boundary, rather than let that sum silently overflow into
+		// a negative or wrapped total mid-match.
+		if tier.OfferWeight > maxInt-totalWeight {
+			return fmt.Errorf("game: Contracts total OfferWeight overflows int (GDD §8.1, D6)")
+		}
+		totalWeight += tier.OfferWeight
 	}
 
 	return nil

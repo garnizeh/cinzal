@@ -341,6 +341,24 @@ func TestContractCandidatesUsesNavigableGraphDistance(t *testing.T) {
 	}
 }
 
+// TestContractCandidatesExcludesSinkholedOrigin asserts a Known Warehouse
+// that has since become Sinkholed cannot originate any contract candidate,
+// at any tier — GDD §9.1a item 0's navigable graph excludes Sinkholed nodes
+// entirely, and contractCandidates calls distances(origin.ID) once per Known
+// Warehouse, which is not necessarily the seat's own position, so this must
+// hold even though the seat never "walked into" the Sinkhole itself.
+func TestContractCandidatesExcludesSinkholedOrigin(t *testing.T) {
+	cfg := game.DefaultConfig()
+	s := offerTestState(0, nil, 0, 1)
+	s.Graph.Nodes[0].SinkholeRounds = 1
+
+	for tier := range cfg.Contracts {
+		if got := len(contractCandidates(s, 0, tier, cfg, map[pairKey]bool{})); got != 0 {
+			t.Errorf("tier=%d: candidates = %d, want 0 (origin warehouse is Sinkholed)", tier, got)
+		}
+	}
+}
+
 // TestGenerateOfferRNGAccounting is #41's/D6's/D7's accounting made
 // concrete: not-due and full-slots consume nothing at all; a delivered
 // offer costs exactly 2 contract.offer.tier draws plus one

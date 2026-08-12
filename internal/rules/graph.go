@@ -10,10 +10,12 @@ import "github.com/garnizeh/cinzal/internal/game"
 // any node with SinkholeRounds > 0, which it never enters or exits.
 //
 // distances[n] is -1 when n is unreachable from src. distances[src] is
-// always 0, regardless of src's own SinkholeRounds — a player only ever asks
-// this from a node they are legitimately standing on or generating a
-// contract origin against, never from inside a Sinkhole they could not have
-// entered.
+// always 0 — even when src itself is Sinkholed, since "unreachable from
+// itself" would be a stranger answer than "0 steps away" — but a Sinkholed
+// src never expands to its neighbours: contractCandidates (contracts.go)
+// calls this once per Known Warehouse, which is not necessarily the seat's
+// own position, so a Warehouse that became Sinkholed after the seat learned
+// of it must not still originate reachable-looking Border candidates.
 //
 // This is the one BFS implementation both D23's fog seeding (initial.go, the
 // setup graph) and the contract tier distance bands (contracts.go, the live
@@ -26,6 +28,9 @@ func (g Graph) distances(src game.NodeID) []int {
 		dist[i] = -1
 	}
 	dist[src] = 0
+	if g.Nodes[src].SinkholeRounds > 0 {
+		return dist
+	}
 
 	queue := []game.NodeID{src}
 	for len(queue) > 0 {

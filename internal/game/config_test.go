@@ -142,6 +142,23 @@ func TestValidateRejectsNonPositiveOfferWeight(t *testing.T) {
 	}
 }
 
+// TestValidateRejectsOverflowingOfferWeightTotal guards weightedTierDraw
+// (rules/contracts.go), which sums every eligible tier's OfferWeight into
+// RNG.Next's n argument: four weights each individually positive but summing
+// past math.MaxInt must be rejected here, at the config boundary, rather
+// than silently wrap into a negative or truncated total mid-match.
+func TestValidateRejectsOverflowingOfferWeightTotal(t *testing.T) {
+	cfg := DefaultConfig()
+	maxInt := int(^uint(0) >> 1)
+	for i := range cfg.Contracts {
+		cfg.Contracts[i].OfferWeight = maxInt / 2
+	}
+
+	if err := cfg.Validate(4); err == nil {
+		t.Fatal("Validate() = nil for a Contracts OfferWeight total that overflows int, want an error")
+	}
+}
+
 // TestSuppressZeroValueSuppressesNothing guards D11's decision that an
 // ordinary match's Suppress field must be all-false by construction, not by
 // convention at each call site.

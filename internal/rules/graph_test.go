@@ -97,6 +97,29 @@ func TestDistancesExcludesSinkholedNodes(t *testing.T) {
 	}
 }
 
+// TestDistancesFromSinkholedSrcNeverExpands asserts a Sinkholed src reports
+// itself at 0 (never an out-of-range panic) but reaches nothing else — it
+// must not expand to its neighbours even though its own distance is defined.
+// contractCandidates (contracts.go) calls distances(origin.ID) once per
+// Known Warehouse, which need not be the seat's own position: a Warehouse
+// that became Sinkholed after the seat learned of it must not still look
+// reachable to Borders through it.
+func TestDistancesFromSinkholedSrcNeverExpands(t *testing.T) {
+	g := buildGraph(3, map[game.NodeID][]game.NodeID{0: {1}, 1: {0, 2}, 2: {1}})
+	g.Nodes[0].SinkholeRounds = 1
+
+	dist := g.distances(0)
+	if dist[0] != 0 {
+		t.Errorf("distances(0)[0] = %d, want 0 (a node's distance to itself, even Sinkholed)", dist[0])
+	}
+	if dist[1] != -1 {
+		t.Errorf("distances(0)[1] = %d, want -1 (Sinkholed src never expands to its neighbours)", dist[1])
+	}
+	if dist[2] != -1 {
+		t.Errorf("distances(0)[2] = %d, want -1 (unreachable through a Sinkholed src)", dist[2])
+	}
+}
+
 // TestDistancesRespectsBridgeDown asserts a destroyed edge (simply absent
 // from both endpoints' Edges, per Node's own convention — Bridge Down never
 // leaves a one-directional stub) forces the longer remaining path, the same
