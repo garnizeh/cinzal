@@ -17,7 +17,8 @@ type Purpose string
 // constant declarations and fails if one is missing a row, or a row names a
 // Purpose no constant declares.
 const (
-	PurposeContractOffer       Purpose = "contract.offer"
+	PurposeContractOfferTier   Purpose = "contract.offer.tier"
+	PurposeContractOfferPick   Purpose = "contract.offer.pick"
 	PurposeMarketStock         Purpose = "market.stock"
 	PurposeConfrontD6          Purpose = "confront.d6"
 	PurposeConfrontTiebreak    Purpose = "confront.tiebreak"
@@ -71,7 +72,8 @@ type PurposeRow struct {
 // test reads to predict, per round, how many draws each Purpose should have
 // consumed.
 var ConsumptionTable = []PurposeRow{
-	{PurposeContractOffer, "3 per offering seat", "Phase 2", ""},
+	{PurposeContractOfferTier, "2 per offering seat, always", "Phase 2", "D6: slot 2 and 3's target tier — a weighted, independent draw over the eligible tier set, drawn even when only one tier is eligible"},
+	{PurposeContractOfferPick, "0-3 per offering seat — one draw per filled slot", "Phase 2", "D6/D7: filled is 0-3, per-slot cascade pick; slot 1 (the guaranteed highest-eligible-tier slot) cascades first, so it gets first claim on the shared, without-replacement candidate pool"},
 	{PurposeMarketStock, "3 per market refreshed", "Phase 3, every 2 rounds", ""},
 	{PurposeConfrontD6, "1 per participant, per confrontation", "", "Not per confrontation"},
 	{PurposeConfrontTiebreak, "1, only at the fourth level", "", "GDD §15"},

@@ -15,6 +15,18 @@ func testSeed(b byte) [32]byte {
 	return seed
 }
 
+// seedFromInt derives a [32]byte seed from an ordinary int via SHA-256, for
+// property-test sweeps that need many more distinct seeds than testSeed's
+// single repeated byte can produce (256 at most). Used wherever a test needs
+// to range over >= 1000 seeds — the same shape internal/rules/gen's own
+// generate_test.go sweeps use, adapted to *RNG's [32]byte seed rather than
+// gen's plain-int Rand.
+func seedFromInt(i int) [32]byte {
+	var buf [8]byte
+	binary.BigEndian.PutUint64(buf[:], uint64(i))
+	return sha256.Sum256(buf[:])
+}
+
 // TestNextIsPureFunctionOfSeedRoundSeqPurposeN pins the core determinism
 // property: two RNGs constructed with the same seed and round, driven
 // through the same sequence of purpose/n calls, must produce the same
@@ -26,8 +38,8 @@ func TestNextIsPureFunctionOfSeedRoundSeqPurposeN(t *testing.T) {
 		purpose Purpose
 		n       int
 	}{
-		{PurposeContractOffer, 6},
-		{PurposeContractOffer, 6},
+		{PurposeContractOfferTier, 6},
+		{PurposeContractOfferPick, 6},
 		{PurposeMarketStock, 12},
 		{PurposeConfrontD6, 6},
 		{PurposeItemTornMap, 9},
