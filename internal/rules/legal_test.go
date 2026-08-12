@@ -262,3 +262,99 @@ func TestLegalAcceptsDealAtHandLimitWithComposedDiscard(t *testing.T) {
 		t.Fatalf("Legal() = %v, want nil (a same-round discard frees the hand slot, D14 case 3)", err)
 	}
 }
+
+// TestLegalRejectsMuscleAsDiscard: GDD §9.4 states Muscle is "not a
+// discard... permanent while held" — declaring it in Field 4 is illegal
+// independent of whether the seat holds it.
+func TestLegalRejectsMuscleAsDiscard(t *testing.T) {
+	v := legalTestView()
+	v.You.Items = []game.ItemID{game.ItemMuscle}
+	o := game.Order{Items: []game.ItemDiscard{{Item: game.ItemMuscle}}}
+	wantReason(t, Legal(v, o, legalTestConfig()), ReasonItemNotDiscardable)
+}
+
+// TestLegalRejectsPoliceBandTargetHidden: D25 — Police Band's target must
+// not be FogHidden. Node 3 in legalTestView is a genuinely Hidden node,
+// absent from v.Nodes entirely.
+func TestLegalRejectsPoliceBandTargetHidden(t *testing.T) {
+	v := legalTestView()
+	v.You.Items = []game.ItemID{game.ItemPoliceBand}
+	o := game.Order{Items: []game.ItemDiscard{{Item: game.ItemPoliceBand, Target: 3}}}
+	wantReason(t, Legal(v, o, legalTestConfig()), ReasonInvalidItemTarget)
+}
+
+// TestLegalAcceptsPoliceBandTargetRumoured: D25 — unlike Decoy, Police Band
+// carries no Known-node restriction; a merely Rumoured target (node 4) is
+// legal.
+func TestLegalAcceptsPoliceBandTargetRumoured(t *testing.T) {
+	v := legalTestView()
+	v.You.Items = []game.ItemID{game.ItemPoliceBand}
+	o := game.Order{Items: []game.ItemDiscard{{Item: game.ItemPoliceBand, Target: 4}}}
+	if err := Legal(v, o, legalTestConfig()); err != nil {
+		t.Fatalf("Legal() = %v, want nil (Police Band's target may be merely Rumoured, D25)", err)
+	}
+}
+
+// TestLegalRejectsDecoyTargetNotKnown: GDD §9.4/D12 — Decoy's target must
+// be Known; node 4 is only Rumoured.
+func TestLegalRejectsDecoyTargetNotKnown(t *testing.T) {
+	v := legalTestView()
+	v.You.Items = []game.ItemID{game.ItemDecoy}
+	o := game.Order{Items: []game.ItemDiscard{{Item: game.ItemDecoy, Target: 4}}}
+	wantReason(t, Legal(v, o, legalTestConfig()), ReasonInvalidItemTarget)
+}
+
+// TestLegalAcceptsDecoyTargetKnown: the mirror case — a Known target (node
+// 1) is legal.
+func TestLegalAcceptsDecoyTargetKnown(t *testing.T) {
+	v := legalTestView()
+	v.You.Items = []game.ItemID{game.ItemDecoy}
+	o := game.Order{Items: []game.ItemDiscard{{Item: game.ItemDecoy, Target: 1}}}
+	if err := Legal(v, o, legalTestConfig()); err != nil {
+		t.Fatalf("Legal() = %v, want nil (a Known target is legal for Decoy)", err)
+	}
+}
+
+// TestLegalRejectsBoltHoleTargetNotKnown: D25 — Bolt Hole's target must be
+// FogKnown; node 4 is only Rumoured.
+func TestLegalRejectsBoltHoleTargetNotKnown(t *testing.T) {
+	v := legalTestView()
+	v.You.Items = []game.ItemID{game.ItemBoltHole}
+	o := game.Order{Items: []game.ItemDiscard{{Item: game.ItemBoltHole, Target: 4}}}
+	wantReason(t, Legal(v, o, legalTestConfig()), ReasonInvalidItemTarget)
+}
+
+// TestLegalRejectsBoltHoleTargetWrongDistance: D25 — node 1 is Known but
+// only 1 step from the player's position (node 0), not exactly 2.
+func TestLegalRejectsBoltHoleTargetWrongDistance(t *testing.T) {
+	v := legalTestView()
+	v.You.Items = []game.ItemID{game.ItemBoltHole}
+	o := game.Order{Items: []game.ItemDiscard{{Item: game.ItemBoltHole, Target: 1}}}
+	wantReason(t, Legal(v, o, legalTestConfig()), ReasonInvalidItemTarget)
+}
+
+// TestLegalAcceptsBoltHoleTargetExactlyTwoStepsKnown: D25 — node 2 is Known
+// and exactly graph-distance 2 from the player's position (0 -> 1 -> 2) on
+// the player's own known subgraph.
+func TestLegalAcceptsBoltHoleTargetExactlyTwoStepsKnown(t *testing.T) {
+	v := legalTestView()
+	v.You.Items = []game.ItemID{game.ItemBoltHole}
+	o := game.Order{Items: []game.ItemDiscard{{Item: game.ItemBoltHole, Target: 2}}}
+	if err := Legal(v, o, legalTestConfig()); err != nil {
+		t.Fatalf("Legal() = %v, want nil (node 2 is Known and exactly 2 steps away, D25)", err)
+	}
+}
+
+// TestKnownSubgraphDistanceStopsAtRumouredNode confirms the BFS never
+// expands past a merely Rumoured node — GDD §7.1: "no edges, so you cannot
+// plot a route through or into it" — even though the node itself is
+// reachable and appears in the distance map.
+func TestKnownSubgraphDistanceStopsAtRumouredNode(t *testing.T) {
+	v := legalTestView()
+	if got := knownSubgraphDistance(v, 4); got != 1 {
+		t.Fatalf("knownSubgraphDistance(v, 4) = %d, want 1 (node 4 is reachable, just not expandable)", got)
+	}
+	if got := knownSubgraphDistance(v, 999); got != -1 {
+		t.Fatalf("knownSubgraphDistance(v, 999) = %d, want -1 (unreachable node)", got)
+	}
+}

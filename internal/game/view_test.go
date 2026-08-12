@@ -29,9 +29,20 @@ func TestNodesIsKeyedNotFlagged(t *testing.T) {
 // asserting each current field's type individually (which the compiler
 // already guarantees). RFC §9.1: "Others never carries a position unless a
 // writer below authorises it, and never an exact balance."
+//
+// It also covers issue #66's own fog acceptance criterion — "Items in hand
+// never appear in any other seat's PlayerView" — structurally: no field may
+// be an []ItemID, the exact type SelfState.Items uses for the seat's own
+// hand (GDD §12: "Items in hand are hidden"). This is the honest scope
+// available before #75's Project exists: a structural guarantee that
+// OpponentView has nowhere to write a hand to, provable by reflection over
+// the type rather than by calling a projection function that isn't built
+// yet. The real RFC §16.3-style negative serialisation test against actual
+// projected views is #75's to add, over this same guarantee.
 func TestOpponentViewCarriesNoPositionOrBalance(t *testing.T) {
 	typ := reflect.TypeFor[OpponentView]()
 	nodeIDType := reflect.TypeFor[NodeID]()
+	itemSliceType := reflect.TypeFor[[]ItemID]()
 
 	for field := range typ.Fields() {
 		if field.Type == nodeIDType {
@@ -39,6 +50,9 @@ func TestOpponentViewCarriesNoPositionOrBalance(t *testing.T) {
 		}
 		if field.Name == "Balance" {
 			t.Errorf("OpponentView.%s: opponents must see only a credit band, never an exact balance (GDD §5.1)", field.Name)
+		}
+		if field.Type == itemSliceType {
+			t.Errorf("OpponentView.%s is an []ItemID — item hands are hidden from every other seat (GDD §12); this must not exist on OpponentView", field.Name)
 		}
 	}
 }
