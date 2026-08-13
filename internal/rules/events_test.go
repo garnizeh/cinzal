@@ -508,6 +508,32 @@ func TestResolveFestivalAwardInfamyToEveryoneAtTheDrawnNode(t *testing.T) {
 	}
 }
 
+// TestResolveNextRoundModifierSurvivesTheSameRoundsUpkeepStub documents and
+// guards the hazard CodeRabbit flagged in review (state.go's own NextRound
+// doc comment, and the RFC's r21 changelog entry): today, upkeep() is
+// issue #74's stub (resolve.go) and clears nothing, so a next-round
+// modifier globalEvent() sets this round must still be present on the
+// MatchState Resolve() returns — not silently erased before round N+1 ever
+// reads it. Runs the full pipeline, not just globalEvent() in isolation,
+// so a future Upkeep implementation that naively clears s.NextRound
+// unconditionally fails this test immediately rather than months later.
+// When #74 lands, this test's "still set" expectation should gain a
+// companion "cleared the round after it's consumed" case, not be deleted.
+func TestResolveNextRoundModifierSurvivesTheSameRoundsUpkeepStub(t *testing.T) {
+	s := resolveTestState() // seeded Fog, unlike eventsTestState — the full pipeline needs it
+	s.Round = 3             // Resolve increments to 4 -> EventDeck[4-4] = EventDeck[0]
+	s.Graph.EventDeck = []EventCardID{EventScaffolding}
+	cfg := legalTestConfig()
+
+	next, _, err := Resolve(s, map[game.SeatID]game.Order{}, cfg, NewRNG(testSeed(1), 4))
+	if err != nil {
+		t.Fatalf("Resolve() error = %v", err)
+	}
+	if next.NextRound.Scaffolding == nil {
+		t.Error("NextRound.Scaffolding = nil after Resolve(), want it set — Scaffolding fired this round and nothing clears it yet (upkeep is issue #74's stub)")
+	}
+}
+
 // TestBuildGlobalEventContextDragnetDrawsBordersEarly is issue #72's own
 // architectural centerpiece: Dragnet's target set is drawn at Resolve's
 // round-start peek, not at globalEvent's Phase 6 call site, because
