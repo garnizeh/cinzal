@@ -396,7 +396,10 @@ func TestPushbackStationaryBoxedInFirstHopStaysPut(t *testing.T) {
 // beats the weak seat's TOTAL under every possible pair of D6 rolls (1-6
 // each): dominant's floor (1 + 7 modifiers = 8) exceeds weak's ceiling
 // (6 + 1 modifier = 7). Used wherever a test needs a guaranteed decisive
-// outcome without searching for a seed.
+// outcome without searching for a seed. The 7 modifiers include the Legend
+// tier bonus of 3, so a caller must also set the dominant seat's Infamy to
+// 9 — every caller below does — or the floor drops to 5 and the outcome
+// becomes seed-dependent.
 func dominantOrder() game.Order {
 	return game.Order{Stance: game.StanceOrder{Stance: game.StanceAggressive, Stake: 6}}
 }
@@ -414,8 +417,10 @@ func TestResolveConfrontationsDecisiveOneOnOne(t *testing.T) {
 	s := confrontTestState(12, 12)
 	s.Players[0].Infamy = 9
 	s.Players[1].Balance = 10
-	validated := map[game.SeatID]game.Order{0: dominantOrder(), 1: weakOrder()}
-	validated[1] = game.Order{Stance: game.StanceOrder{Stance: game.StanceNeutral, Stake: 3}}
+	validated := map[game.SeatID]game.Order{
+		0: dominantOrder(),
+		1: {Stance: game.StanceOrder{Stance: game.StanceNeutral, Stake: 3}},
+	}
 	walks := confrontWalks(map[game.SeatID][]game.NodeID{0: {12}, 1: {13, 12}})
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
@@ -801,7 +806,7 @@ func TestResolveConfrontationsCrossingSnapsBothToTheSameNode(t *testing.T) {
 // seat's node simply cannot recurse — this pins that no extra event or
 // panic results, and both end up positioned at the same node.
 func TestResolveConfrontationsPushbackIntoOccupiedNodeTriggersNoSecondFight(t *testing.T) {
-	s := confrontTestState(3, 3, 4) // seat 2 already sits at node 4, uninvolved
+	s := confrontTestState(3, 3, 2) // seat 2 already sits at node 2, the loser's pushback target
 	s.Players[0].Infamy = 9
 	validated := map[game.SeatID]game.Order{0: dominantOrder(), 1: weakOrder()}
 	walks := confrontWalks(map[game.SeatID][]game.NodeID{0: {3}, 1: {2, 3}})
@@ -814,6 +819,9 @@ func TestResolveConfrontationsPushbackIntoOccupiedNodeTriggersNoSecondFight(t *t
 		t.Fatalf("events = %v, want exactly 1 — pushback must not trigger a second confrontation on its own", events)
 	}
 	if s.Players[1].Position != 2 {
-		t.Errorf("loser Position = %d, want 2 (its own prior node, uninvolved seat 2 is at node 4)", s.Players[1].Position)
+		t.Errorf("loser Position = %d, want 2 (its own prior node, already occupied by uninvolved seat 2)", s.Players[1].Position)
+	}
+	if s.Players[2].Position != 2 {
+		t.Errorf("uninvolved seat 2 Position = %d, want 2 (displacement must not move it)", s.Players[2].Position)
 	}
 }
