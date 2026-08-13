@@ -42,7 +42,7 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 		crossings := detectCrossings(transitions, seats, validated)
 		collisions := detectCollisions(next, seats)
 		pending := mergeConfrontations(next, crossings, collisions)
-		events = append(events, resolveConfrontations(&next, pending, r)...)
+		events = append(events, resolveConfrontations(&next, pending, validated, walks, cfg, r)...)
 	}
 
 	events = append(events, resolveActions(&next, validated, seats, r)...)
@@ -94,13 +94,11 @@ func movementSteps(seats []game.SeatID, validated map[game.SeatID]game.Order) in
 // issue #68's synchronized-movement, crossing, and collision detection —
 // see movement.go.
 
-// resolveConfrontations is a stub — issue #69 implements the confrontation
-// dice roll, pushback, and displacement, for every group #68's detection
-// (advance, detectCrossings, detectCollisions, mergeConfrontations,
-// movement.go) already located and node-ordered (GDD §15; RFC §6.5).
-func resolveConfrontations(s *MatchState, pending []confrontation, r *RNG) []game.Event {
-	return nil
-}
+// resolveConfrontations (issue #69) is defined in confront.go: the
+// confrontation dice roll, pushback, and displacement, for every group
+// #68's detection (advance, detectCrossings, detectCollisions,
+// mergeConfrontations, movement.go) already located and node-ordered (GDD
+// §15; RFC §6.5).
 
 // resolveActions is a stub — issue #70 implements Step N+1: actions,
 // resolved in ascending Infamy order.
