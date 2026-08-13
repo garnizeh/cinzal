@@ -37,8 +37,10 @@ import (
 //
 // Two further degradation checks have no Legal equivalent at all, by
 // Legal's own documentation (legal.go): a Stake Post target already owned,
-// and a Pickup whose declared cargo is no longer on the ground. Both are
-// checked here, against live state, after the route/Legal pass.
+// and a Pickup with neither GDD §9.2 source available — no matching
+// Warehouse contract and no collectible dropped cargo (pickupAvailable,
+// cargo.go). Both are checked here, against live state, after the
+// route/Legal pass.
 //
 // Not handled here: GDD §15.0's third named example, "funds went to a
 // stake that was lost". Balance is untouched at Step 0 — nothing has spent
@@ -179,7 +181,7 @@ func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order) (game.
 		}
 
 	case game.ActionPickup:
-		if !cargoAvailable(s, seat, node) {
+		if !pickupAvailable(s, seat, node) {
 			degraded := o
 			degraded.Action = game.ActionOrder{Kind: game.ActionNothing}
 			return degraded, game.Event{Kind: game.EventPickupTargetGone, Round: s.Round, Seat: seat, Node: node}, false
@@ -187,19 +189,6 @@ func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order) (game.
 	}
 
 	return o, game.Event{}, true
-}
-
-// cargoAvailable reports whether node currently holds cargo seat may
-// collect (GDD §8.4), reusing CanCollect (cargo.go) — the same Bound/loose
-// eligibility rule Legal's own deliverableCargo uses for Deliver, applied
-// here to Pickup instead, which Legal deliberately does not check at all.
-func cargoAvailable(s MatchState, seat game.SeatID, node game.NodeID) bool {
-	for _, c := range s.Graph.Cargo {
-		if c.Node == node && CanCollect(s.Players[seat].Contracts, c) {
-			return true
-		}
-	}
-	return false
 }
 
 // legalView builds the minimal game.PlayerView Legal actually reads,

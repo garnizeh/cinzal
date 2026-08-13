@@ -1,6 +1,10 @@
 package rules
 
-import "github.com/garnizeh/cinzal/internal/game"
+import (
+	"slices"
+
+	"github.com/garnizeh/cinzal/internal/game"
+)
 
 // DebtLeaseCredit is GDD §13 step 3's flat Cr$ credited against an unpaid
 // debt when a lease is surrendered — not the lease's value or its rounds
@@ -104,6 +108,55 @@ func ResolveDebt(s MatchState, seat game.SeatID, owed int) DebtResult {
 // never a signal to fall back to ResolveDebt for the shortfall.
 func Shakedown(balance, cost int) (paid int) {
 	return min(balance, cost)
+}
+
+// applyDebt runs ResolveDebt (GDD §13) for owed against seat's current
+// balance in s and applies the result in place: balance, Infamy (through
+// ApplyInfamyDelta), Flagged, and — when a lease is surrendered — removing
+// it from both the node and the seat's own Posts. It reports the Cr$
+// actually collected and, on a surrender, the event that produces: GDD
+// "Upkeep" states the lease-expiry trace fires identically "whether the
+// lease expired on its own or was surrendered for debt" — this is the same
+// game.EventLeaseExpired Upkeep's own DecrementLease (posts.go) produces,
+// not a distinct kind. round is stamped on that event.
+//
+// Every Debt-eligible payment this issue introduces — Stake Post's lease
+// cost, an ordinary lease renewal, the delivery gate fee — shares this one
+// path rather than three separate copies of GDD §13's cascade. The Evasive
+// shakedown is deliberately not among them: Shakedown (above) is its own,
+// separate, non-Debt path, exactly as GDD §15 states.
+func applyDebt(s *MatchState, seat game.SeatID, owed int, round game.RoundNumber) (paid int, event *game.Event) {
+	result := ResolveDebt(*s, seat, owed)
+
+	p := &s.Players[seat]
+	p.Balance -= result.Paid
+	if result.Triggered {
+		p.Infamy = ApplyInfamyDelta(p.Infamy, result.InfamyDelta)
+	}
+	if result.Flagged {
+		p.Flagged = true
+	}
+
+	if result.Surrendered {
+		node := result.SurrenderedPost
+		s.Graph.Nodes[node].Post = nil
+		p.Posts = removePost(p.Posts, node)
+		event = &game.Event{Kind: game.EventLeaseExpired, Round: round, Node: node, Seat: seat}
+	}
+
+	return result.Paid, event
+}
+
+// removePost removes node from posts, preserving the order of what
+// remains — applyDebt's own update to the seat's Posts slice after Debt
+// surrenders one of them.
+func removePost(posts []game.NodeID, node game.NodeID) []game.NodeID {
+	for i, n := range posts {
+		if n == node {
+			return slices.Delete(posts, i, i+1)
+		}
+	}
+	return posts
 }
 
 // CreditBandFor maps an exact Cr$ balance to GDD §5.1's disclosed band —

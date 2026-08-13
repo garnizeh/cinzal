@@ -1,6 +1,10 @@
 package rules
 
-import "github.com/garnizeh/cinzal/internal/game"
+import (
+	"fmt"
+
+	"github.com/garnizeh/cinzal/internal/game"
+)
 
 // ItemTiming is which of GDD §9.4's discard-timing classes an item falls
 // into. Immediate and Armed are the two the GDD calls out explicitly — "the
@@ -54,6 +58,20 @@ var allItems = []itemMeta{
 	{game.ItemDecoy, 5, TimingEndOfRound},
 	{game.ItemBoltHole, 5, TimingArmed},
 	{game.ItemGuardContact, 6, TimingImmediate},
+}
+
+// itemPrice returns item's GDD §12 catalog price. Panics on an ItemID
+// outside the eight-item catalog — every declared discard and every Deal
+// target is already checked against a real market's stock or a held hand
+// before reaching here, so an unknown ItemID at this point is a caller
+// bug, not a data condition to handle gracefully.
+func itemPrice(item game.ItemID) int {
+	for _, it := range allItems {
+		if it.Item == item {
+			return it.Price
+		}
+	}
+	panic(fmt.Sprintf("rules: itemPrice: unknown item %v", item))
 }
 
 // The confrontation-modifier constants GDD §12 fixes for the two items that

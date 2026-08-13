@@ -45,9 +45,9 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 		events = append(events, resolveConfrontations(&next, pending, validated, walks, cfg, r)...)
 	}
 
-	events = append(events, resolveActions(&next, validated, seats, r)...)
-	events = append(events, resolveDeliveries(&next, r)...)
-	events = append(events, resolveAddons(&next, validated)...)
+	events = append(events, resolveActions(&next, validated, seats, cfg, r)...)
+	events = append(events, resolveDeliveries(&next, validated, cfg)...)
+	events = append(events, resolveAddons(&next, validated, entry, cfg)...)
 	events = append(events, writeTrail(&next)...)
 	events = append(events, globalEvent(&next, r)...)
 	events = append(events, incident(&next, r)...)
@@ -63,10 +63,16 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 // used" from "a value this round just set for next round" (RFC §6.6,
 // D5) — an Upkeep-phase clear cannot make that distinction, which is
 // exactly why these two counters are not in upkeep()'s step 4 list.
+//
+// Ledger shares the same "next round only, consumed once" lifecycle (D1,
+// #70): a seat's Ledger purchase is only ever meant to inform the very
+// next order phase, so it is cleared here too, before this round's own
+// resolveAddons (addons.go) can write a fresh one.
 func resetRoundFlags(players []Player) {
 	for i := range players {
 		players[i].Flagged = false
 		players[i].EvasiveStepPenalty = false
+		players[i].Ledger = nil
 	}
 }
 
@@ -100,19 +106,15 @@ func movementSteps(seats []game.SeatID, validated map[game.SeatID]game.Order) in
 // mergeConfrontations, movement.go) already located and node-ordered (GDD
 // §15; RFC §6.5).
 
-// resolveActions is a stub — issue #70 implements Step N+1: actions,
-// resolved in ascending Infamy order.
-func resolveActions(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, r *RNG) []game.Event {
-	return nil
-}
+// resolveActions (issue #70) is defined in actions.go: Step N+1's six
+// contended/uncontended actions (Pickup, Stake Post, Deal, Vanish,
+// Surveil, Nothing), resolved in ascending Infamy order.
 
-// resolveDeliveries is a stub — issue #70 implements Step N+2: payments,
-// Infamy, RP, and global delivery announcements.
-func resolveDeliveries(s *MatchState, r *RNG) []game.Event { return nil }
+// resolveDeliveries (issue #70) is defined in deliveries.go: Step N+2's
+// Deliver, payments, Infamy, RP, and the global delivery announcement.
 
-// resolveAddons is a stub — issue #70 implements Step N+3: the Ledger and
+// resolveAddons (issue #70) is defined in addons.go: Step N+3's Ledger and
 // lease renewals.
-func resolveAddons(s *MatchState, validated map[game.SeatID]game.Order) []game.Event { return nil }
 
 // writeTrail is a stub — issue #71 implements Step N+4: Loitering
 // evaluation, crate heat, per-node logs, and sight-gated distribution.

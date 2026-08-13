@@ -174,4 +174,10 @@ type Event struct {
 
 	// Contract is the contract fulfilled. Populated only for EventDelivered.
 	Contract ContractID
+
+	// Tier is the contract tier delivered, 0-3 indexing Config.Contracts.
+	// Populated only for EventDelivered — the delivery announcement always
+	// names tier alongside actor and location (GDD §7.3), matching
+	// Anchor's own Tier field (view.go), which this is the source of.
+	Tier int
 }
