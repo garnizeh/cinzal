@@ -145,3 +145,80 @@ func TestDistancesRespectsBridgeDown(t *testing.T) {
 		t.Errorf("after Bridge Down: distances(0)[1] = %d, want 2 (only remaining path is 0-2-1)", got)
 	}
 }
+
+// sectorGraph builds a Graph of n nodes from an adjacency map, exactly like
+// buildGraph, but also stamps each node's Sector from sectors — the shape
+// distancesToSector's multi-source BFS needs that a plain buildGraph graph
+// does not carry. A node absent from sectors keeps FogState's zero-value
+// analogue for Sector, an invalid value distinct from every real one (GDD
+// §3 has exactly four), which is fine here: these tests only ever query
+// distance to a sector some node explicitly claims.
+func sectorGraph(n int, edges map[game.NodeID][]game.NodeID, sectors map[game.NodeID]game.Sector) Graph {
+	g := buildGraph(n, edges)
+	for id, sector := range sectors {
+		g.Nodes[id].Sector = sector
+	}
+	return g
+}
+
+// TestDistancesToSectorZeroAtEverySectorMember asserts every node belonging
+// to the target sector reports distance 0 — the multi-source BFS's base
+// case, mirroring TestDistancesFromSrcIsZero's single-source one.
+func TestDistancesToSectorZeroAtEverySectorMember(t *testing.T) {
+	g := sectorGraph(3, map[game.NodeID][]game.NodeID{0: {1}, 1: {0, 2}, 2: {1}},
+		map[game.NodeID]game.Sector{1: game.SectorMistHeights, 2: game.SectorMistHeights})
+
+	dist := g.distancesToSector(game.SectorMistHeights)
+	if dist[1] != 0 {
+		t.Errorf("distancesToSector(MistHeights)[1] = %d, want 0 (node 1 is itself in the sector)", dist[1])
+	}
+	if dist[2] != 0 {
+		t.Errorf("distancesToSector(MistHeights)[2] = %d, want 0 (node 2 is itself in the sector)", dist[2])
+	}
+	if dist[0] != 1 {
+		t.Errorf("distancesToSector(MistHeights)[0] = %d, want 1 (one step from either sector member)", dist[0])
+	}
+}
+
+// TestDistancesToSectorUnreachableIsNegativeOne asserts a sector with no
+// member reachable at all reports -1 everywhere — the sentinel Pushing On's
+// priority ladder reads as "sector unreachable, fall through to level 4"
+// (GDD §9.1).
+func TestDistancesToSectorUnreachableIsNegativeOne(t *testing.T) {
+	g := sectorGraph(2, map[game.NodeID][]game.NodeID{0: {1}, 1: {0}}, nil)
+
+	dist := g.distancesToSector(game.SectorNorthVale)
+	for i, d := range dist {
+		if d != -1 {
+			t.Errorf("distancesToSector(NorthVale)[%d] = %d, want -1 (no node belongs to that sector)", i, d)
+		}
+	}
+}
+
+// TestDistancesToSectorRoutesAroundBridgeDownAndSinkhole is the issue's own
+// acceptance criterion: "a test with a destroyed edge and a Sinkhole
+// asserts the ladder routes around both." Node 3 is the only sector member,
+// reachable two ways: the graph is already built with only currently-
+// navigable edges (Bridge Down's own convention — a destroyed edge is
+// simply absent, per Node's own comment, exactly as
+// TestDistancesRespectsBridgeDown exercises for the single-source case),
+// and the shorter of the two surviving paths, through node 1, is additionally
+// blocked by node 1's Sinkhole — forcing the longer 0-2-4-3 detour.
+func TestDistancesToSectorRoutesAroundBridgeDownAndSinkhole(t *testing.T) {
+	g := sectorGraph(5, map[game.NodeID][]game.NodeID{
+		0: {1, 2},
+		1: {0, 3},
+		2: {0, 4},
+		3: {1, 4},
+		4: {2, 3},
+	}, map[game.NodeID]game.Sector{3: game.SectorMistHeights})
+	g.Nodes[1].SinkholeRounds = 3
+
+	dist := g.distancesToSector(game.SectorMistHeights)
+	if dist[0] != 3 {
+		t.Errorf("distancesToSector(MistHeights)[0] = %d, want 3 (via 0-2-4-3; node 1's Sinkhole blocks the shorter 0-1-3)", dist[0])
+	}
+	if dist[1] != -1 {
+		t.Errorf("distancesToSector(MistHeights)[1] = %d, want -1 (node 1 is Sinkholed and never entered)", dist[1])
+	}
+}
