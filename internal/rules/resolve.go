@@ -33,12 +33,16 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	// Steps 1..N — synchronized movement (RFC §6.7). The collision check
 	// runs at least once per round even when every route is empty (GDD
 	// §15: a table where nobody moves still resolves) — movementSteps
-	// enforces that floor.
+	// enforces that floor. walks is #68's own per-round movement
+	// bookkeeping (seatWalk, movement.go) — local to this call, never part
+	// of MatchState.
+	walks := newSeatWalks(next, seats)
 	for step := 1; step <= movementSteps(seats, validated); step++ {
-		advance(&next, validated, step)
-		events = append(events, detectCrossings(next, validated, step)...)
-		events = append(events, detectCollisions(next, step)...)
-		events = append(events, resolveConfrontations(&next, r)...)
+		transitions := advance(&next, walks, validated, seats, step, r)
+		crossings := detectCrossings(transitions, seats, validated)
+		collisions := detectCollisions(next, seats)
+		pending := mergeConfrontations(next, crossings, collisions)
+		events = append(events, resolveConfrontations(&next, pending, r)...)
 	}
 
 	events = append(events, resolveActions(&next, validated, seats, r)...)
@@ -86,22 +90,17 @@ func movementSteps(seats []game.SeatID, validated map[game.SeatID]game.Order) in
 	return steps
 }
 
-// advance is a stub — issue #68 implements synchronized movement.
-func advance(s *MatchState, validated map[game.SeatID]game.Order, step int) {}
+// advance, detectCrossings, detectCollisions, and mergeConfrontations are
+// issue #68's synchronized-movement, crossing, and collision detection —
+// see movement.go.
 
-// detectCrossings is a stub — issue #68 implements crossing detection
-// (two players traversing the same edge in opposite directions).
-func detectCrossings(s MatchState, validated map[game.SeatID]game.Order, step int) []game.Event {
+// resolveConfrontations is a stub — issue #69 implements the confrontation
+// dice roll, pushback, and displacement, for every group #68's detection
+// (advance, detectCrossings, detectCollisions, mergeConfrontations,
+// movement.go) already located and node-ordered (GDD §15; RFC §6.5).
+func resolveConfrontations(s *MatchState, pending []confrontation, r *RNG) []game.Event {
 	return nil
 }
-
-// detectCollisions is a stub — issue #68 implements collision detection
-// (two or more players ending a step on the same node).
-func detectCollisions(s MatchState, step int) []game.Event { return nil }
-
-// resolveConfrontations is a stub — issue #69 implements the confrontation,
-// pushback, and displacement.
-func resolveConfrontations(s *MatchState, r *RNG) []game.Event { return nil }
 
 // resolveActions is a stub — issue #70 implements Step N+1: actions,
 // resolved in ascending Infamy order.

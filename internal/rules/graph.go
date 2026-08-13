@@ -48,3 +48,50 @@ func (g Graph) distances(src game.NodeID) []int {
 
 	return dist
 }
+
+// distancesToSector returns g's BFS shortest-path distance from every node
+// to the nearest node of sector, on the currently navigable graph — the
+// same navigable-graph rule distances documents (GDD §9.1a item 0),
+// extended to a multi-source walk: Pushing On's priority ladder (GDD §9.1)
+// needs "the shortest graph distance from the current node to the nearest
+// node of the declared sector," which is a distance-to-a-set query, not a
+// distance-to-a-single-node one.
+//
+// A Sinkholed node of sector is not a valid source — it is impassable, so it
+// cannot be the "nearest node" a blind step is ever steered toward reaching
+// — but it is still a valid node to walk *through* once reached some other
+// way is moot here, since Node.Edges/SinkholeRounds already keep it out of
+// the walk entirely, exactly as distances does.
+//
+// distancesToSector[n] is -1 when no node of sector is reachable from n —
+// the sentinel the priority ladder reads as "sector unreachable, fall
+// through to level 4" (GDD §9.1).
+func (g Graph) distancesToSector(sector game.Sector) []int {
+	dist := make([]int, len(g.Nodes))
+	for i := range dist {
+		dist[i] = -1
+	}
+
+	var queue []game.NodeID
+	for _, n := range g.Nodes {
+		if n.Sector == sector && n.SinkholeRounds == 0 {
+			dist[n.ID] = 0
+			queue = append(queue, n.ID)
+		}
+	}
+
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+
+		for _, next := range g.Nodes[cur].Edges {
+			if g.Nodes[next].SinkholeRounds > 0 || dist[next] != -1 {
+				continue
+			}
+			dist[next] = dist[cur] + 1
+			queue = append(queue, next)
+		}
+	}
+
+	return dist
+}
