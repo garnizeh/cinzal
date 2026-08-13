@@ -333,6 +333,19 @@ func resolveFenceWindfallClaim(s *MatchState, seats []game.SeatID, r *RNG) []gam
 	winner := resolveFairnessTie(*s, candidates, r)
 	p := &s.Players[winner]
 	p.Balance += fenceWindfallPayout
+	// GDD §14.2: "buys any cargo outright... no contract needed" — bound
+	// cargo is eligible too, not only a loose crate (Dead Runner's own
+	// framing). Selling it destroys the cargo the same way a delivery
+	// consumes it, so the matching contract is discarded here exactly as
+	// resolveOneDelivery discards a fulfilled one (deliveries.go) — left
+	// standing, it could never be fulfilled again, and would still charge
+	// its own deadline-miss penalty later at Upkeep: paying twice for one
+	// lost crate.
+	if p.Cargo.Bound {
+		if idx := slices.IndexFunc(p.Contracts, func(c Contract) bool { return c.ID == p.Cargo.Contract }); idx >= 0 {
+			p.Contracts = slices.Delete(p.Contracts, idx, idx+1)
+		}
+	}
 	p.Cargo = nil
 	s.Graph.Nodes[flagged].FenceWindfallActive = false
 	return nil

@@ -295,16 +295,23 @@ func endingNode(v game.PlayerView, o game.Order) (game.NodeID, game.NodeType, bo
 // conflicts are explicitly a degradation case (GDD §15.0: "the target node
 // got staked by someone else"), checked at Resolve, not here.
 func legalAction(v game.PlayerView, o game.Order) error {
+	// Dockers' Strike (GDD §14.2, issue #72) suspends Pickup unconditionally
+	// — it has no node-type dependency, unlike Deliver/Deal below — so it
+	// must be checked before the Hidden-ending-node early return: a Pickup
+	// declared into unexplored territory is exactly as suspended as one
+	// declared anywhere else, and endingNode reports "unknown" for a Hidden
+	// ending node precisely because its type is undisclosed, not because
+	// this check should be skipped.
+	if o.Action.Kind == game.ActionPickup && v.You.DockersStrike {
+		return illegal(ReasonPickupSuspended, "dockers' strike is active this round")
+	}
+
 	node, nodeType, known := endingNode(v, o)
 	if !known {
 		return nil
 	}
 
 	switch o.Action.Kind {
-	case game.ActionPickup:
-		if v.You.DockersStrike {
-			return illegal(ReasonPickupSuspended, "dockers' strike is active this round")
-		}
 	case game.ActionDeliver:
 		if nodeType != game.NodeBorder {
 			return illegal(ReasonIllegalActionAtNode,

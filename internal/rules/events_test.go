@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"reflect"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -182,6 +183,33 @@ func TestResolveFenceWindfallClaimAwardsFirstArrival(t *testing.T) {
 	}
 }
 
+// TestResolveFenceWindfallClaimDiscardsMatchingBoundContract guards the
+// bug CodeRabbit caught in review: GDD §14.2's "buys any cargo outright...
+// no contract needed" makes bound cargo eligible too, not only a loose
+// crate — but selling it destroys the cargo, so the matching contract must
+// be discarded the same way resolveOneDelivery discards a fulfilled one
+// (deliveries.go). Left standing, an orphaned contract could never be
+// fulfilled and would still charge its own deadline-miss penalty later,
+// paying twice for one lost crate.
+func TestResolveFenceWindfallClaimDiscardsMatchingBoundContract(t *testing.T) {
+	s := eventsTestState(3)
+	s.Graph.Nodes[3].FenceWindfallActive = true
+	s.Players[0].Cargo = &game.CarriedCargo{Bound: true, Contract: 0}
+	s.Players[0].Contracts = []Contract{{ID: 0, Origin: 0, Destination: 1}}
+
+	resolveFenceWindfallClaim(&s, bySeat(s), NewRNG(testSeed(1), 7))
+
+	if got := s.Players[0].Balance; got != 32 {
+		t.Errorf("Balance = %d, want 32 (20 + Cr$12)", got)
+	}
+	if s.Players[0].Cargo != nil {
+		t.Error("seat 0 still carries cargo, want it sold")
+	}
+	if len(s.Players[0].Contracts) != 0 {
+		t.Errorf("Contracts = %+v, want none — the matching contract must be discarded with the cargo it named", s.Players[0].Contracts)
+	}
+}
+
 // TestResolveFenceWindfallClaimContestedByFairnessTie: two seats both end
 // the round at the flagged node carrying cargo — the claim is contested by
 // the identical fairness-tie-break chain New Boss's and Bounty's own
@@ -298,13 +326,17 @@ func TestResolveNewBossTieBreaksByFairnessKey(t *testing.T) {
 	s.Players[0].RP, s.Players[1].RP, s.Players[2].RP = 1, 1, 9
 	s.Players[0].Infamy, s.Players[1].Infamy = 5, 2 // seat 1 lower Infamy wins the tie
 
-	resolveNewBoss(&s, NewRNG(testSeed(1), 7))
+	r := NewRNG(testSeed(1), 7)
+	resolveNewBoss(&s, r)
 
 	if got := s.Players[1].Balance; got != 30 {
 		t.Errorf("seat 1 (lower Infamy among the RP tie) Balance = %d, want 30", got)
 	}
 	if got := s.Players[0].Balance; got != 20 {
 		t.Errorf("seat 0 Balance = %d, want unchanged 20", got)
+	}
+	if got := r.Consumed(PurposeConfrontTiebreak); got != 0 {
+		t.Errorf("PurposeConfrontTiebreak consumed = %d, want 0 — Infamy alone resolves the RP tie, no coin drawn (RFC §6.4's lazy-draw rule)", got)
 	}
 }
 
@@ -596,6 +628,48 @@ func TestGlobalEventNoOpWhenNoCardLive(t *testing.T) {
 
 	if events := globalEvent(&s, ctx, nil, NewRNG(testSeed(1), 2)); events != nil {
 		t.Errorf("globalEvent() = %+v, want nil", events)
+	}
+}
+
+// TestGlobalEventDispatchesEveryCard is a dispatch-completeness guard
+// CodeRabbit flagged in review: every other test in this file calls a card's
+// resolver function directly, which proves the resolver is correct but
+// never proves globalEvent's own switch actually routes that card's ID to
+// it. A card added to allEvents/the deck without a matching case here would
+// silently do nothing for the whole match and nothing above would catch
+// it — RFC §6.6's exact "a rule simply stops firing, and nobody notices"
+// failure shape. One shared fixture gives every one of the 18 cards not in
+// TestGlobalEventAlreadyAppliedCardsAreNoOpAtPop's no-op set a real,
+// distinguishable target to act on, so a missing case shows up as "no
+// state change, no events" here rather than passing by accident.
+func TestGlobalEventDispatchesEveryCard(t *testing.T) {
+	noOpAtPop := map[EventCardID]bool{
+		EventCurfew: true, EventGatesClosed: true, EventPermitAuction: true,
+		EventDragnet: true, EventShippingBoom: true, EventRain: true,
+	}
+
+	for _, c := range allEvents {
+		if noOpAtPop[c.ID] {
+			continue // covered by TestGlobalEventAlreadyAppliedCardsAreNoOpAtPop
+		}
+		t.Run(c.Name, func(t *testing.T) {
+			s := eventsTestState(0, 0)
+			s.Players[0].Balance, s.Players[1].Balance = 20, 20
+			s.Players[0].Infamy, s.Players[1].Infamy = 5, 3 // seat 0 is the sole Infamy leader (Raid)
+			s.Players[0].RP, s.Players[1].RP = 5, 8         // seat 1 is the sole RP leader (Bounty); seat 0 the sole trailer (New Boss)
+			s.Players[0].Posts = []game.NodeID{1}           // Payroll Day has something to charge
+			s.Players[0].LastOfferRound, s.Players[1].LastOfferRound = 5, 5
+
+			before := s.clone()
+			ctx := globalEventContext{card: c.ID, live: true, festivalNode: 0, shippingBoomNode: 0}
+			roundEvents := []game.Event{{Kind: game.EventConfrontation, Round: s.Round, Seat: 0, Target: 1}} // Bounty: seat 0 defeated seat 1
+
+			events := globalEvent(&s, ctx, roundEvents, NewRNG(testSeed(1), int(s.Round)))
+
+			if len(events) == 0 && reflect.DeepEqual(s, before) {
+				t.Errorf("globalEvent() with card %s (ID %d) produced no state change and no events — check the dispatch switch has a case for it", c.Name, c.ID)
+			}
+		})
 	}
 }
 
