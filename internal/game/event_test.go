@@ -27,10 +27,18 @@ func TestEventKindNamesAreStable(t *testing.T) {
 		EventTierFeared:     "TierFeared",
 		EventTierLegend:     "TierLegend",
 		EventInformants:     "Informants",
+
+		// Not RFC §9.1 writer rows at all — Resolve's Step 0 vocabulary
+		// (GDD §15.0, issue #67): rejection and the three named
+		// degradation causes.
+		EventOrderRejected:    "OrderRejected",
+		EventRouteTruncated:   "RouteTruncated",
+		EventStakeTargetTaken: "StakeTargetTaken",
+		EventPickupTargetGone: "PickupTargetGone",
 	}
 
-	if len(want) != 12 {
-		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows is 12, table has %d", len(want))
+	if len(want) != 16 {
+		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows plus Step 0's 4 is 16, table has %d", len(want))
 	}
 
 	for kind, name := range want {

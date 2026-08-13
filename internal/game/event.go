@@ -76,6 +76,35 @@ const (
 	// current position is revealed to everyone, once (GDD §14.2, RFC §9.1
 	// row 11).
 	EventInformants
+
+	// The four kinds below are Resolve's Step 0 vocabulary (GDD §15.0,
+	// issue #67): "Orders never silently fail" — every rejection or
+	// degradation produces one of these rather than a silent substitution.
+	// None of the four is in RFC §9.1's authorised-writer table: they are
+	// producer-side bookkeeping for the acting seat's own order, not a
+	// fact about another seat's position, so no fog question arises for
+	// them the way it does for the kinds above.
+
+	// EventOrderRejected is Step 0's response to an illegal payload (GDD
+	// §15.0's reject table): the whole order was discarded and the
+	// absence default (§18) applied instead. Named — Seat only.
+	EventOrderRejected
+
+	// EventRouteTruncated is Step 0 degradation: a route step's edge no
+	// longer exists (e.g. a prior round's Bridge Down). The route
+	// truncated at Node, the last node still reachable, and the action
+	// became Nothing (GDD §15.0 "Step 0").
+	EventRouteTruncated
+
+	// EventStakeTargetTaken is Step 0 degradation: a declared Stake Post
+	// at Node is no longer legal because someone else already holds it.
+	// The action became Nothing; the route is unaffected.
+	EventStakeTargetTaken
+
+	// EventPickupTargetGone is Step 0 degradation: a declared Pickup at
+	// Node no longer has matching cargo on the ground. The action became
+	// Nothing; the route is unaffected.
+	EventPickupTargetGone
 )
 
 // String returns the event kind's name, or "EventKind(n)" for an invalid
@@ -106,6 +135,14 @@ func (k EventKind) String() string {
 		return "TierLegend"
 	case EventInformants:
 		return "Informants"
+	case EventOrderRejected:
+		return "OrderRejected"
+	case EventRouteTruncated:
+		return "RouteTruncated"
+	case EventStakeTargetTaken:
+		return "StakeTargetTaken"
+	case EventPickupTargetGone:
+		return "PickupTargetGone"
 	default:
 		return invalidEnumString("EventKind", int(k))
 	}
