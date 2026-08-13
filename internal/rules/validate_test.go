@@ -168,6 +168,31 @@ func TestValidateDegradesPickupTargetGone(t *testing.T) {
 	}
 }
 
+// TestValidateDoesNotDegradeWarehousePickup guards the bug this issue (#70)
+// fixed: pickupAvailable (cargo.go) must recognize GDD §9.2's first Pickup
+// source — "a Warehouse matching a held contract" — not only dropped ground
+// cargo. Before the fix, checkActionDegradation's narrower check would have
+// wrongly degraded every legitimate Warehouse Pickup to Nothing here, since
+// a Warehouse's own supply is never represented as a Graph.Cargo entry.
+func TestValidateDoesNotDegradeWarehousePickup(t *testing.T) {
+	s := resolveTestState() // seat 0 at node 0 (Warehouse), no Graph.Cargo entries
+	s.Players[0].Contracts = []Contract{{ID: 0, Origin: 0, Destination: 2}}
+	entry := s.Snapshot()
+	seats := bySeat(s)
+	orders := map[game.SeatID]game.Order{
+		0: {Action: game.ActionOrder{Kind: game.ActionPickup}},
+	}
+
+	validated, events := validate(s, entry, seats, orders, legalTestConfig())
+
+	if got := validated[0].Action.Kind; got != game.ActionPickup {
+		t.Errorf("validated[0].Action.Kind = %v, want Pickup (not degraded)", got)
+	}
+	if hasEvent(events, game.EventPickupTargetGone, 0) {
+		t.Errorf("events = %+v, want no EventPickupTargetGone for a genuine Warehouse Pickup", events)
+	}
+}
+
 // TestValidatePassesThroughLegalOrder checks the un-degraded, un-rejected
 // case: a fully legal order with no live-state conflict comes back
 // unchanged and produces no Step 0 event.

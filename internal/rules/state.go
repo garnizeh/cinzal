@@ -209,6 +209,19 @@ type Player struct {
 	// not a real human submission, feeding Autopilot engagement (RFC
 	// §8.2). Lifetime: until a real submission.
 	ConsecutiveDefaults int
+
+	// Ledger is every seat's exact balance as of the end of the previous
+	// round (the entry snapshot), set by resolveAddons when this seat buys
+	// the Ledger add-on this round (GDD §5.1, §9.5), nil otherwise. Not one
+	// of RFC §6.6's original eight cross-round fields — the RFC's own text
+	// there argues against a *stored* "previous round's balances" field,
+	// which this is not: it is this seat's private purchase *result*, and
+	// it exists because Project (#75) reads this MatchState, not Resolve's
+	// local entry snapshot, which is discarded when Resolve returns.
+	// Cleared at the same top-of-Resolve point as Flagged and
+	// EvasiveStepPenalty (resetRoundFlags, resolve.go): "next round only,
+	// consumed once."
+	Ledger []game.LedgerEntry
 }
 
 // MatchState is the match's authoritative state: the graph and every seat,
@@ -405,6 +418,11 @@ func (p Player) clone() Player {
 	if p.Fog != nil {
 		clone.Fog = make([]game.FogState, len(p.Fog))
 		copy(clone.Fog, p.Fog)
+	}
+
+	if p.Ledger != nil {
+		clone.Ledger = make([]game.LedgerEntry, len(p.Ledger))
+		copy(clone.Ledger, p.Ledger)
 	}
 
 	clone.Archive = cloneArchive(p.Archive)

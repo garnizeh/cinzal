@@ -80,6 +80,12 @@ const (
 	// one that isn't FogKnown and exactly 2 steps away on this seat's own
 	// known subgraph (D25).
 	ReasonInvalidItemTarget
+
+	// ReasonLedgerFinalRound is a Buy Ledger add-on declared for the
+	// match's final round — GDD §5.1: "The Ledger cannot be purchased in
+	// the final round," closing the loophole of computing the exact
+	// delivery needed to win by one point in the round bands matter most.
+	ReasonLedgerFinalRound
 )
 
 // String returns the reason's short name, or "Reason(n)" for an invalid
@@ -110,6 +116,8 @@ func (r Reason) String() string {
 		return "item is not a discard"
 	case ReasonInvalidItemTarget:
 		return "invalid item target"
+	case ReasonLedgerFinalRound:
+		return "ledger cannot be purchased in the final round"
 	default:
 		return fmt.Sprintf("Reason(%d)", uint8(r))
 	}
@@ -325,10 +333,16 @@ func deliverableCargo(v game.PlayerView, node game.NodeID) bool {
 }
 
 // legalBalance checks GDD §15.0's "Add-ons or a lease exceeding your balance
-// at submission" row. Aggressive stance's stake is deliberately excluded:
-// neither the GDD row nor RFC §10.2 name it here — RFC §10.2 row 6 treats
-// stake affordability as an affordance clamp, not a submission-time reject.
+// at submission" row, plus GDD §5.1's final-round Ledger restriction.
+// Aggressive stance's stake is deliberately excluded: neither the GDD row
+// nor RFC §10.2 name it here — RFC §10.2 row 6 treats stake affordability
+// as an affordance clamp, not a submission-time reject.
 func legalBalance(v game.PlayerView, o game.Order, cfg game.Config) error {
+	if o.AddOns.BuyLedger && int(o.Round) >= cfg.Rounds {
+		return illegal(ReasonLedgerFinalRound,
+			fmt.Sprintf("ledger declared for round %d, the match's final round (%d)", o.Round, cfg.Rounds))
+	}
+
 	cost := 0
 	if o.AddOns.BuyLedger {
 		cost += cfg.LedgerCost

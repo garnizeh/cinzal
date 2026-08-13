@@ -196,6 +196,38 @@ func TestLegalRejectsAddOnsExceedingBalance(t *testing.T) {
 	wantReason(t, Legal(v, o, legalTestConfig()), ReasonInsufficientBalance)
 }
 
+// TestLegalRejectsLedgerInFinalRound is half of this issue's (#70)
+// acceptance criterion "The Ledger is rejected in the final round, at
+// Legal and again at resolution" — this half is the submission-time
+// reject; TestResolveAddonsLedgerRejectedInFinalRoundAtResolution
+// (addons_test.go) covers resolution's own defensive floor. GDD §5.1:
+// "The Ledger cannot be purchased in the final round."
+func TestLegalRejectsLedgerInFinalRound(t *testing.T) {
+	v := legalTestView()
+	cfg := legalTestConfig()
+	o := game.Order{
+		Round:  game.RoundNumber(cfg.Rounds),
+		Action: game.ActionOrder{Kind: game.ActionNothing},
+		AddOns: game.AddOns{BuyLedger: true},
+	}
+	wantReason(t, Legal(v, o, cfg), ReasonLedgerFinalRound)
+}
+
+// TestLegalAcceptsLedgerBeforeFinalRound is the positive baseline for the
+// row above: the identical order one round earlier is legal.
+func TestLegalAcceptsLedgerBeforeFinalRound(t *testing.T) {
+	v := legalTestView()
+	cfg := legalTestConfig()
+	o := game.Order{
+		Round:  game.RoundNumber(cfg.Rounds - 1),
+		Action: game.ActionOrder{Kind: game.ActionNothing},
+		AddOns: game.AddOns{BuyLedger: true},
+	}
+	if err := Legal(v, o, cfg); err != nil {
+		t.Fatalf("Legal() = %v, want nil", err)
+	}
+}
+
 // TestLegalRejectsStakeBeyondPostCap: GDD §15.0 row "Staking beyond your
 // post cap".
 func TestLegalRejectsStakeBeyondPostCap(t *testing.T) {

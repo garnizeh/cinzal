@@ -64,6 +64,49 @@ func LooseCrateHeatFires(heldRounds int) bool {
 	return heldRounds >= 2
 }
 
+// warehousePickupContract reports the first of seat's held contracts whose
+// Origin is node, when node is a Warehouse (GDD §9.2's first Pickup source:
+// "a Warehouse matching a held contract") — the source with no supply limit
+// (GDD §6.2, cut in v1.1), so nothing is consumed from Graph.Cargo here.
+func warehousePickupContract(s MatchState, seat game.SeatID, node game.NodeID) (Contract, bool) {
+	if s.Graph.Nodes[node].Type != game.NodeWarehouse {
+		return Contract{}, false
+	}
+	for _, c := range s.Players[seat].Contracts {
+		if c.Origin == node {
+			return c, true
+		}
+	}
+	return Contract{}, false
+}
+
+// groundCargoIndex returns the index into s.Graph.Cargo of the first entry at
+// node seat may collect (GDD §9.2's second Pickup source: "any node with
+// dropped cargo you have the contract for"), via CanCollect — a bound crate
+// needing a matching contract, an unbound loose crate collectible by anyone.
+func groundCargoIndex(s MatchState, seat game.SeatID, node game.NodeID) (int, bool) {
+	for i, c := range s.Graph.Cargo {
+		if c.Node == node && CanCollect(s.Players[seat].Contracts, c) {
+			return i, true
+		}
+	}
+	return 0, false
+}
+
+// pickupAvailable reports whether a Pickup at node would find something for
+// seat to take, checking both GDD §9.2 sources. This is the predicate
+// validate.go's Step 0 degradation check must use — checking only
+// groundCargoIndex, as an earlier version of that check did, would wrongly
+// degrade every legitimate Warehouse Pickup, since a Warehouse's own supply
+// is never represented as a Graph.Cargo entry at all.
+func pickupAvailable(s MatchState, seat game.SeatID, node game.NodeID) bool {
+	if _, ok := groundCargoIndex(s, seat, node); ok {
+		return true
+	}
+	_, ok := warehousePickupContract(s, seat, node)
+	return ok
+}
+
 // Deliver reports GDD §8.3's payout for completing c: Cr$ payment and RP
 // from c's tier row, plus the Infamy gained on delivery — 1 for Tiers I and
 // II, 2 for Tiers III and IV ("Delivering any contract grants +1 Infamy;
