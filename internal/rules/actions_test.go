@@ -212,6 +212,39 @@ func TestResolveActionsStakePost(t *testing.T) {
 	}
 }
 
+// TestResolveActionsStakePostFirstInSectorAfterDebtSurrender is a
+// regression test for a CodeRabbit finding on this PR: FirstPostInSector
+// must be read *after* applyDebt, not before. Seat 0 starts broke, holding
+// one existing post (node 3) that Debt's cascade will surrender to cover
+// the new stake's own unaffordable cost — actionsTestGraph gives every
+// node the same (zero-value) Sector, so before the surrender the seat
+// still "holds a post in this sector" and FirstPostInSector would wrongly
+// report false; after the surrender it genuinely doesn't, and the GDD §11
+// first-post-in-sector Infamy bonus is due.
+func TestResolveActionsStakePostFirstInSectorAfterDebtSurrender(t *testing.T) {
+	s := actionsTestState(1, 0) // seat 1 unused, present only so PostCapByPlayers[2] applies
+	cfg := legalTestConfig()
+	s.Players[0].Balance = 0
+	s.Players[0].Infamy = 1
+	s.Players[0].Posts = []game.NodeID{3}
+	s.Graph.Nodes[3].Post = &Post{Owner: 0, RoundsRemaining: 1}
+
+	validated := map[game.SeatID]game.Order{
+		0: {
+			Action: game.ActionOrder{Kind: game.ActionStakePost},
+			AddOns: game.AddOns{RenewPost: 1, RenewBlocks: 1},
+		},
+	}
+	resolveActions(&s, validated, bySeat(s), cfg, NewRNG(testSeed(1), 6))
+
+	if s.Graph.Nodes[3].Post != nil {
+		t.Fatalf("Nodes[3].Post = %+v, want nil (surrendered to Debt) — test setup is broken", s.Graph.Nodes[3].Post)
+	}
+	if got := s.Players[0].Infamy; got != 1 {
+		t.Errorf("Infamy = %d, want 1 (-1 Debt, +1 first-post-in-sector — the bonus is due once the surrender clears the sector)", got)
+	}
+}
+
 // TestResolveActionsStakePostAlreadyOwnedWithinSameStep proves the
 // Step-N+1-time re-verification D4 describes: node 1 is already owned by
 // seat 1 by the time seat 0's own Stake Post would execute (simulating an

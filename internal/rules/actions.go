@@ -154,10 +154,14 @@ func resolveStakePost(s *MatchState, seat game.SeatID, node game.NodeID, o game.
 		return nil
 	}
 
-	firstInSector := FirstPostInSector(*s, seat, node)
-
 	cost := o.AddOns.RenewBlocks * cfg.LeaseCostPerBlock
 	_, debtEvent := applyDebt(s, seat, cost, round)
+
+	// Read after applyDebt, not before: a Debt-surrendered lease (GDD §13
+	// step 3) can be the seat's only other post in this sector, which
+	// would flip this from false to true — computing it earlier could
+	// wrongly deny GDD §11's "stake your first post in a sector +1".
+	firstInSector := FirstPostInSector(*s, seat, node)
 
 	rounds := RenewedRoundsRemaining(0, o.AddOns.RenewBlocks, cfg)
 	s.Graph.Nodes[node].Post = &Post{Owner: seat, RoundsRemaining: rounds}
