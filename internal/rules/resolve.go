@@ -45,10 +45,11 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 		events = append(events, resolveConfrontations(&next, pending, validated, walks, cfg, r)...)
 	}
 
-	events = append(events, resolveActions(&next, validated, seats, cfg, r)...)
+	actionEvents, vanishReducedInfamy := resolveActions(&next, validated, seats, cfg, r)
+	events = append(events, actionEvents...)
 	events = append(events, resolveDeliveries(&next, validated, cfg)...)
 	events = append(events, resolveAddons(&next, validated, entry, cfg)...)
-	events = append(events, writeTrail(&next)...)
+	events = append(events, writeTrail(&next, validated, seats, walks, vanishReducedInfamy, events)...)
 	events = append(events, globalEvent(&next, r)...)
 	events = append(events, incident(&next, r)...)
 	events = append(events, pressure(&next, r)...)
@@ -116,9 +117,9 @@ func movementSteps(seats []game.SeatID, validated map[game.SeatID]game.Order) in
 // resolveAddons (issue #70) is defined in addons.go: Step N+3's Ledger and
 // lease renewals.
 
-// writeTrail is a stub — issue #71 implements Step N+4: Loitering
-// evaluation, crate heat, per-node logs, and sight-gated distribution.
-func writeTrail(s *MatchState) []game.Event { return nil }
+// writeTrail (issue #71) is defined in trail.go: Step N+4's Loitering
+// evaluation, crate heat, per-node trail logs, and sight-gated distribution
+// into every seat's SeatArchive.
 
 // globalEvent is a stub — issue #72 implements the 24-card global event
 // deck.

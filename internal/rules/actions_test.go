@@ -162,7 +162,7 @@ func TestResolveActionsConfrontationLoserRunsNoAction(t *testing.T) {
 	validated := map[game.SeatID]game.Order{
 		0: {Action: game.ActionOrder{Kind: game.ActionNothing}}, // haltMovement's own result
 	}
-	events := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
+	events, _ := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
 
 	if s.Players[0].Cargo != nil {
 		t.Errorf("Cargo = %+v, want nil — a Nothing action must not pick up", s.Players[0].Cargo)
@@ -190,7 +190,7 @@ func TestResolveActionsStakePost(t *testing.T) {
 			AddOns: game.AddOns{RenewPost: 1, RenewBlocks: 2},
 		},
 	}
-	events := resolveActions(&s, validated, bySeat(s), cfg, NewRNG(testSeed(1), 6))
+	events, _ := resolveActions(&s, validated, bySeat(s), cfg, NewRNG(testSeed(1), 6))
 
 	post := s.Graph.Nodes[1].Post
 	if post == nil || post.Owner != 0 {
@@ -261,7 +261,7 @@ func TestResolveActionsStakePostAlreadyOwnedWithinSameStep(t *testing.T) {
 			AddOns: game.AddOns{RenewPost: 1, RenewBlocks: 1},
 		},
 	}
-	events := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
+	events, _ := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
 
 	if s.Players[0].Balance != 20 {
 		t.Errorf("Balance = %d, want 20 (unaffordable stake never charged)", s.Players[0].Balance)
@@ -284,7 +284,7 @@ func TestResolveActionsDeal(t *testing.T) {
 	validated := map[game.SeatID]game.Order{
 		0: {Action: game.ActionOrder{Kind: game.ActionDeal, Item: game.ItemMuscle}},
 	}
-	events := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
+	events, _ := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
 
 	if want := 20 - itemPrice(game.ItemMuscle); s.Players[0].Balance != want {
 		t.Errorf("Balance = %d, want %d", s.Players[0].Balance, want)
@@ -316,7 +316,7 @@ func TestResolveActionsDealItemAlreadyGone(t *testing.T) {
 	validated := map[game.SeatID]game.Order{
 		0: {Action: game.ActionOrder{Kind: game.ActionDeal, Item: game.ItemMuscle}},
 	}
-	events := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
+	events, _ := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
 
 	if s.Players[0].Balance != 20 {
 		t.Errorf("Balance = %d, want 20 (no purchase)", s.Players[0].Balance)
@@ -339,7 +339,7 @@ func TestResolveActionsVanish(t *testing.T) {
 	validated := map[game.SeatID]game.Order{
 		0: {Action: game.ActionOrder{Kind: game.ActionVanish}},
 	}
-	events := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
+	events, _ := resolveActions(&s, validated, bySeat(s), legalTestConfig(), NewRNG(testSeed(1), 6))
 
 	if s.Players[0].Infamy != 0 {
 		t.Errorf("Infamy = %d, want 0 (floored, not -1)", s.Players[0].Infamy)
