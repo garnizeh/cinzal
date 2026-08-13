@@ -39,6 +39,23 @@ type seatWalk struct {
 	// ladder call always reads the predecessor of its own From, never of
 	// itself.
 	Previous game.NodeID
+
+	// Path is the seat's round-start position followed by one entry per
+	// step this round where it genuinely moved (to != from) — the
+	// "distinct nodes actually traversed" pushback (#69, resolveConfrontations
+	// in confront.go) walks backward through, never a raw per-step (from,
+	// to) pair, since a confrontation can land on any step of a multi-step
+	// route. Seeded to [round-start position] by newSeatWalks and appended
+	// to by advance whenever a step moves the seat; confront.go's crossing
+	// correction may also rewrite Path's last entry when a crossing snaps a
+	// seat back to the node the fight actually resolves at.
+	Path []game.NodeID
+
+	// ShivFired is true once this seat's declared Shiv discard has already
+	// granted its +3 to one confrontation this round (GDD §9.4: "Fires on
+	// your first confrontation this round") — read and set by confront.go,
+	// never by this file.
+	ShivFired bool
 }
 
 // newSeatWalks seeds one seatWalk per seat in seats at s's current
@@ -46,11 +63,13 @@ type seatWalk struct {
 // and whose Pushing On begins immediately has "come from" nowhere yet this
 // round, and Previous == Position makes the ladder's backtrack exclusion a
 // harmless no-op for exactly that first blind step (a node is never its own
-// neighbour).
+// neighbour). Path starts as that same single position — the seat has
+// traversed zero nodes so far this round.
 func newSeatWalks(s MatchState, seats []game.SeatID) map[game.SeatID]*seatWalk {
 	walks := make(map[game.SeatID]*seatWalk, len(seats))
 	for _, seat := range seats {
-		walks[seat] = &seatWalk{Previous: s.Players[seat].Position}
+		pos := s.Players[seat].Position
+		walks[seat] = &seatWalk{Previous: pos, Path: []game.NodeID{pos}}
 	}
 	return walks
 }
@@ -96,6 +115,7 @@ func advance(s *MatchState, walks map[game.SeatID]*seatWalk, validated map[game.
 
 		if to != from {
 			s.Players[seat].Position = to
+			walk.Path = append(walk.Path, to)
 			scavenge(s, seat, to, r)
 		}
 
