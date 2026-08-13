@@ -159,6 +159,28 @@ func TestLegalAcceptsDeliverOfUnboundCargoAnywhereOnBorder(t *testing.T) {
 	}
 }
 
+// TestLegalRejectsPickupDuringDockersStrike is GDD §14.2's Dockers'
+// Strike, issue #72: "No Pickup action may be performed next round" — the
+// flag is already true before the order is ever built (set by the
+// previous round's card, read live off NextRoundModifiers), so this
+// rejects rather than degrades, unlike Curfew's route truncation.
+func TestLegalRejectsPickupDuringDockersStrike(t *testing.T) {
+	v := legalTestView()
+	v.You.DockersStrike = true
+	o := game.Order{Action: game.ActionOrder{Kind: game.ActionPickup}}
+	wantReason(t, Legal(v, o, legalTestConfig()), ReasonPickupSuspended)
+}
+
+// TestLegalAcceptsPickupWithoutDockersStrike is the negative baseline for
+// the check above.
+func TestLegalAcceptsPickupWithoutDockersStrike(t *testing.T) {
+	v := legalTestView()
+	o := game.Order{Action: game.ActionOrder{Kind: game.ActionPickup}}
+	if err := Legal(v, o, legalTestConfig()); err != nil {
+		t.Fatalf("Legal() = %v, want nil", err)
+	}
+}
+
 // TestLegalRejectsPushingOnWithAction: GDD §15.0 row "Pushing On combined
 // with an action".
 func TestLegalRejectsPushingOnWithAction(t *testing.T) {

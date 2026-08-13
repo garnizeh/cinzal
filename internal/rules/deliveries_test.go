@@ -24,7 +24,7 @@ func TestResolveDeliveriesPaysAndAnnounces(t *testing.T) {
 	validated := map[game.SeatID]game.Order{
 		0: {Action: game.ActionOrder{Kind: game.ActionDeliver}},
 	}
-	events := resolveDeliveries(&s, validated, cfg)
+	events := resolveDeliveries(&s, validated, cfg, globalEventContext{})
 
 	wantBalance := 20 - cfg.GateFee + tier.Payment
 	if s.Players[0].Balance != wantBalance {
@@ -79,7 +79,7 @@ func TestResolveDeliveriesGateFeeUnaffordableTriggersDebt(t *testing.T) {
 	validated := map[game.SeatID]game.Order{
 		0: {Action: game.ActionOrder{Kind: game.ActionDeliver}},
 	}
-	events := resolveDeliveries(&s, validated, cfg)
+	events := resolveDeliveries(&s, validated, cfg, globalEventContext{})
 
 	if !s.Players[0].Flagged {
 		t.Errorf("Flagged = false, want true (GDD §13 step 4)")
@@ -108,6 +108,114 @@ func TestResolveDeliveriesGateFeeUnaffordableTriggersDebt(t *testing.T) {
 	}
 }
 
+// TestResolveDeliveriesGatesClosedHalvesPayment is GDD §14.2's Gates
+// Closed: "Deliveries this round pay half. RP unaffected."
+func TestResolveDeliveriesGatesClosedHalvesPayment(t *testing.T) {
+	s := actionsTestState(2) // seat 0 at node 2 (Border)
+	cfg := legalTestConfig()
+	tier := cfg.Contracts[0]
+	s.Players[0].Contracts = []Contract{{ID: 0, Origin: 0, Destination: 2, Tier: 0}}
+	s.Players[0].Cargo = &game.CarriedCargo{Bound: true, Contract: 0}
+
+	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionDeliver}}}
+	resolveDeliveries(&s, validated, cfg, globalEventContext{live: true, gatesClosedActive: true})
+
+	wantBalance := 20 - cfg.GateFee + tier.Payment/2
+	if s.Players[0].Balance != wantBalance {
+		t.Errorf("Balance = %d, want %d (half payment, rounded down)", s.Players[0].Balance, wantBalance)
+	}
+	if s.Players[0].RP != tier.RP {
+		t.Errorf("RP = %d, want %d (unaffected)", s.Players[0].RP, tier.RP)
+	}
+}
+
+// TestResolveDeliveriesMarketSurgeAppliesFiftyPercentAndClears is GDD
+// §14.2's Market Surge: "Each player's next delivery pays +50%" — a
+// standing flag (Player.MarketSurgeActive) consumed on whichever delivery
+// actually applies it, then cleared so it never fires twice.
+func TestResolveDeliveriesMarketSurgeAppliesFiftyPercentAndClears(t *testing.T) {
+	s := actionsTestState(2)
+	cfg := legalTestConfig()
+	tier := cfg.Contracts[0]
+	s.Players[0].Contracts = []Contract{{ID: 0, Origin: 0, Destination: 2, Tier: 0}}
+	s.Players[0].Cargo = &game.CarriedCargo{Bound: true, Contract: 0}
+	s.Players[0].MarketSurgeActive = true
+
+	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionDeliver}}}
+	resolveDeliveries(&s, validated, cfg, globalEventContext{})
+
+	wantBalance := 20 - cfg.GateFee + tier.Payment + tier.Payment/2
+	if s.Players[0].Balance != wantBalance {
+		t.Errorf("Balance = %d, want %d (+50%%, rounded down)", s.Players[0].Balance, wantBalance)
+	}
+	if s.Players[0].MarketSurgeActive {
+		t.Error("MarketSurgeActive still true after applying, want cleared")
+	}
+}
+
+// TestResolveDeliveriesMarketSurgeThenGatesClosedStack confirms the
+// documented stacking order (deliveries.go's resolveOneDelivery doc): +50%
+// is applied to the base payment first, then Gates Closed's halving is
+// applied to the result — "a final, round-wide reduction layered on top of
+// a standing per-seat bonus."
+func TestResolveDeliveriesMarketSurgeThenGatesClosedStack(t *testing.T) {
+	s := actionsTestState(2)
+	cfg := legalTestConfig()
+	tier := cfg.Contracts[0]
+	s.Players[0].Contracts = []Contract{{ID: 0, Origin: 0, Destination: 2, Tier: 0}}
+	s.Players[0].Cargo = &game.CarriedCargo{Bound: true, Contract: 0}
+	s.Players[0].MarketSurgeActive = true
+
+	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionDeliver}}}
+	resolveDeliveries(&s, validated, cfg, globalEventContext{live: true, gatesClosedActive: true})
+
+	surged := tier.Payment + tier.Payment/2
+	wantBalance := 20 - cfg.GateFee + surged/2
+	if s.Players[0].Balance != wantBalance {
+		t.Errorf("Balance = %d, want %d ((payment*1.5)/2, both rounded down)", s.Players[0].Balance, wantBalance)
+	}
+}
+
+// TestResolveDeliveriesUnboundCargoPaysFlatDeadRunnerRate is GDD §14.2's
+// Dead Runner (and §14.3's Spilled Load): an unbound loose crate pays a
+// flat Cr$ 12 and 3 RP, grants no Infamy, and removes no contract — the
+// seat holds none for it.
+func TestResolveDeliveriesUnboundCargoPaysFlatDeadRunnerRate(t *testing.T) {
+	s := actionsTestState(2)
+	cfg := legalTestConfig()
+	s.Players[0].Cargo = &game.CarriedCargo{Bound: false}
+
+	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionDeliver}}}
+	events := resolveDeliveries(&s, validated, cfg, globalEventContext{})
+
+	wantBalance := 20 - cfg.GateFee + deadRunnerPayout
+	if s.Players[0].Balance != wantBalance {
+		t.Errorf("Balance = %d, want %d", s.Players[0].Balance, wantBalance)
+	}
+	if s.Players[0].RP != deadRunnerRP {
+		t.Errorf("RP = %d, want %d", s.Players[0].RP, deadRunnerRP)
+	}
+	if s.Players[0].Infamy != 0 {
+		t.Errorf("Infamy = %d, want 0 (a loose crate is not 'delivering a contract', GDD §11)", s.Players[0].Infamy)
+	}
+	if s.Players[0].Cargo != nil {
+		t.Errorf("Cargo = %+v, want nil", s.Players[0].Cargo)
+	}
+
+	var found *game.Event
+	for i := range events {
+		if events[i].Kind == game.EventDelivered {
+			found = &events[i]
+		}
+	}
+	if found == nil {
+		t.Fatalf("events = %+v, want an EventDelivered", events)
+	}
+	if found.Contract != 0 || found.Tier != 0 {
+		t.Errorf("EventDelivered = %+v, want zero-valued Contract/Tier (never bound to one)", found)
+	}
+}
+
 // TestResolveDeliveriesUncontestedSeatOrder is a smoke test that
 // resolveDeliveries iterates bySeat rather than byFairness (RFC §6.5:
 // delivery carries no fairness dimension) — two independent deliveries in
@@ -128,7 +236,7 @@ func TestResolveDeliveriesUncontestedSeatOrder(t *testing.T) {
 		0: {Action: game.ActionOrder{Kind: game.ActionDeliver}},
 		1: {Action: game.ActionOrder{Kind: game.ActionDeliver}},
 	}
-	events := resolveDeliveries(&s, validated, cfg)
+	events := resolveDeliveries(&s, validated, cfg, globalEventContext{})
 
 	if !hasEvent(events, game.EventDelivered, 0) || !hasEvent(events, game.EventDelivered, 1) {
 		t.Fatalf("events = %+v, want an EventDelivered for both seats", events)

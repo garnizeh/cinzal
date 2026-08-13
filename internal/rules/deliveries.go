@@ -17,13 +17,13 @@ import (
 // "gate fee unaffordable → Debt" reachable at all, since an ordinary
 // delivery's payment (8-30cr) dwarfs the Cr$1 fee and would make the debt
 // case unreachable if applied after.
-func resolveDeliveries(s *MatchState, validated map[game.SeatID]game.Order, cfg game.Config) []game.Event {
+func resolveDeliveries(s *MatchState, validated map[game.SeatID]game.Order, cfg game.Config, ctx globalEventContext) []game.Event {
 	var events []game.Event
 	for _, seat := range bySeat(*s) {
 		if validated[seat].Action.Kind != game.ActionDeliver {
 			continue
 		}
-		events = append(events, resolveOneDelivery(s, seat, cfg)...)
+		events = append(events, resolveOneDelivery(s, seat, cfg, ctx)...)
 	}
 	return events
 }
@@ -36,45 +36,69 @@ func resolveDeliveries(s *MatchState, validated map[game.SeatID]game.Order, cfg 
 // regardless of who has sight of what; #71/Project distribute it to every
 // seat unconditionally).
 //
-// Only the bound-cargo case (a held contract) is implemented: GDD's two
-// loose-crate deliveries (Dead Runner, Spilled Load) are both boon-card
-// payouts, and no card-issuing code exists yet (#72/#73) — so an unbound
-// delivery cannot occur in practice ahead of that work. It is a documented
-// no-op here rather than a guess at a payout, so a future boon lands
-// cleanly instead of colliding with an invented figure.
-func resolveOneDelivery(s *MatchState, seat game.SeatID, cfg game.Config) []game.Event {
+// An unbound loose crate (Dead Runner, Spilled Load — issue #72/#73) pays
+// GDD §8.4's flat Cr$ 12/3 RP rather than the tier table, and grants no
+// Infamy (unlike a contract delivery's own +1/+2 — GDD §11 states that gain
+// against "delivering any contract," which a loose crate, by definition, is
+// not one of) and removes no contract, since it was never bound to one.
+//
+// ctx.gatesClosedActive (Gates Closed, GDD §14.2) halves whatever payment
+// this delivery would otherwise pay, rounded down, RP unaffected — applied
+// after Market Surge, so "this round pays half" reads as a final,
+// round-wide reduction layered on top of a standing per-seat bonus rather
+// than the other way around. Market Surge's own +50% (Player.
+// MarketSurgeActive, resolveMarketSurge — events.go) is consumed and
+// cleared here, on whichever delivery — bound or loose — actually applies
+// it, since the card text names "next delivery," not "next contract
+// delivery."
+func resolveOneDelivery(s *MatchState, seat game.SeatID, cfg game.Config, ctx globalEventContext) []game.Event {
 	p := &s.Players[seat]
 	node := p.Position
 
-	if p.Cargo == nil || !p.Cargo.Bound {
+	if p.Cargo == nil {
 		return nil
 	}
 
-	idx := slices.IndexFunc(p.Contracts, func(c Contract) bool { return c.ID == p.Cargo.Contract })
-	if idx < 0 {
-		return nil
+	var payment, rp, infamyGain int
+	var contract Contract
+	bound := p.Cargo.Bound
+
+	if bound {
+		idx := slices.IndexFunc(p.Contracts, func(c Contract) bool { return c.ID == p.Cargo.Contract })
+		if idx < 0 {
+			return nil
+		}
+		contract = p.Contracts[idx]
+		payment, rp, infamyGain = Deliver(contract, cfg)
+	} else {
+		payment, rp, infamyGain = deadRunnerPayout, deadRunnerRP, 0
 	}
-	contract := p.Contracts[idx]
+
+	if p.MarketSurgeActive {
+		payment += payment / 2
+		p.MarketSurgeActive = false
+	}
+	if ctx.live && ctx.gatesClosedActive {
+		payment /= 2
+	}
 
 	var events []game.Event
 	if _, e := applyDebt(s, seat, cfg.GateFee, s.Round); e != nil {
 		events = append(events, *e)
 	}
 
-	payment, rp, infamyGain := Deliver(contract, cfg)
 	p.Balance += payment
 	p.RP += rp
 	p.Infamy = ApplyInfamyDelta(p.Infamy, infamyGain)
 
-	p.Contracts = slices.Delete(p.Contracts, idx, idx+1)
+	ev := game.Event{Kind: game.EventDelivered, Round: s.Round, Node: node, Seat: seat}
+	if bound {
+		idx := slices.IndexFunc(p.Contracts, func(c Contract) bool { return c.ID == contract.ID })
+		p.Contracts = slices.Delete(p.Contracts, idx, idx+1)
+		ev.Contract = contract.ID
+		ev.Tier = contract.Tier
+	}
 	p.Cargo = nil
 
-	return append(events, game.Event{
-		Kind:     game.EventDelivered,
-		Round:    s.Round,
-		Node:     node,
-		Seat:     seat,
-		Contract: contract.ID,
-		Tier:     contract.Tier,
-	})
+	return append(events, ev)
 }

@@ -46,7 +46,7 @@ import (
 // stake that was lost". Balance is untouched at Step 0 — nothing has spent
 // it yet, since resolveAddons (#70) runs after actions and deliveries —
 // so there is nothing to degrade against yet; that check belongs to #70.
-func validate(s MatchState, entry EntrySnapshot, seats []game.SeatID, orders map[game.SeatID]game.Order, cfg game.Config) (map[game.SeatID]game.Order, []game.Event) {
+func validate(s MatchState, entry EntrySnapshot, seats []game.SeatID, orders map[game.SeatID]game.Order, cfg game.Config, ctx globalEventContext) (map[game.SeatID]game.Order, []game.Event) {
 	validated := make(map[game.SeatID]game.Order, len(seats))
 	var events []game.Event
 
@@ -65,7 +65,24 @@ func validate(s MatchState, entry EntrySnapshot, seats []game.SeatID, orders map
 			candidate.PushingOn = game.PushingOn{}
 		}
 
-		if err := Legal(legalView(s, entry, seat), candidate, cfg); err != nil {
+		// Curfew (issue #72, GDD §14.2/§15.0): checked only when the edge
+		// truncation above did not already fire — a route already cut for
+		// a destroyed edge is re-evaluated against Legal below exactly as
+		// before, and does not also need the Curfew comparison. See
+		// truncateForCurfew's own doc for why this degrades rather than
+		// rejects.
+		curfewCut := false
+		if !cut && ctx.curfewActive {
+			var curfewTruncated []game.NodeID
+			curfewTruncated, curfewCut = truncateForCurfew(s, entry, seat, candidate.Route, cfg)
+			if curfewCut {
+				candidate.Route = curfewTruncated
+				candidate.Action = game.ActionOrder{Kind: game.ActionNothing}
+				candidate.PushingOn = game.PushingOn{}
+			}
+		}
+
+		if err := Legal(legalView(s, entry, seat, ctx.curfewActive), candidate, cfg); err != nil {
 			validated[seat] = absenceDefault(s, seat)
 			events = append(events, game.Event{Kind: game.EventOrderRejected, Round: s.Round, Seat: seat})
 			continue
@@ -82,7 +99,18 @@ func validate(s MatchState, entry EntrySnapshot, seats []game.SeatID, orders map
 			continue
 		}
 
-		degraded, reason, ok := checkActionDegradation(s, seat, candidate)
+		if curfewCut {
+			validated[seat] = candidate
+			events = append(events, game.Event{
+				Kind:  game.EventCurfewTruncated,
+				Round: s.Round,
+				Seat:  seat,
+				Node:  routeEndingNode(s, seat, candidate.Route),
+			})
+			continue
+		}
+
+		degraded, reason, ok := checkActionDegradation(s, seat, candidate, ctx.sealedBorders)
 		if !ok {
 			validated[seat] = degraded
 			events = append(events, reason)
@@ -93,6 +121,29 @@ func validate(s MatchState, entry EntrySnapshot, seats []game.SeatID, orders map
 	}
 
 	return validated, events
+}
+
+// truncateForCurfew truncates route to this round's Curfew-reduced step
+// allowance (GDD §14.2, §15.0) when route was legal against the allowance as
+// it stood without Curfew — the allowance the player actually saw when they
+// submitted — but exceeds it once Curfew's live -1 is applied. This is
+// "legal at submission, the world moved under it" (a global event card only
+// known once Resolve peeks it, after submission), not an illegal payload:
+// GDD §15.0's ordinary "route longer than your step allowance" reject row is
+// for a route that was never legal in the first place, which is exactly
+// what the second comparison below still catches. Reports false — nothing
+// to truncate — when route already fits the Curfew allowance, or still
+// exceeds the allowance even without Curfew.
+func truncateForCurfew(s MatchState, entry EntrySnapshot, seat game.SeatID, route []game.NodeID, cfg game.Config) ([]game.NodeID, bool) {
+	withCurfew := Steps(legalView(s, entry, seat, true), cfg)
+	if len(route) <= withCurfew {
+		return route, false
+	}
+	withoutCurfew := Steps(legalView(s, entry, seat, false), cfg)
+	if len(route) > withoutCurfew {
+		return route, false
+	}
+	return route[:withCurfew], true
 }
 
 // absenceDefault is GDD §18's default order on absence, reused verbatim by
@@ -169,7 +220,13 @@ func routeEndingNode(s MatchState, seat game.SeatID, route []game.NodeID) game.N
 // either, it returns o with Action nulled to Nothing, the matching event,
 // and false. Otherwise it returns o unchanged and true. The route is never
 // touched here — only truncateAtDestroyedEdge truncates a route.
-func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order) (game.Order, game.Event, bool) {
+// sealedBorders is Dragnet's own set of Border nodes sealed this round
+// (issue #72, GDD §14.2) — "every delivery must route to the ones that
+// remain." A declared Deliver at a sealed Border is legal payload shape
+// (Deliver at a Border is otherwise always legal) that the world moved
+// under, exactly like a Stake Post target someone else already claimed —
+// degrade, don't reject.
+func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order, sealedBorders []game.NodeID) (game.Order, game.Event, bool) {
 	node := routeEndingNode(s, seat, o.Route)
 
 	switch o.Action.Kind {
@@ -186,6 +243,13 @@ func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order) (game.
 			degraded.Action = game.ActionOrder{Kind: game.ActionNothing}
 			return degraded, game.Event{Kind: game.EventPickupTargetGone, Round: s.Round, Seat: seat, Node: node}, false
 		}
+
+	case game.ActionDeliver:
+		if slices.Contains(sealedBorders, node) {
+			degraded := o
+			degraded.Action = game.ActionOrder{Kind: game.ActionNothing}
+			return degraded, game.Event{Kind: game.EventDeliveryBlocked, Round: s.Round, Seat: seat, Node: node}, false
+		}
 	}
 
 	return o, game.Event{}, true
@@ -200,10 +264,22 @@ func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order) (game.
 // Anchors, Headline, Deck, Archive, NodeStats) is Project's job, not
 // Legal's, and is left zero-valued here.
 //
+// You.Infamy and You.StepModifiers.Flagged/EvasiveStepPenalty complete a
+// wiring gap this function always had: EntrySnapshot has carried Infamy,
+// Flagged and EvasiveStepPenalty since #67, but nothing ever copied them
+// into SelfState, so Steps (steps.go), which Legal calls, silently computed
+// every legality check against Infamy 0 and no modifiers. curfewActive
+// (issue #72, GDD §14.2) is this round's peeked Curfew card — see
+// resolve.go's globalEventContext — and Scaffolding/Retainer read
+// s.NextRound directly (also #72): Scaffolding is sector-scoped against
+// snap.Position (the same frozen position every other entry-snapshot
+// consumer here already uses), Retainer against live p.Cargo, which
+// movement has not yet touched at the point validate calls this.
+//
 // TODO(#75): remove this second MatchState -> game.PlayerView construction
 // once Project exists, and have Legal read Project's output instead — two
 // fog-filter implementations can otherwise drift apart.
-func legalView(s MatchState, entry EntrySnapshot, seat game.SeatID) game.PlayerView {
+func legalView(s MatchState, entry EntrySnapshot, seat game.SeatID, curfewActive bool) game.PlayerView {
 	p := s.Players[seat]
 	snap := entry.Seats[seat]
 
@@ -220,14 +296,25 @@ func legalView(s MatchState, entry EntrySnapshot, seat game.SeatID) game.PlayerV
 		nodes[game.NodeID(i)] = view
 	}
 
+	scaffolding := s.NextRound.Scaffolding != nil && *s.NextRound.Scaffolding == s.Graph.Nodes[snap.Position].Sector
+
 	return game.PlayerView{
 		You: game.SelfState{
 			Position:  snap.Position,
 			Balance:   snap.Balance,
+			Infamy:    snap.Infamy,
 			Cargo:     p.Cargo,
 			Contracts: contractsInHand(p.Contracts),
 			Items:     p.Items,
 			Posts:     postsHeld(s, p.Posts),
+			StepModifiers: game.StepModifiers{
+				Flagged:            snap.Flagged,
+				EvasiveStepPenalty: snap.EvasiveStepPenalty,
+				Curfew:             curfewActive,
+				Scaffolding:        scaffolding,
+				Retainer:           s.NextRound.Retainer && p.Cargo == nil,
+			},
+			DockersStrike: s.NextRound.DockersStrike,
 		},
 		Others: make([]game.OpponentView, len(s.Players)-1),
 		Nodes:  nodes,

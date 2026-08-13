@@ -27,8 +27,18 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	entry := next.Snapshot()
 	resetRoundFlags(next.Players)
 
+	// Global event peek (issue #72, GDD §14.2): the deck's card for this
+	// round is fixed at Setup, so buildGlobalEventContext peeks it — and,
+	// for Dragnet only, draws its target set — before validate/movement
+	// run, exactly the "decide early, reveal late" pattern the deck build
+	// itself already established for the Headline paradox (RFC §6.4). Every
+	// other card resolves entirely inside globalEvent, at its normal Phase
+	// 6 call site below; see events.go's own doc comment for the full
+	// grouping.
+	ctx := buildGlobalEventContext(next, r)
+
 	seats := bySeat(next)
-	validated, events := validate(next, entry, seats, orders, cfg)
+	validated, events := validate(next, entry, seats, orders, cfg, ctx)
 
 	// Steps 1..N — synchronized movement (RFC §6.7). The collision check
 	// runs at least once per round even when every route is empty (GDD
@@ -45,12 +55,13 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 		events = append(events, resolveConfrontations(&next, pending, validated, walks, cfg, r)...)
 	}
 
-	actionEvents, vanishReducedInfamy := resolveActions(&next, validated, seats, cfg, r)
+	actionEvents, vanishReducedInfamy := resolveActions(&next, validated, seats, cfg, ctx, r)
 	events = append(events, actionEvents...)
-	events = append(events, resolveDeliveries(&next, validated, cfg)...)
-	events = append(events, resolveAddons(&next, validated, entry, cfg)...)
-	events = append(events, writeTrail(&next, validated, seats, walks, vanishReducedInfamy, events)...)
-	events = append(events, globalEvent(&next, r)...)
+	events = append(events, resolveFenceWindfallClaim(&next, seats, r)...)
+	events = append(events, resolveDeliveries(&next, validated, cfg, ctx)...)
+	events = append(events, resolveAddons(&next, validated, entry, cfg, ctx)...)
+	events = append(events, writeTrail(&next, validated, seats, walks, vanishReducedInfamy, events, ctx)...)
+	events = append(events, globalEvent(&next, ctx, events, r)...)
 	events = append(events, incident(&next, r)...)
 	events = append(events, pressure(&next, r)...)
 	events = append(events, upkeep(&next)...)
@@ -121,9 +132,9 @@ func movementSteps(seats []game.SeatID, validated map[game.SeatID]game.Order) in
 // evaluation, crate heat, per-node trail logs, and sight-gated distribution
 // into every seat's SeatArchive.
 
-// globalEvent is a stub — issue #72 implements the 24-card global event
-// deck.
-func globalEvent(s *MatchState, r *RNG) []game.Event { return nil }
+// globalEvent (issue #72) is defined in events.go: Phase 6's 24-card global
+// event deck — buildGlobalEventContext (also events.go) is this same
+// issue's round-start peek, called above, before validate.
 
 // incident is a stub — issue #73 implements the 16-card sector incident
 // deck.

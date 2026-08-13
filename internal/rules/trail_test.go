@@ -69,7 +69,7 @@ func TestWriteTrailPostSightOwnNodeOnly(t *testing.T) {
 		{Kind: game.EventConfrontation, Round: 5, Node: 4, Seat: 1, Target: 0},
 	}
 
-	writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents)
+	writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents, globalEventContext{})
 
 	if s.Players[0].Archive.Sight[1].Count() != 1 {
 		t.Errorf("Archive.Sight[1] = %v, want the post's own node observed this round", s.Players[0].Archive.Sight[1])
@@ -101,7 +101,7 @@ func TestWriteTrailTraversedNodeNoLogForTraverser(t *testing.T) {
 		0: {Action: game.ActionOrder{Kind: game.ActionNothing}},
 	}
 
-	events := writeTrail(&s, validated, bySeat(s), walks, nil, nil)
+	events := writeTrail(&s, validated, bySeat(s), walks, nil, nil, globalEventContext{})
 
 	if !hasFreshTracksAt(events, 1) {
 		t.Errorf("events = %+v, want an EventFreshTracks at node 1 — someone did pass through it", events)
@@ -132,7 +132,7 @@ func TestWriteTrailSurveilTwoStepSight(t *testing.T) {
 		{Kind: game.EventConfrontation, Round: 5, Node: 4, Seat: 0, Target: 0},
 	}
 
-	writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents)
+	writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents, globalEventContext{})
 
 	if s.Players[0].Archive.Sight[4].Count() != 1 {
 		t.Errorf("Archive.Sight[4] = %v, want 1 — node 4 is within 2 steps under Surveil", s.Players[0].Archive.Sight[4])
@@ -155,7 +155,7 @@ func TestWriteTrailPoliceBandSight(t *testing.T) {
 		0: {Items: []game.ItemDiscard{{Item: game.ItemPoliceBand, Target: 3}}},
 	}
 
-	writeTrail(&s, validated, bySeat(s), walks, nil, nil)
+	writeTrail(&s, validated, bySeat(s), walks, nil, nil, globalEventContext{})
 
 	if s.Players[0].Archive.Sight[3].Count() != 1 {
 		t.Errorf("Archive.Sight[3] = %v, want 1 — Police Band's declared node", s.Players[0].Archive.Sight[3])
@@ -177,7 +177,7 @@ func TestWriteTrailLoiteringEscalation(t *testing.T) {
 		s.Round = round
 		walks := trailTestWalks(2)
 
-		events := writeTrail(&s, validated, bySeat(s), walks, nil, nil)
+		events := writeTrail(&s, validated, bySeat(s), walks, nil, nil, globalEventContext{})
 
 		if got := s.Players[0].LoiteringStreak; got != wantStreak[i] {
 			t.Fatalf("round %d: LoiteringStreak = %d, want %d", round, got, wantStreak[i])
@@ -218,7 +218,7 @@ func TestWriteTrailVanishExemptsWhenInfamyReduced(t *testing.T) {
 	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionVanish}}}
 	walks := trailTestWalks(2)
 
-	writeTrail(&s, validated, bySeat(s), walks, map[game.SeatID]bool{0: true}, nil)
+	writeTrail(&s, validated, bySeat(s), walks, map[game.SeatID]bool{0: true}, nil, globalEventContext{})
 
 	if got := s.Players[0].LoiteringStreak; got != 0 {
 		t.Errorf("LoiteringStreak = %d, want 0 — a qualifying Vanish exempts this round entirely", got)
@@ -231,7 +231,7 @@ func TestWriteTrailVanishAtZeroDoesNotExempt(t *testing.T) {
 	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionVanish}}}
 	walks := trailTestWalks(2)
 
-	writeTrail(&s, validated, bySeat(s), walks, map[game.SeatID]bool{0: false}, nil)
+	writeTrail(&s, validated, bySeat(s), walks, map[game.SeatID]bool{0: false}, nil, globalEventContext{})
 
 	if got := s.Players[0].LoiteringStreak; got != 2 {
 		t.Errorf("LoiteringStreak = %d, want 2 — a Vanish that did not reduce Infamy does not exempt", got)
@@ -252,7 +252,7 @@ func TestWriteTrailVanishSuppressesFreshTracksNotLoitering(t *testing.T) {
 	walks[0].Path = []game.NodeID{2, 1, 2}
 	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionVanish}}}
 
-	events := writeTrail(&s, validated, bySeat(s), walks, map[game.SeatID]bool{0: false}, nil)
+	events := writeTrail(&s, validated, bySeat(s), walks, map[game.SeatID]bool{0: false}, nil, globalEventContext{})
 
 	if hasFreshTracksAt(events, 1) {
 		t.Errorf("events = %+v, want no EventFreshTracks at node 1 — Vanish suppresses it", events)
@@ -287,7 +287,7 @@ func TestWriteTrailArchiveRate(t *testing.T) {
 		if traffic[round] {
 			roundEvents = []game.Event{{Kind: game.EventConfrontation, Round: round, Node: 1, Seat: 1, Target: 0}}
 		}
-		writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents)
+		writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents, globalEventContext{})
 	}
 
 	if got := s.Players[0].Archive.Sight[1].Count(); got != 6 {
@@ -322,7 +322,7 @@ func TestWriteTrailRainSuppressesFreshTracksOnly(t *testing.T) {
 	walks[1].Path = []game.NodeID{0, 1, 2}
 	roundEvents := []game.Event{{Kind: game.EventConfrontation, Round: 4, Node: 1, Seat: 1, Target: 1}}
 
-	events := writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents)
+	events := writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents, globalEventContext{})
 
 	if hasFreshTracksAt(events, 1) {
 		t.Errorf("events = %+v, want no EventFreshTracks at node 1 — Rain records none anywhere this round (D13)", events)
@@ -359,7 +359,7 @@ func TestWriteTrailFreshTracksExcludesRevisitedEndingNode(t *testing.T) {
 	walks[0].Path = []game.NodeID{2, 1, 2}
 	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionNothing}}}
 
-	events := writeTrail(&s, validated, bySeat(s), walks, nil, nil)
+	events := writeTrail(&s, validated, bySeat(s), walks, nil, nil, globalEventContext{})
 
 	if hasFreshTracksAt(events, 2) {
 		t.Errorf("events = %+v, want no EventFreshTracks at node 2 — it is the ending node, revisited or not", events)
@@ -377,7 +377,7 @@ func TestWriteTrailRainObscuresNodeWhoseOnlyEntryWasFreshTracks(t *testing.T) {
 	walks := trailTestWalks(3)
 	walks[0].Path = []game.NodeID{0, 1, 2, 3} // seat 0 itself passes through node 1
 
-	writeTrail(&s, validated, bySeat(s), walks, nil, nil)
+	writeTrail(&s, validated, bySeat(s), walks, nil, nil, globalEventContext{})
 
 	if got := s.Players[0].Archive.Obscured[1].Count(); got != 1 {
 		t.Errorf("Archive.Obscured[1] = %d, want 1 — the only entry there (fresh tracks) was erased by Rain", got)
@@ -393,13 +393,97 @@ func TestWriteTrailNoTrafficIsHonestZeroNotObscured(t *testing.T) {
 	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionNothing}}}
 	walks := trailTestWalks(3)
 
-	writeTrail(&s, validated, bySeat(s), walks, nil, nil)
+	writeTrail(&s, validated, bySeat(s), walks, nil, nil, globalEventContext{})
 
 	if got := s.Players[0].Archive.Sight[2].Count(); got != 1 {
 		t.Errorf("Archive.Sight[2] = %d, want 1 — genuinely no traffic is an honest zero", got)
 	}
 	if got := s.Players[0].Archive.Obscured[2].Count(); got != 0 {
 		t.Errorf("Archive.Obscured[2] = %d, want 0 — Rain has nothing to erase where nothing happened", got)
+	}
+}
+
+// TestWriteTrailBlackoutObscuresEveryEntryKind is GDD §14.2's Blackout:
+// "nobody generates trail entries" — broader than Rain's fresh-tracks-only
+// suppression (D13), erasing any entry kind, read from the next-round
+// modifier a prior round's card set (MatchState.NextRound.Blackout, live
+// state, not a deck peek).
+func TestWriteTrailBlackoutObscuresEveryEntryKind(t *testing.T) {
+	s := trailTestState(5, 3)
+	s.NextRound.Blackout = true
+	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionNothing}}}
+	walks := trailTestWalks(3)
+	roundEvents := []game.Event{{Kind: game.EventCargoTaken, Round: 5, Node: 3, Seat: 0}}
+
+	events := writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents, globalEventContext{})
+
+	if got := s.Players[0].Archive.Obscured[3].Count(); got != 1 {
+		t.Errorf("Archive.Obscured[3] = %d, want 1 — Blackout erases a cargo-taken entry too, not just fresh tracks", got)
+	}
+	if got := s.Players[0].Archive.Sight[3].Count(); got != 0 {
+		t.Errorf("Archive.Sight[3] = %d, want 0 — an obscured round must not also count as an honest zero", got)
+	}
+	if n := countTrailAt(s.Players[0].Archive.Trail, 3); n != 0 {
+		t.Errorf("Trail has %d entries at node 3, want 0", n)
+	}
+	for _, e := range events {
+		if e.Kind == game.EventFreshTracks {
+			t.Errorf("events = %+v, want no EventFreshTracks — Blackout suppresses the returned stream too", events)
+		}
+	}
+}
+
+// TestWriteTrailBlackoutCapsSightToOwnNodeOnly is GDD §14.2's Blackout's
+// other half: "nobody has sight beyond their own node" — no exception for
+// a held post, unlike an ordinary round (TestWriteTrailPostSightOwnNodeOnly
+// above already covers the ordinary, unrestricted post-sight case).
+func TestWriteTrailBlackoutCapsSightToOwnNodeOnly(t *testing.T) {
+	s := trailTestState(5, 3, 0) // seat 0 at node 3, with a post far away at node 1
+	s.NextRound.Blackout = true
+	s.Players[0].Posts = []game.NodeID{1}
+	validated := map[game.SeatID]game.Order{
+		0: {Action: game.ActionOrder{Kind: game.ActionNothing}},
+		1: {Action: game.ActionOrder{Kind: game.ActionNothing}},
+	}
+	walks := trailTestWalks(3, 0)
+	roundEvents := []game.Event{{Kind: game.EventConfrontation, Round: 5, Node: 1, Seat: 1, Target: 0}}
+
+	writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents, globalEventContext{})
+
+	if got := s.Players[0].Archive.Sight[1].Count(); got != 0 {
+		t.Errorf("Archive.Sight[1] = %d, want 0 — Blackout overrides even a held post's own-node sight", got)
+	}
+	if got := s.Players[0].Archive.Obscured[1].Count(); got != 0 {
+		t.Errorf("Archive.Obscured[1] = %d, want 0 — node 1 is outside sight entirely, not an erased-but-sighted round", got)
+	}
+}
+
+// TestWriteTrailFestivalSuppressesOwnEntryAtDrawnNode is GDD §14.2's
+// Festival: "leaves no trace" for the seat ending this round at the
+// already-drawn node (ctx.festivalNode) — never populates Obscured either
+// (D13: the same shape as Vanish and Distracted Guard, a designed evasion,
+// not a world-level erasure), so the node reads an honest, non-Obscured
+// zero to any other watching seat.
+func TestWriteTrailFestivalSuppressesOwnEntryAtDrawnNode(t *testing.T) {
+	s := trailTestState(5, 3, 3) // both seats end at node 3, the drawn Festival node
+	validated := map[game.SeatID]game.Order{
+		0: {Action: game.ActionOrder{Kind: game.ActionNothing}},
+		1: {Action: game.ActionOrder{Kind: game.ActionNothing}},
+	}
+	walks := trailTestWalks(3, 3)
+	roundEvents := []game.Event{{Kind: game.EventCargoTaken, Round: 5, Node: 3, Seat: 0}}
+	ctx := globalEventContext{live: true, card: EventFestival, festivalNode: 3}
+
+	writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents, ctx)
+
+	if n := countTrailAt(s.Players[1].Archive.Trail, 3); n != 0 {
+		t.Errorf("seat 1's Trail has %d entries at node 3, want 0 — Festival suppresses seat 0's own cargo-taken entry", n)
+	}
+	if got := s.Players[1].Archive.Sight[3].Count(); got != 1 {
+		t.Errorf("Archive.Sight[3] = %d, want 1 — an honest zero, not an absence", got)
+	}
+	if got := s.Players[1].Archive.Obscured[3].Count(); got != 0 {
+		t.Errorf("Archive.Obscured[3] = %d, want 0 — Festival never populates Obscured (D13)", got)
 	}
 }
 
@@ -419,7 +503,7 @@ func TestWriteTrailCargoTakenNamingGate(t *testing.T) {
 		walks := trailTestWalks(0)
 		roundEvents := []game.Event{{Kind: game.EventCargoTaken, Round: 5, Node: 0, Seat: 0}}
 
-		writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents)
+		writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents, globalEventContext{})
 
 		te := findTrailEntry(t, s.Players[0].Archive.Trail, 0, game.EventCargoTaken)
 		gotNamed := te.Actor != nil
@@ -440,7 +524,7 @@ func TestWriteTrailDecoyMatchesRealCargoTaken(t *testing.T) {
 	}
 	walks := trailTestWalks(1)
 
-	writeTrail(&s, validated, bySeat(s), walks, nil, nil)
+	writeTrail(&s, validated, bySeat(s), walks, nil, nil, globalEventContext{})
 
 	te := findTrailEntry(t, s.Players[0].Archive.Trail, 2, game.EventCargoTaken)
 	if te.Actor == nil || *te.Actor != 0 {

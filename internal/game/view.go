@@ -113,6 +113,14 @@ type SelfState struct {
 	// a full hand or an empty pool (D7) are not a client computation (RFC
 	// §10.2).
 	RoundsToNextOffer int
+
+	// DockersStrike is Dockers' Strike's next-round suppression (GDD
+	// §14.2, issue #72): "No Pickup action may be performed next round."
+	// Unlike StepModifiers, this is an action-legality input, not a step-
+	// formula one, so it lives on SelfState directly — Legal reads it to
+	// reject a declared Pickup outright, since (unlike Curfew) the flag is
+	// already true before the order is ever built.
+	DockersStrike bool
 }
 
 // StepModifiers are GDD §9.1a's step-allowance formula inputs beyond the
