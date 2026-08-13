@@ -309,21 +309,24 @@ func TestWriteTrailArchiveRate(t *testing.T) {
 // "fresh tracks" kind, nothing else, and only where erasing it actually
 // erases something.
 func TestWriteTrailRainSuppressesFreshTracksOnly(t *testing.T) {
-	s := trailTestState(4, 3, 1) // round 4: EventDeck[0] must be Rain
+	s := trailTestState(4, 3, 2) // round 4: EventDeck[0] must be Rain; seat 1 ends at node 2
 	s.Graph.EventDeck = []EventCardID{EventRain}
 	s.Players[0].Posts = []game.NodeID{1}
 	validated := map[game.SeatID]game.Order{
 		0: {Action: game.ActionOrder{Kind: game.ActionNothing}},
 		1: {Action: game.ActionOrder{Kind: game.ActionNothing}},
 	}
-	walks := trailTestWalks(3, 1)
+	walks := trailTestWalks(3, 2)
 	// Node 1 gets BOTH a confrontation (survives Rain) and fresh tracks
-	// from a third traversal — model the traversal via seat 1's own path.
-	walks[1].Path = []game.NodeID{0, 1}
+	// from seat 1 passing through it on the way to node 2.
+	walks[1].Path = []game.NodeID{0, 1, 2}
 	roundEvents := []game.Event{{Kind: game.EventConfrontation, Round: 4, Node: 1, Seat: 1, Target: 1}}
 
-	writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents)
+	events := writeTrail(&s, validated, bySeat(s), walks, nil, roundEvents)
 
+	if hasFreshTracksAt(events, 1) {
+		t.Errorf("events = %+v, want no EventFreshTracks at node 1 — Rain records none anywhere this round (D13)", events)
+	}
 	if s.Players[0].Archive.Obscured[1].Count() != 0 {
 		t.Errorf("Archive.Obscured[1] = %v, want 0 — a real confrontation entry survived Rain", s.Players[0].Archive.Obscured[1])
 	}
@@ -341,6 +344,28 @@ func TestWriteTrailRainSuppressesFreshTracksOnly(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("Trail has no Confrontation entry at node 1, want the non-fresh-tracks entry unaffected by Rain")
+	}
+}
+
+// TestWriteTrailFreshTracksExcludesRevisitedEndingNode is a regression test
+// for a CodeRabbit finding on this PR: a there-and-back route can revisit
+// its own final node earlier in the same round's path (Path == {2, 1, 2}),
+// and that earlier visit must not be mistaken for "passing through" — the
+// seat ends at node 2, so node 2 is a sight source, never a fresh-tracks
+// one, however many times the path touches it first.
+func TestWriteTrailFreshTracksExcludesRevisitedEndingNode(t *testing.T) {
+	s := trailTestState(5, 2)
+	walks := trailTestWalks(2)
+	walks[0].Path = []game.NodeID{2, 1, 2}
+	validated := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionNothing}}}
+
+	events := writeTrail(&s, validated, bySeat(s), walks, nil, nil)
+
+	if hasFreshTracksAt(events, 2) {
+		t.Errorf("events = %+v, want no EventFreshTracks at node 2 — it is the ending node, revisited or not", events)
+	}
+	if !hasFreshTracksAt(events, 1) {
+		t.Errorf("events = %+v, want an EventFreshTracks at node 1 — it was genuinely passed through", events)
 	}
 }
 

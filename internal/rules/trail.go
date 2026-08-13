@@ -39,10 +39,23 @@ func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []gam
 
 	entries := map[game.NodeID][]game.TrailEntry{}
 
+	// Rain's suppression is computed once, up front: D13's card text is a
+	// world fact, not a viewer-side redaction — "No 'fresh tracks' entries
+	// are recorded anywhere this round" — so the returned Event stream
+	// (the substrate for recap, telemetry and the debug trace, RFC §6.7)
+	// must omit them too, not merely have distributeTrail's Archive writes
+	// skip them below. The entries themselves are still constructed here,
+	// unconditionally: distributeTrail needs the pre-suppression fact to
+	// tell an honest zero (nothing happened) from an Obscured one (Rain
+	// erased the only thing that would have been recorded).
+	suppressFreshTracks := rainActive(*s)
+
 	addCargoTakenAndDecoy(*s, roundEvents, validated, seats, entries)
 
 	for _, n := range addFreshTracks(*s, validated, seats, walks, entries) {
-		out = append(out, game.Event{Kind: game.EventFreshTracks, Round: s.Round, Node: n})
+		if !suppressFreshTracks {
+			out = append(out, game.Event{Kind: game.EventFreshTracks, Round: s.Round, Node: n})
+		}
 	}
 
 	addConfrontation(roundEvents, entries)
@@ -62,7 +75,7 @@ func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []gam
 
 	addItemPurchased(*s, roundEvents, entries)
 
-	distributeTrail(s, validated, seats, entries, rainActive(*s))
+	distributeTrail(s, validated, seats, entries, suppressFreshTracks)
 
 	return out
 }
@@ -107,15 +120,19 @@ func cargoTakenEntry(s MatchState, node game.NodeID, seat game.SeatID) game.Trai
 }
 
 // addFreshTracks adds GDD §7.3's never-named "Fresh tracks" entry for every
-// node any seat entered and then left this round — walks[seat].Path minus
-// its own final entry, which is this round's ending position, not a
-// passed-through node (GDD §7.2: "Passing through is not looking around").
-// Deduplicated per node: two different seats crossing the same node the
-// same round leave one indistinguishable, unnamed fact, not two (#71 owns
-// this construction choice — D4's own text leaves it open). A seat whose
-// Action this round was Vanish contributes nothing at all (GDD §9.2: "You
-// leave no 'fresh tracks' trace this round") — an honest absence, not
-// something for Rain/Blackout's Obscured bookkeeping to ever see (D13).
+// node any seat entered and then left this round — walks[seat].Path with
+// its own ending position excluded by node ID, not merely by dropping the
+// path's last index: a there-and-back route (e.g. Path == {2, 1, 2}) can
+// revisit its own final node earlier in the same round, and that earlier
+// visit is not "passing through" either — the seat ends there, so it is a
+// sight source (GDD §7.2), never a fresh-tracks one, no matter how many
+// times the path touches it before settling. Deduplicated per node: two
+// different seats crossing the same node the same round leave one
+// indistinguishable, unnamed fact, not two (#71 owns this construction
+// choice — D4's own text leaves it open). A seat whose Action this round
+// was Vanish contributes nothing at all (GDD §9.2: "You leave no 'fresh
+// tracks' trace this round") — an honest absence, not something for
+// Rain/Blackout's Obscured bookkeeping to ever see (D13).
 //
 // Returns the ascending-NodeID list of nodes that gained an entry, for the
 // caller to mint one EventFreshTracks per node.
@@ -126,7 +143,11 @@ func addFreshTracks(s MatchState, validated map[game.SeatID]game.Order, seats []
 			continue
 		}
 		path := walks[seat].Path
+		ending := path[len(path)-1]
 		for _, node := range path[:len(path)-1] {
+			if node == ending {
+				continue
+			}
 			mask[node] = true
 		}
 	}
