@@ -34,7 +34,7 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	// runs at least once per round even when every route is empty (GDD
 	// §15: a table where nobody moves still resolves) — movementSteps
 	// enforces that floor.
-	for step := 1; step <= movementSteps(validated); step++ {
+	for step := 1; step <= movementSteps(seats, validated); step++ {
 		advance(&next, validated, step)
 		events = append(events, detectCrossings(next, validated, step)...)
 		events = append(events, detectCollisions(next, step)...)
@@ -71,9 +71,14 @@ func resetRoundFlags(players []Player) {
 // collision check still runs once on a round where every route is empty
 // (RFC §6.7, GDD §15). Split out from Resolve's loop so that floor is
 // directly unit-testable without instrumenting the movement stubs below.
-func movementSteps(validated map[game.SeatID]game.Order) int {
+// Iterates seats rather than ranging validated directly (CLAUDE.md:
+// resolution must not range over maps) — today's computation is a maximum,
+// so iteration order can't affect the result, but keeping the stable order
+// here means this stays true if the loop ever grows a step that isn't.
+func movementSteps(seats []game.SeatID, validated map[game.SeatID]game.Order) int {
 	steps := 1
-	for _, o := range validated {
+	for _, seat := range seats {
+		o := validated[seat]
 		if n := len(o.Route) + o.PushingOn.Steps; n > steps {
 			steps = n
 		}

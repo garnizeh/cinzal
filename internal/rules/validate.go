@@ -172,7 +172,7 @@ func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order) (game.
 
 	switch o.Action.Kind {
 	case game.ActionStakePost:
-		if s.Graph.Nodes[node].Post != nil {
+		if post := s.Graph.Nodes[node].Post; post != nil && post.Owner != seat {
 			degraded := o
 			degraded.Action = game.ActionOrder{Kind: game.ActionNothing}
 			return degraded, game.Event{Kind: game.EventStakeTargetTaken, Round: s.Round, Seat: seat, Node: node}, false
@@ -210,6 +210,10 @@ func cargoAvailable(s MatchState, seat game.SeatID, node game.NodeID) bool {
 // its length, by legalPostCap. Everything else on game.PlayerView (Trail,
 // Anchors, Headline, Deck, Archive, NodeStats) is Project's job, not
 // Legal's, and is left zero-valued here.
+//
+// TODO(#75): remove this second MatchState -> game.PlayerView construction
+// once Project exists, and have Legal read Project's output instead — two
+// fog-filter implementations can otherwise drift apart.
 func legalView(s MatchState, entry EntrySnapshot, seat game.SeatID) game.PlayerView {
 	p := s.Players[seat]
 	snap := entry.Seats[seat]

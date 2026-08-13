@@ -130,7 +130,8 @@ func TestMovementStepsAtLeastOneWhenEveryRouteEmpty(t *testing.T) {
 		0: {},
 		1: {Route: nil},
 	}
-	if got := movementSteps(validated); got < 1 {
+	seats := []game.SeatID{0, 1}
+	if got := movementSteps(seats, validated); got < 1 {
 		t.Errorf("movementSteps(all empty) = %d, want >= 1", got)
 	}
 }
@@ -143,7 +144,8 @@ func TestMovementStepsTracksLongestRoutePlusPushingOn(t *testing.T) {
 		0: {Route: []game.NodeID{1, 2}},
 		1: {Route: []game.NodeID{1}, PushingOn: game.PushingOn{Steps: 2}},
 	}
-	if got, want := movementSteps(validated), 3; got != want {
+	seats := []game.SeatID{0, 1}
+	if got, want := movementSteps(seats, validated), 3; got != want {
 		t.Errorf("movementSteps() = %d, want %d", got, want)
 	}
 }

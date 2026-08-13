@@ -119,6 +119,31 @@ func TestValidateDegradesStakeTargetTaken(t *testing.T) {
 	}
 }
 
+// TestValidateStakeOwnPostDoesNotDegrade checks the seat-comparison this
+// degradation relies on: a Stake Post target the seat already owns is not
+// "someone else's" post, so it must not degrade or fire
+// EventStakeTargetTaken.
+func TestValidateStakeOwnPostDoesNotDegrade(t *testing.T) {
+	s := resolveTestState()
+	s.Graph.Nodes[1].Post = &Post{Owner: 0, RoundsRemaining: 3}
+	entry := s.Snapshot()
+	seats := bySeat(s)
+	orders := map[game.SeatID]game.Order{
+		0: {Route: []game.NodeID{1}, Action: game.ActionOrder{Kind: game.ActionStakePost}},
+	}
+
+	validated, events := validate(s, entry, seats, orders, legalTestConfig())
+
+	got := validated[0]
+	if got.Action.Kind != game.ActionStakePost {
+		t.Errorf("validated[0].Action.Kind = %v, want ActionStakePost unchanged (own post, not taken)", got.Action.Kind)
+	}
+
+	if hasEvent(events, game.EventStakeTargetTaken, 0) {
+		t.Errorf("events = %+v, want no EventStakeTargetTaken for seat 0 staking its own post", events)
+	}
+}
+
 // TestValidateDegradesPickupTargetGone covers the second of legal.go's
 // named Resolve-only degradation checks: a Pickup whose declared cargo
 // isn't on the ground. Legal deliberately never checks Pickup at all, so
