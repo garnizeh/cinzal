@@ -247,6 +247,15 @@ func (c Config) Validate(players int) error {
 		return fmt.Errorf("game: MaxGenAttempts must be at least 1, got %d (GDD §6.1)", c.MaxGenAttempts)
 	}
 
+	// A negative StartingBalance has no reading under GDD §5 and breaks the
+	// non-negative Player.Balance invariant every Cr$-moving rule in
+	// internal/rules trusts implicitly — Currency Slide's own "-25%,
+	// rounded down" (GDD §14.2) would *increase* a negative balance instead
+	// of decreasing it, since integer division truncates toward zero.
+	if c.StartingBalance < 0 {
+		return fmt.Errorf("game: StartingBalance must be non-negative, got %d (GDD §5)", c.StartingBalance)
+	}
+
 	const maxInt = int(^uint(0) >> 1)
 	totalWeight := 0
 	for i, tier := range c.Contracts {

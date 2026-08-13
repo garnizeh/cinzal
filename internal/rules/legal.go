@@ -86,6 +86,12 @@ const (
 	// the final round," closing the loophole of computing the exact
 	// delivery needed to win by one point in the round bands matter most.
 	ReasonLedgerFinalRound
+
+	// ReasonPickupSuspended is a declared Pickup while Dockers' Strike
+	// (GDD §14.2, issue #72) is this round's active next-round modifier —
+	// unlike a target-node conflict, this is known before the order is
+	// ever built, so it rejects rather than degrades.
+	ReasonPickupSuspended
 )
 
 // String returns the reason's short name, or "Reason(n)" for an invalid
@@ -118,6 +124,8 @@ func (r Reason) String() string {
 		return "invalid item target"
 	case ReasonLedgerFinalRound:
 		return "ledger cannot be purchased in the final round"
+	case ReasonPickupSuspended:
+		return "pickup suspended by Dockers' Strike this round"
 	default:
 		return fmt.Sprintf("Reason(%d)", uint8(r))
 	}
@@ -287,6 +295,17 @@ func endingNode(v game.PlayerView, o game.Order) (game.NodeID, game.NodeType, bo
 // conflicts are explicitly a degradation case (GDD §15.0: "the target node
 // got staked by someone else"), checked at Resolve, not here.
 func legalAction(v game.PlayerView, o game.Order) error {
+	// Dockers' Strike (GDD §14.2, issue #72) suspends Pickup unconditionally
+	// — it has no node-type dependency, unlike Deliver/Deal below — so it
+	// must be checked before the Hidden-ending-node early return: a Pickup
+	// declared into unexplored territory is exactly as suspended as one
+	// declared anywhere else, and endingNode reports "unknown" for a Hidden
+	// ending node precisely because its type is undisclosed, not because
+	// this check should be skipped.
+	if o.Action.Kind == game.ActionPickup && v.You.DockersStrike {
+		return illegal(ReasonPickupSuspended, "dockers' strike is active this round")
+	}
+
 	node, nodeType, known := endingNode(v, o)
 	if !known {
 		return nil

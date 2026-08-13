@@ -26,8 +26,8 @@ func TestResolveAddonsLedgerReportsPreRoundBalances(t *testing.T) {
 		0: {Action: game.ActionOrder{Kind: game.ActionDeliver}, AddOns: game.AddOns{BuyLedger: true}},
 		1: {Action: game.ActionOrder{Kind: game.ActionNothing}},
 	}
-	resolveDeliveries(&s, validated, cfg) // moves seat 0's balance for real
-	resolveAddons(&s, validated, entry, cfg)
+	resolveDeliveries(&s, validated, cfg, globalEventContext{}) // moves seat 0's balance for real
+	resolveAddons(&s, validated, entry, cfg, globalEventContext{})
 
 	if s.Players[0].Balance == 20 {
 		t.Fatalf("Balance = %d, want it to have moved (payment received) — test setup is broken", s.Players[0].Balance)
@@ -63,7 +63,7 @@ func TestResolveAddonsLedgerRejectedInFinalRoundAtResolution(t *testing.T) {
 	validated := map[game.SeatID]game.Order{
 		0: {Action: game.ActionOrder{Kind: game.ActionNothing}, AddOns: game.AddOns{BuyLedger: true}},
 	}
-	resolveAddons(&s, validated, entry, cfg)
+	resolveAddons(&s, validated, entry, cfg, globalEventContext{})
 
 	if s.Players[0].Ledger != nil {
 		t.Errorf("Ledger = %+v, want nil (rejected in the final round)", s.Players[0].Ledger)
@@ -86,7 +86,7 @@ func TestResolveAddonsLedgerUnaffordableSkipsSilently(t *testing.T) {
 	validated := map[game.SeatID]game.Order{
 		0: {Action: game.ActionOrder{Kind: game.ActionNothing}, AddOns: game.AddOns{BuyLedger: true}},
 	}
-	events := resolveAddons(&s, validated, entry, cfg)
+	events := resolveAddons(&s, validated, entry, cfg, globalEventContext{})
 
 	if s.Players[0].Ledger != nil {
 		t.Errorf("Ledger = %+v, want nil", s.Players[0].Ledger)
@@ -118,7 +118,7 @@ func TestResolveAddonsRenewalExtendsAnAlreadyHeldPost(t *testing.T) {
 			AddOns: game.AddOns{RenewPost: 1, RenewBlocks: 1},
 		},
 	}
-	resolveAddons(&s, validated, entry, cfg)
+	resolveAddons(&s, validated, entry, cfg, globalEventContext{})
 
 	want := RenewedRoundsRemaining(3, 1, cfg)
 	if got := s.Graph.Nodes[1].Post.RoundsRemaining; got != want {
@@ -145,11 +145,11 @@ func TestResolveAddonsRenewalSkipsAFreshStakePostSameRound(t *testing.T) {
 			AddOns: game.AddOns{RenewPost: 1, RenewBlocks: 2},
 		},
 	}
-	resolveActions(&s, validated, bySeat(s), cfg, NewRNG(testSeed(1), 6))
+	resolveActions(&s, validated, bySeat(s), cfg, globalEventContext{}, NewRNG(testSeed(1), 6))
 	balanceAfterActions := s.Players[0].Balance
 	roundsAfterActions := s.Graph.Nodes[1].Post.RoundsRemaining
 
-	resolveAddons(&s, validated, entry, cfg)
+	resolveAddons(&s, validated, entry, cfg, globalEventContext{})
 
 	if s.Players[0].Balance != balanceAfterActions {
 		t.Errorf("Balance = %d, want %d (unchanged by resolveAddons)", s.Players[0].Balance, balanceAfterActions)
@@ -157,6 +157,50 @@ func TestResolveAddonsRenewalSkipsAFreshStakePostSameRound(t *testing.T) {
 	if s.Graph.Nodes[1].Post.RoundsRemaining != roundsAfterActions {
 		t.Errorf("RoundsRemaining = %d, want %d (unchanged by resolveAddons)",
 			s.Graph.Nodes[1].Post.RoundsRemaining, roundsAfterActions)
+	}
+}
+
+// TestResolveAddonsRenewalUsesPermitAuctionDiscount is GDD §14.2's Permit
+// Auction: "Lease blocks cost Cr$ 2 instead of 3, next round only" —
+// applied to a renewal's own block cost via leaseCostPerBlock (events.go).
+func TestResolveAddonsRenewalUsesPermitAuctionDiscount(t *testing.T) {
+	cfg := legalTestConfig()
+	s := actionsTestState(2)
+	s.Players[0].Posts = []game.NodeID{1}
+	s.Graph.Nodes[1].Post = &Post{Owner: 0, RoundsRemaining: 3}
+	entry := s.Snapshot()
+
+	validated := map[game.SeatID]game.Order{
+		0: {
+			Action: game.ActionOrder{Kind: game.ActionNothing},
+			AddOns: game.AddOns{RenewPost: 1, RenewBlocks: 1},
+		},
+	}
+	resolveAddons(&s, validated, entry, cfg, globalEventContext{live: true, permitAuctionActive: true})
+
+	wantBalance := 20 - permitAuctionCostPerBlock
+	if s.Players[0].Balance != wantBalance {
+		t.Errorf("Balance = %d, want %d (discounted rate, not cfg.LeaseCostPerBlock)", s.Players[0].Balance, wantBalance)
+	}
+}
+
+// TestResolveActionsStakePostUsesPermitAuctionDiscount confirms the same
+// discount applies to a fresh Stake Post's own block cost — GDD §14.2 says
+// "lease blocks," not "renewals only" (events.go's leaseCostPerBlock doc).
+func TestResolveActionsStakePostUsesPermitAuctionDiscount(t *testing.T) {
+	cfg := legalTestConfig()
+	s := actionsTestState(1, 0) // a second seat so PostCapByPlayers[2] applies
+	validated := map[game.SeatID]game.Order{
+		0: {
+			Action: game.ActionOrder{Kind: game.ActionStakePost},
+			AddOns: game.AddOns{RenewPost: 1, RenewBlocks: 1},
+		},
+	}
+	resolveActions(&s, validated, bySeat(s), cfg, globalEventContext{live: true, permitAuctionActive: true}, NewRNG(testSeed(1), 6))
+
+	wantBalance := 20 - permitAuctionCostPerBlock
+	if s.Players[0].Balance != wantBalance {
+		t.Errorf("Balance = %d, want %d (discounted rate)", s.Players[0].Balance, wantBalance)
 	}
 }
 
@@ -182,7 +226,7 @@ func TestResolveAddonsRenewalUnaffordableTriggersDebt(t *testing.T) {
 			AddOns: game.AddOns{RenewPost: 1, RenewBlocks: 1},
 		},
 	}
-	resolveAddons(&s, validated, entry, cfg)
+	resolveAddons(&s, validated, entry, cfg, globalEventContext{})
 
 	if !s.Players[0].Flagged {
 		t.Errorf("Flagged = false, want true")

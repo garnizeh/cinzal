@@ -66,6 +66,20 @@ func TestValidateRejectsZeroRounds(t *testing.T) {
 	}
 }
 
+// TestValidateRejectsNegativeStartingBalance guards the non-negative
+// Player.Balance invariant every Cr$-moving rule in internal/rules trusts
+// implicitly (caught in review on #72's Currency Slide: `bal - bal/4`
+// increases a negative balance instead of decreasing it, since integer
+// division truncates toward zero).
+func TestValidateRejectsNegativeStartingBalance(t *testing.T) {
+	cfg := DefaultConfig()
+	cfg.StartingBalance = -1
+
+	if err := cfg.Validate(4); err == nil {
+		t.Fatal("Validate() = nil for StartingBalance=-1, want an error")
+	}
+}
+
 // TestValidateFailsClosedOnEmptyConfig guards the fail-closed convention
 // this repository holds every gate to: a zero-value Config — the shape a
 // missing or malformed load would produce — must be rejected, not treated

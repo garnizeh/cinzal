@@ -29,16 +29,24 @@ func TestEventKindNamesAreStable(t *testing.T) {
 		EventInformants:     "Informants",
 
 		// Not RFC §9.1 writer rows at all — Resolve's Step 0 vocabulary
-		// (GDD §15.0, issue #67): rejection and the three named
+		// (GDD §15.0, issue #67 and #72): rejection and the five named
 		// degradation causes.
 		EventOrderRejected:    "OrderRejected",
 		EventRouteTruncated:   "RouteTruncated",
 		EventStakeTargetTaken: "StakeTargetTaken",
 		EventPickupTargetGone: "PickupTargetGone",
+		EventCurfewTruncated:  "CurfewTruncated",
+		EventDeliveryBlocked:  "DeliveryBlocked",
+
+		// Issue #72's own two public announcements (GDD §14.2: "announced
+		// publicly"), not degradation and not an RFC §9.1 writer row from
+		// an earlier issue.
+		EventDeadRunnerCrate:        "DeadRunnerCrate",
+		EventFenceWindfallAnnounced: "FenceWindfallAnnounced",
 	}
 
-	if len(want) != 16 {
-		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows plus Step 0's 4 is 16, table has %d", len(want))
+	if len(want) != 20 {
+		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows plus Step 0's 6 plus #72's 2 announcements is 20, table has %d", len(want))
 	}
 
 	for kind, name := range want {

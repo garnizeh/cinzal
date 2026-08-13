@@ -105,6 +105,34 @@ const (
 	// Node no longer has matching cargo on the ground. The action became
 	// Nothing; the route is unaffected.
 	EventPickupTargetGone
+
+	// EventCurfewTruncated is Step 0 degradation (issue #72): the Curfew
+	// global event card (GDD §14.2) reduces this round's step allowance by
+	// 1, and the route submitted before that was known no longer fits.
+	// The route truncated at Node, the last node still reachable under the
+	// reduced allowance; the action became Nothing — the same shape as
+	// EventRouteTruncated, a distinct kind because the cause (a step-
+	// allowance change, not a destroyed edge) is a different "specific
+	// reason" for the player to be notified of (GDD §15.0).
+	EventCurfewTruncated
+
+	// EventDeliveryBlocked is Step 0 degradation (issue #72): the Dragnet
+	// global event card (GDD §14.2) seals Node, a Border, for this round —
+	// a declared Deliver there cannot complete. The action became Nothing;
+	// the route is unaffected.
+	EventDeliveryBlocked
+
+	// EventDeadRunnerCrate is the Underworld global event card's own
+	// public announcement (GDD §14.2: "A crate appears at a random node,
+	// announced publicly") — an Anchor-shaped fact, not a sight-gated
+	// Trail row, naming Node only.
+	EventDeadRunnerCrate
+
+	// EventFenceWindfallAnnounced is the Economy global event card's own
+	// public announcement (GDD §14.2: "One random Black Market,
+	// announced publicly") — Node only, fired once when the standing
+	// offer opens, independent of whoever eventually claims it.
+	EventFenceWindfallAnnounced
 )
 
 // String returns the event kind's name, or "EventKind(n)" for an invalid
@@ -143,6 +171,14 @@ func (k EventKind) String() string {
 		return "StakeTargetTaken"
 	case EventPickupTargetGone:
 		return "PickupTargetGone"
+	case EventCurfewTruncated:
+		return "CurfewTruncated"
+	case EventDeliveryBlocked:
+		return "DeliveryBlocked"
+	case EventDeadRunnerCrate:
+		return "DeadRunnerCrate"
+	case EventFenceWindfallAnnounced:
+		return "FenceWindfallAnnounced"
 	default:
 		return invalidEnumString("EventKind", int(k))
 	}

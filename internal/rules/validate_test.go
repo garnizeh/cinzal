@@ -18,7 +18,7 @@ func TestValidateAbsenceDefaultOnMissingOrder(t *testing.T) {
 	entry := s.Snapshot()
 	seats := bySeat(s)
 
-	validated, events := validate(s, entry, seats, nil, legalTestConfig())
+	validated, events := validate(s, entry, seats, nil, legalTestConfig(), globalEventContext{})
 
 	want0 := game.Order{Action: game.ActionOrder{Kind: game.ActionNothing}, Stance: game.StanceOrder{Stance: game.StanceEvasive}}
 	if got := validated[0]; !reflect.DeepEqual(got, want0) {
@@ -53,7 +53,7 @@ func TestValidateRejectsIllegalPayload(t *testing.T) {
 		0: {Route: []game.NodeID{4}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig())
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
 
 	want := game.Order{Action: game.ActionOrder{Kind: game.ActionNothing}, Stance: game.StanceOrder{Stance: game.StanceEvasive}}
 	if got := validated[0]; !reflect.DeepEqual(got, want) {
@@ -77,7 +77,7 @@ func TestValidateDegradesDestroyedEdge(t *testing.T) {
 		0: {Route: []game.NodeID{1, 3}, Action: game.ActionOrder{Kind: game.ActionNothing}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig())
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
 
 	got := validated[0]
 	if !slices.Equal(got.Route, []game.NodeID{1}) {
@@ -104,7 +104,7 @@ func TestValidateDegradesStakeTargetTaken(t *testing.T) {
 		0: {Route: []game.NodeID{1}, Action: game.ActionOrder{Kind: game.ActionStakePost}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig())
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
 
 	got := validated[0]
 	if !slices.Equal(got.Route, []game.NodeID{1}) {
@@ -132,7 +132,7 @@ func TestValidateStakeOwnPostDoesNotDegrade(t *testing.T) {
 		0: {Route: []game.NodeID{1}, Action: game.ActionOrder{Kind: game.ActionStakePost}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig())
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
 
 	got := validated[0]
 	if got.Action.Kind != game.ActionStakePost {
@@ -156,7 +156,7 @@ func TestValidateDegradesPickupTargetGone(t *testing.T) {
 		0: {Route: []game.NodeID{1}, Action: game.ActionOrder{Kind: game.ActionPickup}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig())
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
 
 	got := validated[0]
 	if got.Action.Kind != game.ActionNothing {
@@ -183,7 +183,7 @@ func TestValidateDoesNotDegradeWarehousePickup(t *testing.T) {
 		0: {Action: game.ActionOrder{Kind: game.ActionPickup}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig())
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
 
 	if got := validated[0].Action.Kind; got != game.ActionPickup {
 		t.Errorf("validated[0].Action.Kind = %v, want Pickup (not degraded)", got)
@@ -203,7 +203,7 @@ func TestValidatePassesThroughLegalOrder(t *testing.T) {
 	o := game.Order{Route: []game.NodeID{1}, Action: game.ActionOrder{Kind: game.ActionNothing}}
 	orders := map[game.SeatID]game.Order{0: o}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig())
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
 
 	if got := validated[0]; !reflect.DeepEqual(got, o) {
 		t.Errorf("validated[0] = %+v, want the submitted order unchanged %+v", got, o)
@@ -212,6 +212,175 @@ func TestValidatePassesThroughLegalOrder(t *testing.T) {
 		if e.Seat == 0 {
 			t.Errorf("events = %+v, want none for seat 0's fully legal order", events)
 		}
+	}
+}
+
+// TestValidateCurfewDegradesRouteToReducedAllowance is issue #72's own
+// acceptance criterion: "Retroactive Curfew: a route legal at submission
+// that exceeds the reduced allowance degrades, per GDD §15.0, rather than
+// being rejected." Seat 0 is Infamy 0 (Nobody tier, 4 steps); the 4-step
+// route below is legal against that base allowance, but Curfew's live -1
+// (GDD §14.2) reduces it to 3 — "legal at submission, the world moved
+// under it" (truncateForCurfew, validate.go), not an illegal payload.
+func TestValidateCurfewDegradesRouteToReducedAllowance(t *testing.T) {
+	s := resolveTestState()
+	entry := s.Snapshot()
+	seats := bySeat(s)
+	orders := map[game.SeatID]game.Order{
+		0: {Route: []game.NodeID{1, 0, 1, 2}, Action: game.ActionOrder{Kind: game.ActionNothing}},
+	}
+
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{curfewActive: true})
+
+	got := validated[0]
+	if !slices.Equal(got.Route, []game.NodeID{1, 0, 1}) {
+		t.Errorf("validated[0].Route = %v, want [1 0 1] (truncated to the Curfew-reduced allowance of 3)", got.Route)
+	}
+	if got.Action.Kind != game.ActionNothing {
+		t.Errorf("validated[0].Action.Kind = %v, want Nothing", got.Action.Kind)
+	}
+	if !hasEvent(events, game.EventCurfewTruncated, 0) {
+		t.Errorf("events = %+v, want an EventCurfewTruncated for seat 0", events)
+	}
+	if hasEvent(events, game.EventOrderRejected, 0) {
+		t.Errorf("events = %+v, want no EventOrderRejected — this degrades, it does not reject", events)
+	}
+}
+
+// TestValidateCurfewStillRejectsGenuinelyOverAllowanceRoute confirms Curfew's
+// degrade path does not swallow an ordinary illegal payload: a route that
+// exceeds even the no-Curfew allowance was never legal to begin with (GDD
+// §15.0's ordinary "route longer than your step allowance" reject row), so
+// it still rejects rather than truncating to the Curfew figure.
+func TestValidateCurfewStillRejectsGenuinelyOverAllowanceRoute(t *testing.T) {
+	s := resolveTestState()
+	entry := s.Snapshot()
+	seats := bySeat(s)
+	orders := map[game.SeatID]game.Order{
+		0: {Route: []game.NodeID{1, 0, 1, 0, 1}, Action: game.ActionOrder{Kind: game.ActionNothing}},
+	}
+
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{curfewActive: true})
+
+	want := game.Order{Action: game.ActionOrder{Kind: game.ActionNothing}, Stance: game.StanceOrder{Stance: game.StanceEvasive}}
+	if got := validated[0]; !reflect.DeepEqual(got, want) {
+		t.Errorf("validated[0] = %+v, want the absence default %+v", got, want)
+	}
+	if !hasEvent(events, game.EventOrderRejected, 0) {
+		t.Errorf("events = %+v, want an EventOrderRejected for seat 0", events)
+	}
+	if hasEvent(events, game.EventCurfewTruncated, 0) {
+		t.Errorf("events = %+v, want no EventCurfewTruncated — this route was never legal, Curfew or not", events)
+	}
+}
+
+// TestValidateDragnetDegradesDeliverAtSealedBorder covers Dragnet's own
+// degradation case (checkActionDegradation's third branch, GDD §14.2):
+// "every delivery must route to the ones that remain" — a Deliver
+// otherwise legal at a Border degrades to Nothing when that Border is
+// this round's sealed target.
+func TestValidateDragnetDegradesDeliverAtSealedBorder(t *testing.T) {
+	s := resolveTestState()
+	s.Players[0].Position = 2 // the Border
+	s.Players[0].Cargo = &game.CarriedCargo{Bound: false}
+	entry := s.Snapshot()
+	seats := bySeat(s)
+	orders := map[game.SeatID]game.Order{
+		0: {Action: game.ActionOrder{Kind: game.ActionDeliver}},
+	}
+
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{sealedBorders: []game.NodeID{2}})
+
+	if got := validated[0].Action.Kind; got != game.ActionNothing {
+		t.Errorf("validated[0].Action.Kind = %v, want Nothing", got)
+	}
+	if !hasEvent(events, game.EventDeliveryBlocked, 0) {
+		t.Errorf("events = %+v, want an EventDeliveryBlocked for seat 0", events)
+	}
+}
+
+// TestValidateDeliverAtUnsealedBorderDoesNotDegrade checks the negative
+// case: a Border not in sealedBorders is unaffected.
+func TestValidateDeliverAtUnsealedBorderDoesNotDegrade(t *testing.T) {
+	s := resolveTestState()
+	s.Players[0].Position = 2
+	s.Players[0].Cargo = &game.CarriedCargo{Bound: false}
+	entry := s.Snapshot()
+	seats := bySeat(s)
+	orders := map[game.SeatID]game.Order{
+		0: {Action: game.ActionOrder{Kind: game.ActionDeliver}},
+	}
+
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{sealedBorders: []game.NodeID{3}})
+
+	if got := validated[0].Action.Kind; got != game.ActionDeliver {
+		t.Errorf("validated[0].Action.Kind = %v, want Deliver (node 2 is not sealed)", got)
+	}
+	if hasEvent(events, game.EventDeliveryBlocked, 0) {
+		t.Errorf("events = %+v, want no EventDeliveryBlocked", events)
+	}
+}
+
+// TestLegalViewWiresEntrySnapshotIntoStepModifiers guards the wiring gap
+// this issue closes: legalView must copy Infamy, Flagged and
+// EvasiveStepPenalty from the entry snapshot into the PlayerView Steps
+// actually reads — before this fix, every legality check silently computed
+// against Infamy 0 and no modifiers regardless of the seat's true state.
+func TestLegalViewWiresEntrySnapshotIntoStepModifiers(t *testing.T) {
+	s := resolveTestState()
+	s.Players[0].Infamy = 9 // Legend tier: 2 steps per round.
+	entry := s.Snapshot()
+
+	v := legalView(s, entry, 0, false)
+
+	if v.You.Infamy != 9 {
+		t.Errorf("You.Infamy = %d, want 9 (from the entry snapshot)", v.You.Infamy)
+	}
+	if got := Steps(v, legalTestConfig()); got != 2 {
+		t.Errorf("Steps() = %d, want 2 (Legend tier)", got)
+	}
+}
+
+// TestLegalViewScaffoldingBonusIsSectorScoped is GDD §14.2's Scaffolding,
+// consumed the round after the card fires: "+1 step" only for a player
+// whose entry position is inside the flagged sector.
+func TestLegalViewScaffoldingBonusIsSectorScoped(t *testing.T) {
+	s := resolveTestState() // seat 0 at node 0
+	s.Graph.Nodes[0].Sector = game.SectorOldDocks
+	sector := game.SectorOldDocks
+	s.NextRound.Scaffolding = &sector
+	entry := s.Snapshot()
+
+	v := legalView(s, entry, 0, false)
+	if !v.You.StepModifiers.Scaffolding {
+		t.Error("StepModifiers.Scaffolding = false, want true for a seat inside the flagged sector")
+	}
+
+	other := game.SectorNorthVale
+	s.NextRound.Scaffolding = &other
+	v = legalView(s, entry, 0, false)
+	if v.You.StepModifiers.Scaffolding {
+		t.Error("StepModifiers.Scaffolding = true, want false for a seat outside the flagged sector")
+	}
+}
+
+// TestLegalViewRetainerBonusRequiresNoCargo is GDD §14.2's Retainer,
+// consumed the round after the card fires: "+2 steps" only for a player
+// carrying no cargo.
+func TestLegalViewRetainerBonusRequiresNoCargo(t *testing.T) {
+	s := resolveTestState()
+	s.NextRound.Retainer = true
+	entry := s.Snapshot()
+
+	v := legalView(s, entry, 0, false)
+	if !v.You.StepModifiers.Retainer {
+		t.Error("StepModifiers.Retainer = false, want true for a seat carrying no cargo")
+	}
+
+	s.Players[0].Cargo = &game.CarriedCargo{Bound: false}
+	v = legalView(s, entry, 0, false)
+	if v.You.StepModifiers.Retainer {
+		t.Error("StepModifiers.Retainer = true, want false for a seat carrying cargo")
 	}
 }
 

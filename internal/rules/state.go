@@ -48,6 +48,14 @@ type Node struct {
 	// it; at zero the node needs no announcement — "it's read off the map
 	// like any other passable node" (GDD "Upkeep").
 	SinkholeRounds int
+
+	// FenceWindfallActive is Fence's Windfall's standing offer (GDD §14.2):
+	// true from the round the card fires until whichever cargo-carrying
+	// seat ends a round here first claims it — "First arrival only." Only
+	// ever true on a Black Market node. Cleared by the claim, never by
+	// Upkeep — unlike the NextRoundModifiers block below, this has no
+	// round-bounded lifetime of its own; it simply waits.
+	FenceWindfallActive bool
 }
 
 // Post is one seat's lease on a node (GDD §10.1, §10.4).
@@ -222,6 +230,13 @@ type Player struct {
 	// EvasiveStepPenalty (resetRoundFlags, resolve.go): "next round only,
 	// consumed once."
 	Ledger []game.LedgerEntry
+
+	// MarketSurgeActive is Market Surge's per-seat standing bonus (GDD
+	// §14.2): "Each player's next delivery pays +50%." Unlike Ledger, this
+	// is not "next round only" — it survives however many rounds pass
+	// until this seat's next Deliver actually resolves, at which point
+	// resolveOneDelivery (deliveries.go) applies the bonus and clears it.
+	MarketSurgeActive bool
 }
 
 // MatchState is the match's authoritative state: the graph and every seat,
@@ -244,6 +259,53 @@ type MatchState struct {
 	// separate sort key are ever needed to look one up or to iterate every
 	// seat in a stable, fair order.
 	Players []Player
+
+	// NextRound holds the four global-event cards whose GDD text reads
+	// "next round" rather than "this round" (GDD §14.2: Scaffolding,
+	// Retainer, Blackout, Dockers' Strike). globalEvent (events.go) sets
+	// these when the corresponding card fires; the round that follows
+	// reads them as ordinary live state — validate/legalView for
+	// Scaffolding and Retainer's step bonuses, Legal for Dockers' Strike,
+	// writeTrail for Blackout — before that round's own movement can
+	// change what they're evaluated against. Upkeep step 4 (D5) clears
+	// them; that step is issue #74's stub, not this one's, so a flag set
+	// here persists until #74 lands (matches the precedent trail.go's
+	// rainActive/Blackout comment already documents).
+	//
+	// Warning for #74: an unconditional "clear s.NextRound" at the end of
+	// Upkeep would delete a flag globalEvent() just set moments earlier in
+	// the very same Resolve() call, before round N+1 ever gets to read it —
+	// the identical hazard D5's own Reasoning section already worked
+	// through for Flagged/EvasiveStepPenalty ("cannot tell round N's
+	// already-consumed value apart from a value Phase 5 just wrote for
+	// round N+1"). D5's decided step 4 text — "clear whichever fired for
+	// this round" — already points at the right fix (clear only a
+	// modifier that was active entering this round, not one merely
+	// present when Upkeep runs), but that distinction needs an explicit
+	// mechanism, not just careful phrasing, or #74 reintroduces the same
+	// bug this field's own consumers were built to avoid.
+	NextRound NextRoundModifiers
+}
+
+// NextRoundModifiers is MatchState.NextRound's shape — see that field's own
+// comment. Scaffolding is a *game.Sector rather than a bool because its
+// bonus is sector-scoped (GDD §14.2: "every player inside it"); nil means no
+// Scaffolding is pending.
+type NextRoundModifiers struct {
+	Scaffolding   *game.Sector
+	Retainer      bool
+	Blackout      bool
+	DockersStrike bool
+}
+
+// clone returns a deep copy of m — only Scaffolding needs reallocating; the
+// three bools copy by value with the struct itself. See MatchState.clone.
+func (m NextRoundModifiers) clone() NextRoundModifiers {
+	if m.Scaffolding != nil {
+		sector := *m.Scaffolding
+		m.Scaffolding = &sector
+	}
+	return m
 }
 
 // SeatSnapshot is one seat's frozen end-of-previous-round truth (RFC §6.6):
@@ -325,9 +387,10 @@ func (s MatchState) clone() MatchState {
 		}
 	}
 	return MatchState{
-		Round:   s.Round,
-		Graph:   s.Graph.clone(),
-		Players: players,
+		Round:     s.Round,
+		Graph:     s.Graph.clone(),
+		Players:   players,
+		NextRound: s.NextRound.clone(),
 	}
 }
 

@@ -10,12 +10,12 @@ import (
 // seat order (bySeat) — neither carries a fairness dimension. A Ledger
 // purchase is private and touches nothing another seat could contest; a
 // renewal extends a post this seat already holds exclusively.
-func resolveAddons(s *MatchState, validated map[game.SeatID]game.Order, entry EntrySnapshot, cfg game.Config) []game.Event {
+func resolveAddons(s *MatchState, validated map[game.SeatID]game.Order, entry EntrySnapshot, cfg game.Config, ctx globalEventContext) []game.Event {
 	var events []game.Event
 	for _, seat := range bySeat(*s) {
 		o := validated[seat]
 		resolveLedger(s, seat, o, entry, cfg)
-		events = append(events, resolveRenewal(s, seat, o, cfg)...)
+		events = append(events, resolveRenewal(s, seat, o, cfg, ctx)...)
 	}
 	return events
 }
@@ -64,7 +64,11 @@ func resolveLedger(s *MatchState, seat game.SeatID, o game.Order, entry EntrySna
 // remaining case Debt selects, SelectLeaseByFewestRounds — often exactly
 // the post being renewed, since that is usually why it's being renewed at
 // all) must not then try to extend a lease that no longer exists.
-func resolveRenewal(s *MatchState, seat game.SeatID, o game.Order, cfg game.Config) []game.Event {
+//
+// cost is computed via leaseCostPerBlock (events.go), Permit Auction's
+// (GDD §14.2, issue #72) discounted rate when live this round, the
+// ordinary cfg.LeaseCostPerBlock otherwise.
+func resolveRenewal(s *MatchState, seat game.SeatID, o game.Order, cfg game.Config, ctx globalEventContext) []game.Event {
 	if o.AddOns.RenewBlocks <= 0 || o.Action.Kind == game.ActionStakePost {
 		return nil
 	}
@@ -72,7 +76,7 @@ func resolveRenewal(s *MatchState, seat game.SeatID, o game.Order, cfg game.Conf
 		return nil
 	}
 
-	cost := o.AddOns.RenewBlocks * cfg.LeaseCostPerBlock
+	cost := o.AddOns.RenewBlocks * leaseCostPerBlock(cfg, ctx)
 	_, debtEvent := applyDebt(s, seat, cost, s.Round)
 
 	var events []game.Event

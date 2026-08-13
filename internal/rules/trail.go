@@ -34,26 +34,36 @@ const (
 // No RNG draw happens anywhere in this file (D13: "No RNG consumption
 // change" — Rain's suppression is a re-read of the event deck's fixed,
 // already-shuffled order, never a new draw).
-func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, walks map[game.SeatID]*seatWalk, vanished map[game.SeatID]bool, roundEvents []game.Event) []game.Event {
+//
+// ctx (issue #72) carries this round's already-drawn Festival node — see
+// festivalNoTrace below — needed here because Festival's "leaves no trace"
+// half has no consumer before Phase 6 pops the card, exactly like Rain's
+// suppression already reads eventCardThisRound directly rather than
+// waiting for globalEvent (events.go).
+func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, walks map[game.SeatID]*seatWalk, vanished map[game.SeatID]bool, roundEvents []game.Event, ctx globalEventContext) []game.Event {
 	var out []game.Event
 
 	entries := map[game.NodeID][]game.TrailEntry{}
 
-	// Rain's suppression is computed once, up front: D13's card text is a
-	// world fact, not a viewer-side redaction — "No 'fresh tracks' entries
-	// are recorded anywhere this round" — so the returned Event stream
-	// (the substrate for recap, telemetry and the debug trace, RFC §6.7)
-	// must omit them too, not merely have distributeTrail's Archive writes
-	// skip them below. The entries themselves are still constructed here,
-	// unconditionally: distributeTrail needs the pre-suppression fact to
-	// tell an honest zero (nothing happened) from an Obscured one (Rain
-	// erased the only thing that would have been recorded).
+	// Rain's and Blackout's suppression are both computed once, up front:
+	// D13's card text is a world fact, not a viewer-side redaction — "No
+	// 'fresh tracks' entries are recorded anywhere this round" (Rain),
+	// "nobody generates trail entries" (Blackout, read from the next-round
+	// modifier a prior round's card set — state.go, NextRoundModifiers) —
+	// so the returned Event stream (the substrate for recap, telemetry and
+	// the debug trace, RFC §6.7) must omit them too, not merely have
+	// distributeTrail's Archive writes skip them below. The entries
+	// themselves are still constructed here, unconditionally:
+	// distributeTrail needs the pre-suppression fact to tell an honest
+	// zero (nothing happened) from an Obscured one (suppression erased the
+	// only thing that would have been recorded).
 	suppressFreshTracks := rainActive(*s)
+	blackoutActive := s.NextRound.Blackout
 
-	addCargoTakenAndDecoy(*s, roundEvents, validated, seats, entries)
+	addCargoTakenAndDecoy(*s, roundEvents, validated, seats, entries, ctx)
 
 	for _, n := range addFreshTracks(*s, validated, seats, walks, entries) {
-		if !suppressFreshTracks {
+		if !suppressFreshTracks && !blackoutActive {
 			out = append(out, game.Event{Kind: game.EventFreshTracks, Round: s.Round, Node: n})
 		}
 	}
@@ -73,11 +83,28 @@ func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []gam
 		}
 	}
 
-	addItemPurchased(*s, roundEvents, entries)
+	addItemPurchased(*s, roundEvents, entries, ctx)
 
-	distributeTrail(s, validated, seats, entries, suppressFreshTracks)
+	distributeTrail(s, validated, seats, entries, suppressFreshTracks, blackoutActive)
 
 	return out
+}
+
+// festivalNoTrace reports whether seat's own entries at node should be
+// suppressed by Festival (GDD §14.2, issue #72: "Anyone ending there this
+// round... leaves no trace") — this round's card is Festival, node is its
+// already-drawn target (ctx.festivalNode, buildGlobalEventContext), and
+// seat's live Position (unchanged since movement, at every call site this
+// is read from) is that same node. Scoped to cargo-taken and item-
+// purchased — the two sight-gated entry kinds a seat can actually
+// contribute at its own ending node; fresh tracks already excludes a
+// seat's own ending node unconditionally (addFreshTracks), and
+// confrontation/post-staked are Anchor rows Festival's card text has no
+// bearing on (D13: Festival "suppresses the acting player's own entry...
+// not a world-level event", the same shape as Vanish and Distracted
+// Guard — never populates Obscured).
+func festivalNoTrace(ctx globalEventContext, seat game.SeatID, node game.NodeID, s MatchState) bool {
+	return ctx.live && ctx.card == EventFestival && node == ctx.festivalNode && s.Players[seat].Position == node
 }
 
 // addCargoTakenAndDecoy adds GDD §7.3 row 1's "Cargo left here" entry for
@@ -90,9 +117,9 @@ func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []gam
 // resolves" (event.go's EventCargoTaken doc), since neither action a seat
 // takes this round can itself change that same seat's own Infamy again
 // between here and Step N+1 having already run.
-func addCargoTakenAndDecoy(s MatchState, roundEvents []game.Event, validated map[game.SeatID]game.Order, seats []game.SeatID, entries map[game.NodeID][]game.TrailEntry) {
+func addCargoTakenAndDecoy(s MatchState, roundEvents []game.Event, validated map[game.SeatID]game.Order, seats []game.SeatID, entries map[game.NodeID][]game.TrailEntry, ctx globalEventContext) {
 	for _, e := range roundEvents {
-		if e.Kind != game.EventCargoTaken {
+		if e.Kind != game.EventCargoTaken || festivalNoTrace(ctx, e.Seat, e.Node, s) {
 			continue
 		}
 		entries[e.Node] = append(entries[e.Node], cargoTakenEntry(s, e.Node, e.Seat))
@@ -100,7 +127,7 @@ func addCargoTakenAndDecoy(s MatchState, roundEvents []game.Event, validated map
 
 	for _, seat := range seats {
 		for _, d := range validated[seat].Items {
-			if d.Item == game.ItemDecoy {
+			if d.Item == game.ItemDecoy && !festivalNoTrace(ctx, seat, d.Target, s) {
 				entries[d.Target] = append(entries[d.Target], cargoTakenEntry(s, d.Target, seat))
 			}
 		}
@@ -182,9 +209,9 @@ func addConfrontation(roundEvents []game.Event, entries map[game.NodeID][]game.T
 // entry for every EventItemPurchased this round, named iff the buyer's live
 // Infamy is >= 6 — the same "at the moment it resolves" reasoning as
 // cargoTakenEntry.
-func addItemPurchased(s MatchState, roundEvents []game.Event, entries map[game.NodeID][]game.TrailEntry) {
+func addItemPurchased(s MatchState, roundEvents []game.Event, entries map[game.NodeID][]game.TrailEntry, ctx globalEventContext) {
 	for _, e := range roundEvents {
-		if e.Kind != game.EventItemPurchased {
+		if e.Kind != game.EventItemPurchased || festivalNoTrace(ctx, e.Seat, e.Node, s) {
 			continue
 		}
 		item := e.Item
@@ -340,10 +367,19 @@ func rainActive(s MatchState) bool {
 // same rule D23's opening-sight seeding already establishes at Setup
 // (initial.go: a start node's Hidden neighbour is seeded straight to
 // FogInSight, never held at an intermediate tier first).
-func seatSight(s MatchState, validated map[game.SeatID]game.Order, seat game.SeatID) []game.NodeID {
-	mask := make([]bool, len(s.Graph.Nodes))
-
+//
+// blackout (GDD §14.2, issue #72) overrides every one of those sources at
+// once — "nobody has sight beyond their own node" carves out no exception
+// for a held post, a declared Surveil, or a Police Band target, so this
+// returns seat's own position alone rather than reading any of the other
+// three.
+func seatSight(s MatchState, validated map[game.SeatID]game.Order, seat game.SeatID, blackout bool) []game.NodeID {
 	pos := s.Players[seat].Position
+	if blackout {
+		return []game.NodeID{pos}
+	}
+
+	mask := make([]bool, len(s.Graph.Nodes))
 	mask[pos] = true
 	for _, n := range s.Graph.Nodes[pos].Edges {
 		mask[n] = true
@@ -402,13 +438,16 @@ func updateSeatFog(p *Player, sight []game.NodeID) {
 
 // distributeTrail applies GDD §7.3's "you read the logs of nodes you had
 // sight of" and RFC §9.2's archive bookkeeping, for every seat: update Fog
-// to this round's sight set, then for every sighted node either append its
+// to this round's sight set (capped to the seat's own node when blackoutActive
+// — seatSight's own doc), then for every sighted node either append its
 // (post-suppression) entries to Archive.Trail and mark the round in
 // Archive.Sight, or — per D13 — mark it in Archive.Obscured instead when a
-// real entry genuinely occurred there and Rain's suppression erased the
-// only thing that would have been recorded. A node with no real activity at
-// all is an honest Sight zero either way, never Obscured.
-func distributeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, entries map[game.NodeID][]game.TrailEntry, suppressFreshTracks bool) {
+// real entry genuinely occurred there and Rain's or Blackout's suppression
+// erased the only thing that would have been recorded (blackoutActive erases
+// every entry kind at once; suppressFreshTracks only that one kind). A node
+// with no real activity at all is an honest Sight zero either way, never
+// Obscured.
+func distributeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, entries map[game.NodeID][]game.TrailEntry, suppressFreshTracks, blackoutActive bool) {
 	type nodeResult struct {
 		entries  []game.TrailEntry
 		obscured bool
@@ -420,16 +459,21 @@ func distributeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats 
 		if !ok {
 			continue
 		}
-		after := before
-		if suppressFreshTracks {
+		var after []game.TrailEntry
+		switch {
+		case blackoutActive:
+			after = nil
+		case suppressFreshTracks:
 			after = withoutFreshTracks(before)
+		default:
+			after = before
 		}
 		results[n.ID] = nodeResult{entries: after, obscured: len(after) == 0}
 	}
 
 	for _, seat := range seats {
 		p := &s.Players[seat]
-		sight := seatSight(*s, validated, seat)
+		sight := seatSight(*s, validated, seat, blackoutActive)
 		updateSeatFog(p, sight)
 
 		for _, node := range sight {

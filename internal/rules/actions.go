@@ -33,7 +33,7 @@ import (
 // reconstructed later from a diff of before/after Infamy snapshots that
 // would also have to account for this same round's confrontation deltas.
 // writeTrail (#71) is its only consumer.
-func resolveActions(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, cfg game.Config, r *RNG) ([]game.Event, map[game.SeatID]bool) {
+func resolveActions(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, cfg game.Config, ctx globalEventContext, r *RNG) ([]game.Event, map[game.SeatID]bool) {
 	var events []game.Event
 	vanishReducedInfamy := map[game.SeatID]bool{}
 
@@ -61,9 +61,17 @@ func resolveActions(s *MatchState, validated map[game.SeatID]game.Order, seats [
 			if e := resolvePickup(s, seat, node, s.Round); e != nil {
 				events = append(events, *e)
 			}
+			// Shipping Boom (GDD §14.2, issue #72): +Cr$5 on a Pickup at
+			// this round's already-drawn overloaded Warehouse
+			// (ctx.shippingBoomNode, buildGlobalEventContext) — fires
+			// regardless of which Pickup source resolvePickup actually
+			// used, matching the card text's plain "picking up there."
+			if ctx.card == EventShippingBoom && ctx.live && node == ctx.shippingBoomNode && s.Players[seat].Cargo != nil {
+				s.Players[seat].Balance += 5
+			}
 
 		case game.ActionStakePost:
-			events = append(events, resolveStakePost(s, seat, node, o, cfg, s.Round)...)
+			events = append(events, resolveStakePost(s, seat, node, o, cfg, ctx, s.Round)...)
 
 		case game.ActionDeal:
 			if e := resolveDeal(s, seat, node, o.Action.Item, s.Round); e != nil {
@@ -158,7 +166,7 @@ func resolvePickup(s *MatchState, seat game.SeatID, node game.NodeID, round game
 // a seat at the cap gets silent no-op, matching D14's "Open Doors"
 // precedent for a legal declaration whose target moved under it
 // (docs/decisions/D14-five-resolution-gaps.md).
-func resolveStakePost(s *MatchState, seat game.SeatID, node game.NodeID, o game.Order, cfg game.Config, round game.RoundNumber) []game.Event {
+func resolveStakePost(s *MatchState, seat game.SeatID, node game.NodeID, o game.Order, cfg game.Config, ctx globalEventContext, round game.RoundNumber) []game.Event {
 	if s.Graph.Nodes[node].Post != nil {
 		return []game.Event{{Kind: game.EventStakeTargetTaken, Round: round, Node: node, Seat: seat}}
 	}
@@ -167,7 +175,11 @@ func resolveStakePost(s *MatchState, seat game.SeatID, node game.NodeID, o game.
 		return nil
 	}
 
-	cost := o.AddOns.RenewBlocks * cfg.LeaseCostPerBlock
+	// cost: leaseCostPerBlock (events.go) applies Permit Auction's
+	// discounted rate (GDD §14.2, issue #72) when live this round — "lease
+	// blocks," not "renewals only," so a fresh stake's own block count is
+	// discounted identically to resolveRenewal's (addons.go).
+	cost := o.AddOns.RenewBlocks * leaseCostPerBlock(cfg, ctx)
 	_, debtEvent := applyDebt(s, seat, cost, round)
 
 	// Read after applyDebt, not before: a Debt-surrendered lease (GDD §13
