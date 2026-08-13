@@ -72,9 +72,9 @@ func TestDetectCrossingsFindsOppositeDirectionSameEdge(t *testing.T) {
 	}
 
 	got := detectCrossings(transitions, seats, validated)
-	want := map[game.NodeID][]game.SeatID{1: {0, 1}}
+	want := []confrontation{{Node: 1, Seats: []game.SeatID{0, 1}}}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("detectCrossings() = %v, want %v", got, want)
+		t.Fatalf("detectCrossings() = %+v, want %+v", got, want)
 	}
 }
 
@@ -110,9 +110,9 @@ func TestDetectCollisionsGroupsSharedNodeIncludingStationary(t *testing.T) {
 	seats := []game.SeatID{0, 1, 2}
 
 	got := detectCollisions(s, seats)
-	want := map[game.NodeID][]game.SeatID{5: {0, 1}}
+	want := []confrontation{{Node: 5, Seats: []game.SeatID{0, 1}}}
 	if !reflect.DeepEqual(got, want) {
-		t.Fatalf("detectCollisions() = %v, want %v", got, want)
+		t.Fatalf("detectCollisions() = %+v, want %+v", got, want)
 	}
 }
 
@@ -187,12 +187,7 @@ func TestCohabitationThreeCases(t *testing.T) {
 			advance(&s, walks, c.validated, seats, 1, rng)
 
 			groups := detectCollisions(s, seats)
-			fight := false
-			for _, group := range groups {
-				if len(group) >= 2 {
-					fight = true
-				}
-			}
+			fight := len(groups) > 0
 			if fight != c.wantFight {
 				t.Errorf("collision after step 1 = %v, want %v (groups=%v)", fight, c.wantFight, groups)
 			}
@@ -207,8 +202,8 @@ func TestCohabitationThreeCases(t *testing.T) {
 // step resolve in node ID order."
 func TestMergeConfrontationsOrdersByNodeID(t *testing.T) {
 	s := MatchState{Players: []Player{{Seat: 0}, {Seat: 1}, {Seat: 2}, {Seat: 3}}}
-	crossings := map[game.NodeID][]game.SeatID{9: {2, 3}}
-	collisions := map[game.NodeID][]game.SeatID{1: {0, 1}}
+	crossings := []confrontation{{Node: 9, Seats: []game.SeatID{2, 3}}}
+	collisions := []confrontation{{Node: 1, Seats: []game.SeatID{0, 1}}}
 
 	got := mergeConfrontations(s, crossings, collisions)
 	want := []confrontation{
@@ -226,8 +221,8 @@ func TestMergeConfrontationsOrdersByNodeID(t *testing.T) {
 // deduplicated, not two separate resolutions of the same node.
 func TestMergeConfrontationsUnionsCrossingAndCollisionAtSameNode(t *testing.T) {
 	s := MatchState{Players: []Player{{Seat: 0}, {Seat: 1}, {Seat: 2}}}
-	crossings := map[game.NodeID][]game.SeatID{4: {0, 1}}
-	collisions := map[game.NodeID][]game.SeatID{4: {1, 2}}
+	crossings := []confrontation{{Node: 4, Seats: []game.SeatID{0, 1}}}
+	collisions := []confrontation{{Node: 4, Seats: []game.SeatID{1, 2}}}
 
 	got := mergeConfrontations(s, crossings, collisions)
 	want := []confrontation{{Node: 4, Seats: []game.SeatID{0, 1, 2}}}
@@ -419,6 +414,31 @@ func TestScavengeMarksEnteredNodeKnownRegardlessOfRoll(t *testing.T) {
 		if s.Players[0].Fog[1] != game.FogKnown {
 			t.Fatalf("seed %d: Fog[1] = %s, want Known after visiting, regardless of the roll", seed, s.Players[0].Fog[1])
 		}
+	}
+}
+
+// TestScavengeSkipsRumouredNodeButStillMarksKnown asserts GDD §9.1's roll
+// is gated on genuinely Hidden, not "anything short of Known": a Rumoured
+// node (name, type, sector already known, GDD §7.1) rolls no Scavenging
+// and consumes no scavenge.d6 index — but entering it still upgrades it to
+// Known, exactly like any other visited node (GDD §7.2).
+func TestScavengeSkipsRumouredNodeButStillMarksKnown(t *testing.T) {
+	s := MatchState{
+		Graph:   buildGraph(2, map[game.NodeID][]game.NodeID{0: {1}, 1: {0}}),
+		Players: []Player{{Seat: 0, Balance: 10, Fog: []game.FogState{game.FogKnown, game.FogRumoured}}},
+	}
+	rng := NewRNG(testSeed(1), 1)
+
+	scavenge(&s, 0, 1, rng)
+
+	if rng.Seq() != 0 {
+		t.Errorf("Seq() = %d, want 0 — a Rumoured node is not Hidden, so it rolls no Scavenging", rng.Seq())
+	}
+	if s.Players[0].Balance != 10 {
+		t.Errorf("Balance = %d, want unchanged 10", s.Players[0].Balance)
+	}
+	if s.Players[0].Fog[1] != game.FogKnown {
+		t.Errorf("Fog[1] = %s, want Known after visiting, even though no roll fired", s.Players[0].Fog[1])
 	}
 }
 

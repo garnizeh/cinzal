@@ -193,49 +193,55 @@ func nodesAtSectorDistance(candidates []game.NodeID, toSector []int, d int) []ga
 	return out
 }
 
-// scavenge applies GDD §9.1's Scavenging roll for seat entering node: a
-// destination already Known to seat rolls nothing at all — "including one
-// that became Known thirty seconds earlier because a 6 on the previous step
-// revealed it" — checked against seat's live Fog at the moment of arrival,
-// which advance guarantees by calling this immediately after each step's
-// move, never batched. Otherwise it draws 1D6 (scavenge.d6): 1-3 nothing,
-// 4-5 Cr$3, 6 reveals every node adjacent to node as Known. Entering node
-// makes it Known to seat regardless of the roll — "a visited node becomes
-// Known permanently" (GDD §7.2) is the reveal the roll only adds a bonus on
-// top of, not a gate on.
+// scavenge applies GDD §9.1's Scavenging roll for seat entering node. The
+// roll is gated on node being genuinely Hidden — "Entering a Hidden node
+// rolls 1D6" (GDD §9.1) names that state specifically, not "anything short
+// of Known": a Rumoured node (name, type, sector already known, GDD §7.1)
+// is not the blind-exploration case Scavenging represents, so walking into
+// one costs no roll and no scavenge.d6 index — including a node that became
+// Known thirty seconds earlier because a 6 on the previous step revealed
+// it, checked against seat's live Fog at the moment of arrival, which
+// advance guarantees by calling this immediately after each step's move,
+// never batched. When it does roll: 1-3 nothing, 4-5 Cr$3, 6 reveals every
+// node adjacent to node as Known. Entering node makes it Known to seat
+// regardless of fog state or roll — "a visited node becomes Known
+// permanently" (GDD §7.2) is unconditional; the roll only ever adds a bonus
+// on top of it for the Hidden case.
 func scavenge(s *MatchState, seat game.SeatID, node game.NodeID, r *RNG) {
 	p := &s.Players[seat]
-	if p.Fog[node] >= game.FogKnown {
-		return
-	}
 
-	switch roll := r.Next(PurposeScavengeD6, 6) + 1; roll {
-	case 4, 5:
-		p.Balance += 3
-	case 6:
-		for _, adj := range s.Graph.Nodes[node].Edges {
-			if p.Fog[adj] < game.FogKnown {
-				p.Fog[adj] = game.FogKnown
+	if p.Fog[node] == game.FogHidden {
+		switch roll := r.Next(PurposeScavengeD6, 6) + 1; roll {
+		case 4, 5:
+			p.Balance += 3
+		case 6:
+			for _, adj := range s.Graph.Nodes[node].Edges {
+				if p.Fog[adj] < game.FogKnown {
+					p.Fog[adj] = game.FogKnown
+				}
 			}
 		}
 	}
 
-	p.Fog[node] = game.FogKnown
+	if p.Fog[node] < game.FogKnown {
+		p.Fog[node] = game.FogKnown
+	}
 }
 
-// detectCrossings returns, for step's transitions, one seat group per node
-// where two seats traversed the same edge in opposite directions this step
-// (GDD §15a): "they meet mid-edge." The group is keyed by the confrontation
-// location crossingNode resolves — the four Aggressive combinations the
-// issue names explicitly.
+// detectCrossings returns, for step's transitions, one confrontation per
+// node where two seats traversed the same edge in opposite directions this
+// step (GDD §15a): "they meet mid-edge." Node-ordered (orderConfrontationsByNode,
+// #58) so mergeConfrontations can combine this with detectCollisions'
+// output by a plain sorted-slice merge, never by ranging a map (CLAUDE.md:
+// resolution must not range over maps) — groups is write-only here, keyed
+// lookups only, never ranged.
 //
 // seats must be bySeat's own order: pairs are scanned lowest-seat-first so
 // that when more than one pair resolves to the same node, the seats append
-// to that node's group in a stable order before mergeConfrontations imposes
-// its own final seat ordering — a merge input this function does not itself
-// need to keep sorted, but must not need a second, ad-hoc sort to fix later.
-func detectCrossings(transitions map[game.SeatID]transition, seats []game.SeatID, validated map[game.SeatID]game.Order) map[game.NodeID][]game.SeatID {
+// to that node's group in a stable order.
+func detectCrossings(transitions map[game.SeatID]transition, seats []game.SeatID, validated map[game.SeatID]game.Order) []confrontation {
 	groups := map[game.NodeID][]game.SeatID{}
+	var nodes []game.NodeID
 
 	for i, a := range seats {
 		ta := transitions[a]
@@ -250,11 +256,27 @@ func detectCrossings(transitions map[game.SeatID]transition, seats []game.SeatID
 			}
 
 			node := crossingNode(ta.From, tb.From, validated[a].Stance.Stance, validated[b].Stance.Stance)
+			if _, seen := groups[node]; !seen {
+				nodes = append(nodes, node)
+			}
 			groups[node] = append(groups[node], a, b)
 		}
 	}
 
-	return groups
+	return confrontationsFromGroups(nodes, groups)
+}
+
+// confrontationsFromGroups builds a node-ordered []confrontation from nodes
+// (every key groups holds, in no particular order but with no duplicate)
+// and groups itself, read only by keyed lookup — never by ranging it — so
+// every caller of this helper stays inside CLAUDE.md's no-map-ranging rule.
+func confrontationsFromGroups(nodes []game.NodeID, groups map[game.NodeID][]game.SeatID) []confrontation {
+	ordered := orderConfrontationsByNode(nodes)
+	result := make([]confrontation, 0, len(ordered))
+	for _, node := range ordered {
+		result = append(result, confrontation{Node: node, Seats: groups[node]})
+	}
+	return result
 }
 
 // crossingNode resolves GDD §15a's confrontation location: the origin node
@@ -276,60 +298,80 @@ func crossingNode(fromA, fromB game.NodeID, stanceA, stanceB game.Stance) game.N
 	}
 }
 
-// detectCollisions returns one seat group per node occupied by two or more
-// seats at the end of this step (GDD §15b) — "evaluates ALL positions,
+// detectCollisions returns one confrontation per node occupied by two or
+// more seats at the end of this step (GDD §15b) — "evaluates ALL positions,
 // stationary seats included" (RFC §6.7): it reads s.Players directly rather
 // than a transition set, so a seat that did not move this step, or this
 // round, is still counted. Running this every step, on final position
 // alone, is what makes GDD §15's three cohabitation cases self-resolving
 // without a dedicated pre-movement check (GDD §15, "nothing special is
-// needed to end it").
+// needed to end it"). Node-ordered like detectCrossings, and for the same
+// reason: groups is written to and looked up by key, never ranged.
 //
 // seats must be bySeat's own order, so each node's group is already seat-
 // ordered on the way in — mergeConfrontations still reorders explicitly via
 // filterBySeat rather than trusting that as a given, since a crossing group
 // merged into the same node need not itself be seat-ordered going in.
-func detectCollisions(s MatchState, seats []game.SeatID) map[game.NodeID][]game.SeatID {
+func detectCollisions(s MatchState, seats []game.SeatID) []confrontation {
 	groups := map[game.NodeID][]game.SeatID{}
+	var nodes []game.NodeID
+
 	for _, seat := range seats {
 		node := s.Players[seat].Position
+		if _, seen := groups[node]; !seen {
+			nodes = append(nodes, node)
+		}
 		groups[node] = append(groups[node], seat)
 	}
 
-	for node, group := range groups {
-		if len(group) < 2 {
-			delete(groups, node)
+	var multi []game.NodeID
+	for _, node := range nodes {
+		if len(groups[node]) >= 2 {
+			multi = append(multi, node)
 		}
 	}
 
-	return groups
+	return confrontationsFromGroups(multi, groups)
 }
 
-// mergeConfrontations combines detectCrossings' and detectCollisions'
-// groupings into node-ordered confrontations (orderConfrontationsByNode,
-// #58): "two confrontations at different nodes in the same step resolve in
-// node ID order." A node with both a crossing and a co-located collision
-// becomes one confrontation with every participant's union, not two
-// separate resolutions of the same node — Seats is deduplicated and
-// seat-ordered via filterBySeat, which also folds a seat's own duplicate
-// membership across more than one contributing group into a single entry.
-func mergeConfrontations(s MatchState, crossings, collisions map[game.NodeID][]game.SeatID) []confrontation {
-	merged := map[game.NodeID][]game.SeatID{}
-	for node, group := range crossings {
-		merged[node] = append(merged[node], group...)
+// mergeConfrontations combines detectCrossings' and detectCollisions' own
+// node-ordered results into one node-ordered list (RFC §6.5's "two
+// confrontations at different nodes in the same step resolve in node ID
+// order"): a plain sorted-slice merge, since both inputs are already
+// ascending by Node and each is internally duplicate-free. A node
+// appearing in both — a crossing and a co-located collision — becomes one
+// confrontation with every participant's union, not two separate
+// resolutions of the same node; Seats is deduplicated and seat-ordered via
+// filterBySeat, which also folds a seat appearing in both groups into a
+// single entry. Neither input is ever ranged, only walked by index — the
+// no-map-ranging-in-resolution rule (CLAUDE.md) that motivated
+// detectCrossings and detectCollisions to hand back slices rather than raw
+// maps in the first place.
+func mergeConfrontations(s MatchState, crossings, collisions []confrontation) []confrontation {
+	result := make([]confrontation, 0, len(crossings)+len(collisions))
+
+	i, j := 0, 0
+	for i < len(crossings) && j < len(collisions) {
+		switch a, b := crossings[i], collisions[j]; {
+		case a.Node < b.Node:
+			result = append(result, confrontation{Node: a.Node, Seats: filterBySeat(s, a.Seats)})
+			i++
+		case a.Node > b.Node:
+			result = append(result, confrontation{Node: b.Node, Seats: filterBySeat(s, b.Seats)})
+			j++
+		default:
+			seats := append(append([]game.SeatID{}, a.Seats...), b.Seats...)
+			result = append(result, confrontation{Node: a.Node, Seats: filterBySeat(s, seats)})
+			i++
+			j++
+		}
 	}
-	for node, group := range collisions {
-		merged[node] = append(merged[node], group...)
+	for ; i < len(crossings); i++ {
+		result = append(result, confrontation{Node: crossings[i].Node, Seats: filterBySeat(s, crossings[i].Seats)})
+	}
+	for ; j < len(collisions); j++ {
+		result = append(result, confrontation{Node: collisions[j].Node, Seats: filterBySeat(s, collisions[j].Seats)})
 	}
 
-	nodes := make([]game.NodeID, 0, len(merged))
-	for node := range merged {
-		nodes = append(nodes, node)
-	}
-
-	result := make([]confrontation, 0, len(merged))
-	for _, node := range orderConfrontationsByNode(nodes) {
-		result = append(result, confrontation{Node: node, Seats: filterBySeat(s, merged[node])})
-	}
 	return result
 }
