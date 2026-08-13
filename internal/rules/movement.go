@@ -90,12 +90,20 @@ func newSeatWalks(s MatchState, seats []game.SeatID) map[game.SeatID]*seatWalk {
 // in resolution).
 //
 // Gas Leak's "nobody may end their route in this sector" truncation (GDD
-// §14.3) is not implemented here: no code anywhere yet sets a sector
-// Unstable for the round (that is #73's Sector Incident deck), so there is
-// no live state to truncate against and nothing this issue's acceptance
-// criteria asks it to do. #73 is the natural place to add that check once
-// the state it reads exists.
-func advance(s *MatchState, walks map[game.SeatID]*seatWalk, validated map[game.SeatID]game.Order, seats []game.SeatID, step int, r *RNG) map[game.SeatID]transition {
+// §14.3, issue #73) is applied here, the moment a step's destination would
+// land inside incCtx's flagged sector: the seat does not move this step
+// (to reverts to from) and its remaining Route/PushingOn are cleared, so
+// later steps this round see an exhausted route rather than re-attempting
+// entry — "routes truncate at the last node outside it." Doing this inline,
+// per step, rather than pre-truncating the declared Route before the loop
+// starts, is what keeps Pushing On's blind draws lazy (RFC §6.4): a seat
+// truncated on an ordinary Route step never reaches its own blind
+// continuation, and a seat truncated mid-blind-walk draws no further
+// pushon.edge/scavenge.d6 for steps it will never take. A seat that
+// declared Circulation Permit as this round's discard (GDD §12: "immune to
+// this round's Sector Incident") is exempt — the truncation simply never
+// fires for them.
+func advance(s *MatchState, walks map[game.SeatID]*seatWalk, validated map[game.SeatID]game.Order, seats []game.SeatID, step int, incCtx incidentContext, r *RNG) map[game.SeatID]transition {
 	transitions := make(map[game.SeatID]transition, len(seats))
 
 	for _, seat := range seats {
@@ -109,6 +117,15 @@ func advance(s *MatchState, walks map[game.SeatID]*seatWalk, validated map[game.
 			to = o.Route[step-1]
 		case step <= len(o.Route)+o.PushingOn.Steps:
 			to = pushOnStep(s.Graph, from, walk.Previous, o.PushingOn.Bias, r)
+		}
+
+		if to != from && incCtx.live && incCtx.card == IncidentGasLeak &&
+			s.Graph.Nodes[to].Sector == *incCtx.sector && !hasDiscard(o, game.ItemCirculationPermit) {
+			to = from
+			o.Route = nil
+			o.PushingOn = game.PushingOn{}
+			o.Action = game.ActionOrder{Kind: game.ActionNothing}
+			validated[seat] = o
 		}
 
 		walk.Previous = from

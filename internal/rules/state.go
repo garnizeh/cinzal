@@ -83,6 +83,14 @@ type Cargo struct {
 
 	Origin      game.NodeID // meaningful only when Bound
 	Destination game.NodeID // meaningful only when Bound
+
+	// SpilledLoad marks a loose crate as issue #73's Spilled Load
+	// incident's own (GDD §14.3: Cr$ 10, 2 RP) rather than Dead Runner's
+	// (GDD §14.2: Cr$ 12, 3 RP) — carried through pickup onto
+	// game.CarriedCargo.SpilledLoad (view.go) so resolveOneDelivery
+	// (deliveries.go) can tell the two flat payouts apart. Meaningful
+	// only when Bound is false.
+	SpilledLoad bool
 }
 
 // EventCardID identifies one of the global event deck's 24 cards (GDD
@@ -237,6 +245,29 @@ type Player struct {
 	// until this seat's next Deliver actually resolves, at which point
 	// resolveOneDelivery (deliveries.go) applies the bonus and clears it.
 	MarketSurgeActive bool
+
+	// DistractedGuard and StreetsBlocked are issue #73's two sector-
+	// incident step-allowance modifiers (GDD §14.3: Distracted Guard "+1
+	// step next round", Streets Blocked "capped at 1 step next round") —
+	// same lifecycle as Flagged and EvasiveStepPenalty above: consumed
+	// from the entry snapshot (SeatSnapshot, below) by legalView
+	// (validate.go) into game.StepModifiers, reset by resetRoundFlags at
+	// the top of Resolve (resolve.go), and set fresh by incident()
+	// (incidents.go) at Phase 7 for whichever seats end this round in the
+	// flagged sector. Lifetime: next round only.
+	DistractedGuard bool
+	StreetsBlocked  bool
+
+	// LocalInformant is the Local Informant boon's own standing grant
+	// (GDD §14.3: "sight of every node within 2 steps of wherever they
+	// end their route next round") — set by incident() (incidents.go) at
+	// Phase 7, same "survives until consumed" lifecycle as
+	// MarketSurgeActive above, not resetRoundFlags's "next round only":
+	// it is read and cleared by seatSight/distributeTrail (trail.go) the
+	// moment next round's writeTrail actually uses it, which happens
+	// strictly after resetRoundFlags would already have cleared a
+	// same-round-only field.
+	LocalInformant bool
 }
 
 // MatchState is the match's authoritative state: the graph and every seat,
@@ -285,6 +316,21 @@ type MatchState struct {
 	// mechanism, not just careful phrasing, or #74 reintroduces the same
 	// bug this field's own consumers were built to avoid.
 	NextRound NextRoundModifiers
+
+	// UnstableSector is the sector flagged Unstable for round Round+1 —
+	// the round about to begin, not the one just folded in (GDD §14.1:
+	// the Headline announces it "at the start of each round, before
+	// orders", which is before that round's own Resolve call ever runs,
+	// so the value has to already be sitting here when the round before
+	// it returns). nil before round 3's value is drawn (GDD §14.3:
+	// "nothing in rounds 1-2") or once the match has no further round to
+	// announce it for. initial() (initial.go) draws round 3's value at
+	// Setup; incident() (incidents.go), at Phase 7, resolves the CURRENT
+	// round's incident against whatever this field already held entering
+	// Resolve, then overwrites it with the NEXT round's draw — excluding
+	// the sector just used, which is the entire mechanism behind "the
+	// same sector cannot be flagged two rounds running."
+	UnstableSector *game.Sector
 }
 
 // NextRoundModifiers is MatchState.NextRound's shape — see that field's own
@@ -332,6 +378,13 @@ type SeatSnapshot struct {
 	// here, never from the live, mutable Player field of the same name.
 	Flagged            bool
 	EvasiveStepPenalty bool
+
+	// DistractedGuard and StreetsBlocked are issue #73's own two
+	// entry-snapshot-sourced step-allowance modifiers (GDD §14.3),
+	// same shape as Flagged/EvasiveStepPenalty above — read from here by
+	// legalView, never from the live Player field of the same name.
+	DistractedGuard bool
+	StreetsBlocked  bool
 }
 
 // EntrySnapshot is "end of the previous round" truth, frozen at the top of
@@ -365,6 +418,8 @@ func (s MatchState) Snapshot() EntrySnapshot {
 			Position:           p.Position,
 			Flagged:            p.Flagged,
 			EvasiveStepPenalty: p.EvasiveStepPenalty,
+			DistractedGuard:    p.DistractedGuard,
+			StreetsBlocked:     p.StreetsBlocked,
 		}
 	}
 	return EntrySnapshot{Seats: seats}
@@ -386,11 +441,17 @@ func (s MatchState) clone() MatchState {
 			players[i] = p.clone()
 		}
 	}
+	var unstableSector *game.Sector
+	if s.UnstableSector != nil {
+		sector := *s.UnstableSector
+		unstableSector = &sector
+	}
 	return MatchState{
-		Round:     s.Round,
-		Graph:     s.Graph.clone(),
-		Players:   players,
-		NextRound: s.NextRound.clone(),
+		Round:          s.Round,
+		Graph:          s.Graph.clone(),
+		Players:        players,
+		NextRound:      s.NextRound.clone(),
+		UnstableSector: unstableSector,
 	}
 }
 

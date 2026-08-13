@@ -37,6 +37,14 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	// grouping.
 	ctx := buildGlobalEventContext(next, r)
 
+	// Sector incident peek (issue #73, GDD §14.3): the flagged sector for
+	// this round was already decided a round ago (MatchState.UnstableSector,
+	// state.go) — incidentContext is a non-consuming re-read of it plus
+	// this round's card, needed before movement (Gas Leak) and before
+	// writeTrail (Riot, Distracted Guard's own-trace suppression), both of
+	// which run before Phase 7's own sector-incident call site below.
+	incCtx := buildIncidentContext(next)
+
 	seats := bySeat(next)
 	validated, events := validate(next, entry, seats, orders, cfg, ctx)
 
@@ -48,7 +56,7 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	// of MatchState.
 	walks := newSeatWalks(next, seats)
 	for step := 1; step <= movementSteps(seats, validated); step++ {
-		transitions := advance(&next, walks, validated, seats, step, r)
+		transitions := advance(&next, walks, validated, seats, step, incCtx, r)
 		crossings := detectCrossings(transitions, seats, validated)
 		collisions := detectCollisions(next, seats)
 		pending := mergeConfrontations(next, crossings, collisions)
@@ -60,10 +68,10 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	events = append(events, resolveFenceWindfallClaim(&next, seats, r)...)
 	events = append(events, resolveDeliveries(&next, validated, cfg, ctx)...)
 	events = append(events, resolveAddons(&next, validated, entry, cfg, ctx)...)
-	events = append(events, writeTrail(&next, validated, seats, walks, vanishReducedInfamy, events, ctx)...)
+	events = append(events, writeTrail(&next, validated, seats, walks, vanishReducedInfamy, events, ctx, incCtx, r)...)
 	events = append(events, globalEvent(&next, ctx, events, r)...)
-	events = append(events, incident(&next, r)...)
-	events = append(events, pressure(&next, r)...)
+	events = append(events, incident(&next, incCtx, validated, seats, walks, cfg, r)...)
+	events = append(events, pressure(&next, cfg, r)...)
 	events = append(events, upkeep(&next)...)
 
 	return next, events, nil
@@ -85,6 +93,8 @@ func resetRoundFlags(players []Player) {
 		players[i].Flagged = false
 		players[i].EvasiveStepPenalty = false
 		players[i].Ledger = nil
+		players[i].DistractedGuard = false
+		players[i].StreetsBlocked = false
 	}
 }
 
@@ -136,13 +146,10 @@ func movementSteps(seats []game.SeatID, validated map[game.SeatID]game.Order) in
 // event deck — buildGlobalEventContext (also events.go) is this same
 // issue's round-start peek, called above, before validate.
 
-// incident is a stub — issue #73 implements the 16-card sector incident
-// deck.
-func incident(s *MatchState, r *RNG) []game.Event { return nil }
-
-// pressure is a stub — issue #73 implements Phase 7's Legend-tier pressure
-// check.
-func pressure(s *MatchState, r *RNG) []game.Event { return nil }
+// incident and pressure (issue #73) are defined in incidents.go: Phase 7's
+// 16-card sector incident deck and the Legend-tier Pressure check —
+// buildIncidentContext (also incidents.go) is this same issue's round-start
+// peek, called above, before validate.
 
 // upkeep is a stub — issue #74 implements Phase 8's four fixed steps
 // (contract deadlines, leases, Sinkhole, next-round modifier clear).

@@ -153,6 +153,14 @@ type CarriedCargo struct {
 	// Contract is the contract this cargo is bound to. Meaningful only
 	// when Bound is true.
 	Contract ContractID
+
+	// SpilledLoad distinguishes the Spilled Load incident's own unbound
+	// crate (GDD §14.3: Cr$ 10, 2 RP) from Dead Runner's (GDD §14.2: Cr$
+	// 12, 3 RP) — both are loose crates (Bound false) with no contract to
+	// read a payout from, so this is the only thing that tells the two
+	// flat payouts apart once the crate is picked up. Meaningful only
+	// when Bound is false.
+	SpilledLoad bool
 }
 
 // ContractInHand is one contract this seat currently holds (GDD §8.1,

@@ -91,13 +91,29 @@ type ItemDiscard struct {
 	Target NodeID
 }
 
-// AddOns are GDD §9.5's two checkboxes. RenewBlocks is 0 when no lease
-// renewal is requested — legal purchases are 1-4 blocks (GDD §10.4), so 0 is
-// never a real value and needs no separate flag or pointer.
+// AddOns are GDD §9.5's two checkboxes, plus Open Doors' pre-declaration
+// (GDD §14.3, D14 §4). RenewBlocks is 0 when no lease renewal is requested —
+// legal purchases are 1-4 blocks (GDD §10.4), so 0 is never a real value and
+// needs no separate flag or pointer.
 type AddOns struct {
 	BuyLedger   bool
 	RenewPost   NodeID
 	RenewBlocks int
+
+	// OpenDoorsMarket and OpenDoorsItem are Open Doors' own pre-
+	// declaration (D14 §4, Option C): "there is no moment at which to
+	// choose" once the incident is known, so — exactly like Bolt Hole's
+	// own item-declaration shape — the player names, up front, a Black
+	// Market node they currently have sight of and an item from its
+	// current stock. OpenDoorsMarket nil means "not declared"; NodeID's
+	// own zero value is a real node, so unlike OpenDoorsItem (whose zero
+	// value is already this package's reserved-invalid convention,
+	// enums.go) this one needs a pointer to carry "unset" at all. Legal
+	// accepts the declaration unconditionally (D14: every failure mode —
+	// no sight, stock moved, hand full — is a resolution-time fact, not
+	// one knowable at submission).
+	OpenDoorsMarket *NodeID
+	OpenDoorsItem   ItemID
 }
 
 // Equal reports whether o and other are the same order. Order is not
@@ -111,6 +127,23 @@ func (o Order) Equal(other Order) bool {
 		o.Action == other.Action &&
 		o.Stance == other.Stance &&
 		slices.Equal(o.Items, other.Items) &&
-		o.AddOns == other.AddOns &&
+		o.AddOns.Equal(other.AddOns) &&
 		o.AbandonCargo == other.AbandonCargo
+}
+
+// Equal reports whether a and other declare the same add-ons, including a
+// deep comparison of OpenDoorsMarket (a *NodeID cannot be compared with ==:
+// two orders declaring the identical node would otherwise compare unequal
+// merely for holding different pointers to it).
+func (a AddOns) Equal(other AddOns) bool {
+	if a.BuyLedger != other.BuyLedger || a.RenewPost != other.RenewPost || a.RenewBlocks != other.RenewBlocks {
+		return false
+	}
+	if a.OpenDoorsItem != other.OpenDoorsItem {
+		return false
+	}
+	if (a.OpenDoorsMarket == nil) != (other.OpenDoorsMarket == nil) {
+		return false
+	}
+	return a.OpenDoorsMarket == nil || *a.OpenDoorsMarket == *other.OpenDoorsMarket
 }

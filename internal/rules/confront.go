@@ -158,8 +158,16 @@ func stanceModifier(stance game.Stance) int {
 // whether an Armed discard has actually been removed from hand is #70's
 // concern (resolveActions), not this one's.
 func hasShivDiscard(o game.Order) bool {
+	return hasDiscard(o, game.ItemShiv)
+}
+
+// hasDiscard reports whether o declares item as a Field 4 discard this
+// round — the general form of hasShivDiscard above, needed by issue #73's
+// Circulation Permit immunity check (incidents.go's incidentEligible) and
+// Gas Leak's own immunity check (movement.go's advance).
+func hasDiscard(o game.Order, item game.ItemID) bool {
 	return slices.ContainsFunc(o.Items, func(d game.ItemDiscard) bool {
-		return d.Item == game.ItemShiv
+		return d.Item == item
 	})
 }
 
@@ -342,7 +350,7 @@ func applyDeadlinePause(p *Player) {
 // on the ground again, since it never had a pair to preserve.
 func dropForfeitCargo(s *MatchState, seat game.SeatID, node game.NodeID) {
 	p := &s.Players[seat]
-	dropped := Cargo{Node: node, Bound: p.Cargo.Bound}
+	dropped := Cargo{Node: node, Bound: p.Cargo.Bound, SpilledLoad: p.Cargo.SpilledLoad}
 
 	if p.Cargo.Bound {
 		for _, c := range p.Contracts {
