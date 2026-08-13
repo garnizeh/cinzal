@@ -173,9 +173,9 @@ func incident(s *MatchState, ctx incidentContext, validated map[game.SeatID]game
 	case IncidentFlood:
 		resolveFlood(s, ctx, validated, seats)
 	case IncidentSnatchJob:
-		resolveSnatchJob(s, ctx, validated, seats, r)
+		events = resolveSnatchJob(s, ctx, validated, seats, r)
 	case IncidentGuardSweep:
-		resolveGuardSweep(s, ctx, validated, seats)
+		events = resolveGuardSweep(s, ctx, validated, seats)
 	case IncidentTorched:
 		resolveTorched(s, *ctx.sector)
 	case IncidentTurfWar:
@@ -187,7 +187,7 @@ func incident(s *MatchState, ctx incidentContext, validated map[game.SeatID]game
 	case IncidentSinkhole:
 		resolveSinkhole(s, *ctx.sector, r)
 	case IncidentShakedown:
-		resolveShakedown(s, ctx, validated, seats)
+		events = resolveShakedown(s, ctx, validated, seats)
 	case IncidentInformantRing:
 		events = resolveInformantRing(s, ctx, validated, seats)
 	case IncidentSpilledLoad:
@@ -247,28 +247,51 @@ func resolveFlood(s *MatchState, ctx incidentContext, validated map[game.SeatID]
 // (not the cargo: "gone, not dropped" already disposes of it), one
 // PurposeIncidentRelocate draw per affected player, in seat order (RFC
 // §6.5 names "Snatch Job relocation" directly as a seat-index batch).
-func resolveSnatchJob(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID, r *RNG) {
+// candidates is guarded before indexing even though nodesOutsideSector is
+// safe by construction here (D8's floor guarantees every sector has >= 3
+// nodes, so the pool outside any one flagged sector is never smaller than
+// the other three sectors combined) — guarded anyway, for the same
+// symmetric defense-in-depth the Sinkhole/Spilled Load guards below need
+// for real (D3's own Sinkhole row is explicit that candidate-pool safety
+// there is "conditional on generation," not fully proven). The debt event
+// — a penalty that pushes a seat into Debt can surrender a lease — is
+// captured and returned, matching resolveOneDelivery's own precedent
+// (deliveries.go) for every other applyDebt call site in this package.
+func resolveSnatchJob(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID, r *RNG) []game.Event {
 	candidates := nodesOutsideSector(s.Graph, *ctx.sector)
+	if len(candidates) == 0 {
+		return nil
+	}
+
+	var events []game.Event
 	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
 		p := &s.Players[seat]
-		applyDebt(s, seat, snatchJobLoss, s.Round)
+		if _, e := applyDebt(s, seat, snatchJobLoss, s.Round); e != nil {
+			events = append(events, *e)
+		}
 		p.Cargo = nil
 		p.Position = PartialFisherYates(r, PurposeIncidentRelocate, candidates, 1)[0]
 	}
+	return events
 }
 
 // resolveGuardSweep applies GDD §14.3's Guard Sweep: "Lose Cr$ 5 and −1
 // Infamy. Carrying cargo, you lose it too." Cargo, if any, is destroyed —
 // no GDD text says it lands anywhere — and the underlying Contract, if
 // bound, is left untouched: the crate is gone, but the deal itself can
-// still be re-sourced from its Warehouse.
-func resolveGuardSweep(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) {
+// still be re-sourced from its Warehouse. The debt event is captured and
+// returned — see resolveSnatchJob's own doc.
+func resolveGuardSweep(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
+	var events []game.Event
 	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
 		p := &s.Players[seat]
-		applyDebt(s, seat, guardSweepLoss, s.Round)
+		if _, e := applyDebt(s, seat, guardSweepLoss, s.Round); e != nil {
+			events = append(events, *e)
+		}
 		p.Infamy = ApplyInfamyDelta(p.Infamy, -1)
 		p.Cargo = nil
 	}
+	return events
 }
 
 // resolveTorched applies GDD §14.3's Torched: "Every post in the sector
@@ -347,9 +370,19 @@ func resolveStreetsBlocked(s *MatchState, ctx incidentContext, validated map[gam
 // resolveSinkhole applies GDD §14.3's Sinkhole: "One random node in the
 // sector is impassable for 3 rounds" (PurposeIncidentSinkhole, D3:
 // candidates nodes in the flagged sector, sorted NodeID). Node-wide, no
-// eligibility filter.
+// eligibility filter. candidates is guarded before indexing: D3's own
+// Sinkhole row inherits D8's candidate-pool argument only "conditional on
+// generation" — D8's own tightest-config follow-up (a 12-node, four
+// 3-node-sector map) is explicitly still open — so, unlike the whole-map
+// pools every other card in this package draws from, an empty sector here
+// is not yet a fully closed question. A no-op when it happens keeps
+// PurposeIncidentSinkhole's draw lazy (RFC §6.4) rather than panicking
+// Resolve for the whole table.
 func resolveSinkhole(s *MatchState, sector game.Sector, r *RNG) {
 	candidates := nodesInSector(s.Graph, sector)
+	if len(candidates) == 0 {
+		return
+	}
 	node := PartialFisherYates(r, PurposeIncidentSinkhole, candidates, 1)[0]
 	s.Graph.Nodes[node].SinkholeRounds = 3
 }
@@ -357,11 +390,16 @@ func resolveSinkhole(s *MatchState, sector game.Sector, r *RNG) {
 // resolveShakedown applies GDD §14.3's Shakedown: "Every player ending
 // here pays Cr$ 4" — routed through applyDebt like every other mandatory
 // Cr$ obligation in this package (resolvePayrollDay, events.go, states the
-// same reasoning).
-func resolveShakedown(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) {
+// same reasoning). The debt event is captured and returned — see
+// resolveSnatchJob's own doc.
+func resolveShakedown(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
+	var events []game.Event
 	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
-		applyDebt(s, seat, shakedownCost, s.Round)
+		if _, e := applyDebt(s, seat, shakedownCost, s.Round); e != nil {
+			events = append(events, *e)
+		}
 	}
+	return events
 }
 
 // resolveInformantRing applies GDD §14.3's Informant Ring: "Every player
@@ -386,9 +424,15 @@ func resolveInformantRing(s *MatchState, ctx incidentContext, validated map[game
 // there, tagged SpilledLoad so resolveOneDelivery (deliveries.go) pays
 // GDD §14.3's Cr$10/2RP rather than Dead Runner's Cr$12/3RP. "Announced
 // publicly" — GDD §14.3 — so this fires an Anchor-shaped kind, the
-// incident-deck twin of EventDeadRunnerCrate.
+// incident-deck twin of EventDeadRunnerCrate. candidates is guarded before
+// indexing — no crate, no announcement, no draw — for the same reason
+// resolveSinkhole's own doc gives: this candidate pool's safety is not yet
+// fully closed (D3, D8).
 func resolveSpilledLoad(s *MatchState, sector game.Sector, r *RNG) []game.Event {
 	candidates := nodesInSector(s.Graph, sector)
+	if len(candidates) == 0 {
+		return nil
+	}
 	node := PartialFisherYates(r, PurposeCrateNode, candidates, 1)[0]
 	s.Graph.Cargo = append(s.Graph.Cargo, Cargo{Node: node, Bound: false, SpilledLoad: true})
 	return []game.Event{{Kind: game.EventSpilledLoadCrate, Round: s.Round, Node: node}}
@@ -427,6 +471,17 @@ func resolveDistractedGuard(s *MatchState, ctx incidentContext, validated map[ga
 // only — unlike an ordinary Deal it cannot enter anyone's sight-gated
 // Archive.Trail, since writeTrail() (trail.go) already ran this same round,
 // strictly before incident() — see incidentContext's own doc.
+//
+// OpenDoorsMarket is a client-declared NodeID that Legal accepts
+// unconditionally at submission (D14 §4: "there is nothing to check
+// against at submission time") — that unconditional acceptance is about
+// semantic validity (whether the market still makes sense once Open Doors
+// is known to have fired), not about basic bounds safety, so this function
+// is the only remaining check before an out-of-range value would index
+// Graph.Nodes. GDD §15.0 frames exactly this shape — a malformed field on
+// an otherwise-legal order — as "the obvious attack surface," and Resolve
+// processes every seat's order in one call, so one seat's out-of-range
+// value must not panic resolution for the whole table.
 func resolveOpenDoors(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
 	var events []game.Event
 	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
@@ -436,6 +491,9 @@ func resolveOpenDoors(s *MatchState, ctx incidentContext, validated map[game.Sea
 			continue
 		}
 		node := *market
+		if node < 0 || int(node) >= len(s.Graph.Nodes) {
+			continue
+		}
 		p := &s.Players[seat]
 
 		if s.Graph.Nodes[node].Type != game.NodeBlackMarket || p.Fog[node] < game.FogInSight {
@@ -486,15 +544,18 @@ func pressure(s *MatchState, cfg game.Config, r *RNG) []game.Event {
 		return nil
 	}
 
+	var events []game.Event
 	for _, seat := range bySeat(*s) {
 		p := &s.Players[seat]
 		if TierOf(p.Infamy) != game.TierLegend {
 			continue
 		}
 		if roll := r.Next(PurposePressureD6, 6) + 1; roll <= cfg.Pressure.Threshold {
-			applyDebt(s, seat, cfg.Pressure.CashPenalty, s.Round)
+			if _, e := applyDebt(s, seat, cfg.Pressure.CashPenalty, s.Round); e != nil {
+				events = append(events, *e)
+			}
 			p.Infamy = ApplyInfamyDelta(p.Infamy, -cfg.Pressure.InfamyPenalty)
 		}
 	}
-	return nil
+	return events
 }

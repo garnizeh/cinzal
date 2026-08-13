@@ -218,6 +218,25 @@ func TestResolveSnatchJobRelocatesAndConsumesRNG(t *testing.T) {
 	}
 }
 
+// TestResolveSnatchJobReturnsDebtEventOnSurrender is the same fix
+// TestResolveShakedownReturnsDebtEventOnSurrender documents, for Snatch
+// Job's own applyDebt call site.
+func TestResolveSnatchJobReturnsDebtEventOnSurrender(t *testing.T) {
+	s := incidentsTestState(1)
+	s.Players[0].Balance = 0
+	s.Players[0].Posts = []game.NodeID{2}
+	s.Graph.Nodes[2].Post = &Post{Owner: 0, RoundsRemaining: 3}
+	validated := map[game.SeatID]game.Order{0: {}}
+	ctx := incidentsTestContext(IncidentSnatchJob, game.SectorOldDocks)
+	r := NewRNG(testSeed(1), 5)
+
+	events := resolveSnatchJob(&s, ctx, validated, []game.SeatID{0}, r)
+
+	if len(events) != 1 || events[0].Kind != game.EventLeaseExpired || events[0].Node != 2 {
+		t.Errorf("events = %+v, want one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
+	}
+}
+
 // TestResolveGuardSweepLosesCashInfamyAndCargo is GDD §14.3's Guard Sweep:
 // "Lose Cr$ 5 and −1 Infamy. Carrying cargo, you lose it too."
 func TestResolveGuardSweepLosesCashInfamyAndCargo(t *testing.T) {
@@ -242,6 +261,24 @@ func TestResolveGuardSweepLosesCashInfamyAndCargo(t *testing.T) {
 	}
 	if len(s.Players[0].Contracts) != 1 {
 		t.Errorf("Contracts = %+v, want the underlying contract left untouched", s.Players[0].Contracts)
+	}
+}
+
+// TestResolveGuardSweepReturnsDebtEventOnSurrender is the same fix
+// TestResolveShakedownReturnsDebtEventOnSurrender documents, for Guard
+// Sweep's own applyDebt call site.
+func TestResolveGuardSweepReturnsDebtEventOnSurrender(t *testing.T) {
+	s := incidentsTestState(1)
+	s.Players[0].Balance = 0
+	s.Players[0].Posts = []game.NodeID{2}
+	s.Graph.Nodes[2].Post = &Post{Owner: 0, RoundsRemaining: 3}
+	validated := map[game.SeatID]game.Order{0: {}}
+	ctx := incidentsTestContext(IncidentGuardSweep, game.SectorOldDocks)
+
+	events := resolveGuardSweep(&s, ctx, validated, []game.SeatID{0})
+
+	if len(events) != 1 || events[0].Kind != game.EventLeaseExpired || events[0].Node != 2 {
+		t.Errorf("events = %+v, want one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
 	}
 }
 
@@ -357,6 +394,23 @@ func TestResolveSinkholeSetsThreeRoundsAndConsumesRNG(t *testing.T) {
 	}
 }
 
+// TestResolveSinkholeNoopWhenSectorEmpty confirms an empty candidate pool
+// degrades silently rather than panicking on PartialFisherYates(...)[0] —
+// D3's own Sinkhole row leaves this pool's safety conditional on
+// generation (D8), not fully proven, unlike every other card's whole-map
+// pool in this package.
+func TestResolveSinkholeNoopWhenSectorEmpty(t *testing.T) {
+	s := incidentsTestState()
+	s.Graph.Nodes = nil
+	r := NewRNG(testSeed(1), 5)
+
+	resolveSinkhole(&s, game.SectorOldDocks, r) // must not panic
+
+	if got := r.Consumed(PurposeIncidentSinkhole); got != 0 {
+		t.Errorf("PurposeIncidentSinkhole consumed = %d, want 0 (no candidates)", got)
+	}
+}
+
 // TestResolveShakedownChargesFlatFee is GDD §14.3's Shakedown: "Every
 // player ending here pays Cr$ 4."
 func TestResolveShakedownChargesFlatFee(t *testing.T) {
@@ -369,6 +423,25 @@ func TestResolveShakedownChargesFlatFee(t *testing.T) {
 
 	if got := s.Players[0].Balance; got != 16 {
 		t.Errorf("Balance = %d, want 16 (20 - 4)", got)
+	}
+}
+
+// TestResolveShakedownReturnsDebtEventOnSurrender confirms a Debt-forced
+// lease surrender's EventLeaseExpired is captured and returned, matching
+// resolveOneDelivery's own precedent (deliveries.go) for every applyDebt
+// call site in this package — not silently discarded.
+func TestResolveShakedownReturnsDebtEventOnSurrender(t *testing.T) {
+	s := incidentsTestState(1)
+	s.Players[0].Balance = 0
+	s.Players[0].Posts = []game.NodeID{2}
+	s.Graph.Nodes[2].Post = &Post{Owner: 0, RoundsRemaining: 3}
+	validated := map[game.SeatID]game.Order{0: {}}
+	ctx := incidentsTestContext(IncidentShakedown, game.SectorOldDocks)
+
+	events := resolveShakedown(&s, ctx, validated, []game.SeatID{0})
+
+	if len(events) != 1 || events[0].Kind != game.EventLeaseExpired || events[0].Node != 2 {
+		t.Errorf("events = %+v, want one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
 	}
 }
 
@@ -410,6 +483,24 @@ func TestResolveSpilledLoadDropsCrateAndConsumesRNG(t *testing.T) {
 	}
 	if got := r.Consumed(PurposeCrateNode); got != 1 {
 		t.Errorf("PurposeCrateNode consumed = %d, want 1", got)
+	}
+}
+
+// TestResolveSpilledLoadNoopWhenSectorEmpty is the same fix
+// TestResolveSinkholeNoopWhenSectorEmpty documents, for Spilled Load's own
+// PurposeCrateNode draw.
+func TestResolveSpilledLoadNoopWhenSectorEmpty(t *testing.T) {
+	s := incidentsTestState()
+	s.Graph.Nodes = nil
+	r := NewRNG(testSeed(1), 5)
+
+	events := resolveSpilledLoad(&s, game.SectorOldDocks, r) // must not panic
+
+	if events != nil {
+		t.Errorf("events = %+v, want nil (no candidates)", events)
+	}
+	if got := r.Consumed(PurposeCrateNode); got != 0 {
+		t.Errorf("PurposeCrateNode consumed = %d, want 0 (no candidates)", got)
 	}
 }
 
@@ -557,6 +648,26 @@ func TestResolveOpenDoorsDegradesWhenNotDeclared(t *testing.T) {
 
 	if events != nil {
 		t.Errorf("events = %+v, want nil (nothing declared)", events)
+	}
+}
+
+// TestResolveOpenDoorsDegradesOnOutOfRangeMarket confirms a client-declared
+// OpenDoorsMarket outside the graph's node range degrades silently rather
+// than panicking Resolve for the whole table — Legal accepts the
+// declaration unconditionally at submission (D14 §4), so this function is
+// the only remaining bounds check before Graph.Nodes is indexed.
+func TestResolveOpenDoorsDegradesOnOutOfRangeMarket(t *testing.T) {
+	s := incidentsTestState(3)
+	oob := game.NodeID(999)
+	validated := map[game.SeatID]game.Order{0: {
+		AddOns: game.AddOns{OpenDoorsMarket: &oob, OpenDoorsItem: game.ItemMuscle},
+	}}
+	ctx := incidentsTestContext(IncidentOpenDoors, game.SectorMistHeights)
+
+	events := resolveOpenDoors(&s, ctx, validated, []game.SeatID{0}) // must not panic
+
+	if events != nil {
+		t.Errorf("events = %+v, want nil (out-of-range OpenDoorsMarket)", events)
 	}
 }
 
@@ -764,6 +875,26 @@ func TestPressureAppliesCashAndInfamyPenaltyOnATrigger(t *testing.T) {
 	}
 	if got := s.Players[0].Infamy; got != 9 {
 		t.Errorf("Infamy = %d, want 9 (10 - 1)", got)
+	}
+}
+
+// TestPressureReturnsDebtEventOnSurrender is the same fix
+// TestResolveShakedownReturnsDebtEventOnSurrender documents, for
+// Pressure's own applyDebt call site.
+func TestPressureReturnsDebtEventOnSurrender(t *testing.T) {
+	s := incidentsTestState(0)
+	s.Players[0].Infamy = 10
+	s.Players[0].Balance = 0
+	s.Players[0].Posts = []game.NodeID{2}
+	s.Graph.Nodes[2].Post = &Post{Owner: 0, RoundsRemaining: 3}
+	cfg := legalTestConfig()
+	cfg.Pressure = game.PressureConfig{Threshold: 6, CashPenalty: 5, InfamyPenalty: 1}
+	r := NewRNG(testSeed(1), 5)
+
+	events := pressure(&s, cfg, r)
+
+	if len(events) != 1 || events[0].Kind != game.EventLeaseExpired || events[0].Node != 2 {
+		t.Errorf("events = %+v, want one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
 	}
 }
 
