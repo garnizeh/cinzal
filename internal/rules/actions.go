@@ -23,8 +23,19 @@ import (
 // seat at a time, in fairness order, correct for the contended actions
 // (Pickup, Stake Post, Deal): each seat's turn sees exactly what every
 // earlier seat in this same order already did to s this round.
-func resolveActions(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, cfg game.Config, r *RNG) []game.Event {
+//
+// The second return value is GDD §9.1's Vanish-qualifies-for-Loitering-
+// exemption fact — "a Vanish qualifies only if it actually reduced your
+// Infamy by at least 1" — keyed by seat, true only for a seat whose Action
+// this round was Vanish and whose Infamy genuinely dropped (not floored at
+// 0). RFC §6.6: "the delta is known in-flight" — this is that in-flight
+// value, read once here where the mutation happens, rather than
+// reconstructed later from a diff of before/after Infamy snapshots that
+// would also have to account for this same round's confrontation deltas.
+// writeTrail (#71) is its only consumer.
+func resolveActions(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, cfg game.Config, r *RNG) ([]game.Event, map[game.SeatID]bool) {
 	var events []game.Event
+	vanishReducedInfamy := map[game.SeatID]bool{}
 
 	// Field 4 discard hand bookkeeping (confirmed minimal scope for this
 	// issue): removing a declared discard from hand is what makes Deal's
@@ -61,7 +72,9 @@ func resolveActions(s *MatchState, validated map[game.SeatID]game.Order, seats [
 
 		case game.ActionVanish:
 			p := &s.Players[seat]
+			before := p.Infamy
 			p.Infamy = ApplyInfamyDelta(p.Infamy, InfamyLossVanish)
+			vanishReducedInfamy[seat] = p.Infamy < before
 
 			// ActionSurveil and ActionNothing: no state mutation here.
 			// Surveil's 2-step sight (GDD §7.2) is realized by writeTrail
@@ -71,7 +84,7 @@ func resolveActions(s *MatchState, validated map[game.SeatID]game.Order, seats [
 		}
 	}
 
-	return events
+	return events, vanishReducedInfamy
 }
 
 // applyDiscards removes every item o declares as a Field 4 discard
