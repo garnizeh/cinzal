@@ -141,6 +141,9 @@ func TestFinalScoreHigherTotalOutranksTiebreakLevels(t *testing.T) {
 	s.Players[1].Balance = 99
 
 	got := FinalScore(s)
+	if got[0].Total <= got[1].Total {
+		t.Fatalf("FinalScore() Totals = %d, %d, want seat 0 strictly ahead (test premise)", got[0].Total, got[1].Total)
+	}
 	if got[0].Seat != 0 {
 		t.Fatalf("FinalScore() order = %+v, want seat 0 first (higher Total)", got)
 	}

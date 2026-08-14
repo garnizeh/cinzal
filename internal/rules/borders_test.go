@@ -96,12 +96,15 @@ func TestBlockedBordersThisRoundCombinesDragnetAndRotation(t *testing.T) {
 // TestBlockedBordersThisRoundSafetyValve is D28, verbatim: at 2 players,
 // Dragnet's seal can coincide with rotation's inactive set to close every
 // Border. Round 2's active set is {3} alone (see the alternation test
-// above); Dragnet sealing exactly {3} would leave zero Borders deliverable
-// without the fallback. The lowest-NodeID Border (1) must reopen.
+// above); Dragnet — which always seals min(2, candidates) = 2 of this
+// fixture's 3 Borders, drawDragnetBorders — sealing {1, 3} covers the
+// round's only active Border (3) without needing to touch node 5 at all,
+// leaving zero Borders deliverable without the fallback. The lowest-NodeID
+// Border (1) must reopen.
 func TestBlockedBordersThisRoundSafetyValve(t *testing.T) {
 	s := bordersFixture(2)
 
-	got := blockedBordersThisRound(s.Graph, 2, 2, []game.NodeID{3})
+	got := blockedBordersThisRound(s.Graph, 2, 2, []game.NodeID{1, 3})
 	want := []game.NodeID{3, 5} // node 1 (lowest NodeID) reopened
 	if !slices.Equal(got, want) {
 		t.Fatalf("blockedBordersThisRound() = %v, want %v (node 1 should reopen)", got, want)

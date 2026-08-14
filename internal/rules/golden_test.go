@@ -56,7 +56,7 @@ func fogAwareRoute(g Graph, fog []game.FogState, from, to game.NodeID) []game.No
 	var bestNeighbour game.NodeID
 	bestLen := -1
 	for _, n := range g.Nodes[to].Edges {
-		if !visited[n] {
+		if !visited[n] || !visitable(n) {
 			continue
 		}
 		if l := len(buildPath(n)); bestLen < 0 || l < bestLen {
@@ -106,6 +106,16 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 		t.Fatalf("initial() error = %v", err)
 	}
 	homeSector := s.Graph.Nodes[s.Players[0].Position].Sector
+
+	// The unbound-cargo branch below hardcodes node 14 as "any Border" to
+	// deliver a loose crate to. Asserted once, up front, so a future
+	// map-generation change that stops making node 14 a Border under this
+	// seed fails here, by name, rather than as a silently degraded Deliver
+	// order deep in the round loop.
+	const knownBorder = 14
+	if s.Graph.Nodes[knownBorder].Type != game.NodeBorder {
+		t.Fatalf("node %d is %v under seed 7, not a Border — this scenario's hardcoded loose-crate delivery target needs updating", knownBorder, s.Graph.Nodes[knownBorder].Type)
+	}
 
 	idleOrder := game.Order{
 		Action: game.ActionOrder{Kind: game.ActionNothing},
@@ -204,9 +214,10 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 					target, action, hasTarget = p.Contracts[idx].Destination, game.ActionDeliver, true
 				}
 			case p.Cargo != nil:
-				// An unbound crate (below) delivers to any Border — node
-				// 14 is already this scenario's own well-known one.
-				target, action, hasTarget = 14, game.ActionDeliver, true
+				// An unbound crate (below) delivers to any Border —
+				// knownBorder (asserted above) is already this scenario's
+				// own well-known one.
+				target, action, hasTarget = knownBorder, game.ActionDeliver, true
 			case crateAt != nil:
 				// A genuinely free RP source: an announced Dead Runner or
 				// Spilled Load crate (GDD §14.2/§14.3), collectible by
@@ -273,6 +284,13 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 	t.Logf("seat0: Balance=%d Infamy=%d ContractsDelivered=%d Posts=%v Contracts=%+v",
 		s.Players[0].Balance, s.Players[0].Infamy, s.Players[0].ContractsDelivered, s.Players[0].Posts, s.Players[0].Contracts)
 
+	// GDD §16's reference simulation states two bands: [14, 34] for a match's
+	// general spread and [26, 36] as the tighter sub-band the winner
+	// specifically falls into. Checking both against the same winner.Total
+	// would conflict for 35-36 — inside the winner band, outside the general
+	// one — so only the winner's own band is asserted on Total here; the
+	// four component checks below still pin the general band's per-source
+	// shape.
 	checks := []struct {
 		name     string
 		got      int
@@ -282,7 +300,6 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 		{"PostsRP", winner.PostsRP, 4, 8},
 		{"MajorityRP", winner.MajorityRP, 0, 3},
 		{"CashRP", winner.CashRP, 2, 7},
-		{"Total", winner.Total, 14, 34},
 	}
 	for _, c := range checks {
 		if c.got < c.min || c.got > c.max {
