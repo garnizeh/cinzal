@@ -313,6 +313,8 @@ func legalView(s MatchState, entry EntrySnapshot, seat game.SeatID, curfewActive
 				Curfew:             curfewActive,
 				Scaffolding:        scaffolding,
 				Retainer:           s.NextRound.Retainer && p.Cargo == nil,
+				DistractedGuard:    snap.DistractedGuard,
+				StreetsBlocked:     snap.StreetsBlocked,
 			},
 			DockersStrike: s.NextRound.DockersStrike,
 		},

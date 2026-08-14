@@ -128,7 +128,7 @@ func resolvePickup(s *MatchState, seat game.SeatID, node game.NodeID, round game
 
 	if idx, ok := groundCargoIndex(*s, seat, node); ok {
 		ground := s.Graph.Cargo[idx]
-		cargo := game.CarriedCargo{Bound: ground.Bound}
+		cargo := game.CarriedCargo{Bound: ground.Bound, SpilledLoad: ground.SpilledLoad}
 		if ground.Bound {
 			for _, c := range p.Contracts {
 				if c.Origin == ground.Origin && c.Destination == ground.Destination {

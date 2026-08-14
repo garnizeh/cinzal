@@ -2,6 +2,7 @@ package rules
 
 import (
 	"slices"
+	"sort"
 
 	"github.com/garnizeh/cinzal/internal/game"
 )
@@ -36,11 +37,21 @@ const (
 // already-shuffled order, never a new draw).
 //
 // ctx (issue #72) carries this round's already-drawn Festival node — see
-// festivalNoTrace below — needed here because Festival's "leaves no trace"
-// half has no consumer before Phase 6 pops the card, exactly like Rain's
-// suppression already reads eventCardThisRound directly rather than
+// ownTraceSuppressed below — needed here because Festival's "leaves no
+// trace" half has no consumer before Phase 6 pops the card, exactly like
+// Rain's suppression already reads eventCardThisRound directly rather than
 // waiting for globalEvent (events.go).
-func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, walks map[game.SeatID]*seatWalk, vanished map[game.SeatID]bool, roundEvents []game.Event, ctx globalEventContext) []game.Event {
+//
+// incCtx (issue #73) carries this round's already-known flagged sector and
+// incident card, needed here for the same reason: Distracted Guard's own
+// "leaves no trace this round" (GDD §14.3) has no consumer before Phase 7
+// pops the card (ownTraceSuppressed, below), and Riot's trail-entry
+// permutation (GDD §14.3, D4) has to run against the entries this same
+// function builds, before distributeTrail hands them out by sight — both
+// strictly before incident()'s own Phase 7 call site. r is threaded through
+// for Riot's one PurposeIncidentRiot draw (D4) — the only RNG consumer in
+// this file; every other suppression here is a re-read, never a draw (D13).
+func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, walks map[game.SeatID]*seatWalk, vanished map[game.SeatID]bool, roundEvents []game.Event, ctx globalEventContext, incCtx incidentContext, r *RNG) []game.Event {
 	var out []game.Event
 
 	entries := map[game.NodeID][]game.TrailEntry{}
@@ -60,7 +71,7 @@ func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []gam
 	suppressFreshTracks := rainActive(*s)
 	blackoutActive := s.NextRound.Blackout
 
-	addCargoTakenAndDecoy(*s, roundEvents, validated, seats, entries, ctx)
+	addCargoTakenAndDecoy(*s, roundEvents, validated, seats, entries, ctx, incCtx)
 
 	for _, n := range addFreshTracks(*s, validated, seats, walks, entries) {
 		if !suppressFreshTracks && !blackoutActive {
@@ -83,28 +94,50 @@ func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []gam
 		}
 	}
 
-	addItemPurchased(*s, roundEvents, entries, ctx)
+	addItemPurchased(*s, roundEvents, entries, ctx, incCtx, validated)
+
+	// Riot (issue #73, GDD §14.3, D4) permutes the flagged sector's
+	// sight-gated entries in place, strictly before distributeTrail hands
+	// them out by sight — see writeTrail's own doc for why this cannot
+	// wait for incident()'s normal Phase 7 call site.
+	applyRiotPermutation(s, entries, incCtx, r)
 
 	distributeTrail(s, validated, seats, entries, suppressFreshTracks, blackoutActive)
 
 	return out
 }
 
-// festivalNoTrace reports whether seat's own entries at node should be
-// suppressed by Festival (GDD §14.2, issue #72: "Anyone ending there this
-// round... leaves no trace") — this round's card is Festival, node is its
-// already-drawn target (ctx.festivalNode, buildGlobalEventContext), and
-// seat's live Position (unchanged since movement, at every call site this
-// is read from) is that same node. Scoped to cargo-taken and item-
-// purchased — the two sight-gated entry kinds a seat can actually
-// contribute at its own ending node; fresh tracks already excludes a
-// seat's own ending node unconditionally (addFreshTracks), and
-// confrontation/post-staked are Anchor rows Festival's card text has no
-// bearing on (D13: Festival "suppresses the acting player's own entry...
-// not a world-level event", the same shape as Vanish and Distracted
-// Guard — never populates Obscured).
-func festivalNoTrace(ctx globalEventContext, seat game.SeatID, node game.NodeID, s MatchState) bool {
-	return ctx.live && ctx.card == EventFestival && node == ctx.festivalNode && s.Players[seat].Position == node
+// ownTraceSuppressed reports whether seat's own entries at node should be
+// suppressed this round — Festival (GDD §14.2, issue #72: "Anyone ending
+// there this round... leaves no trace") or Distracted Guard (GDD §14.3,
+// issue #73: "leaves no trace this round"), the two "suppress the acting
+// player's own entry, not a world-level event" cases D13 already groups
+// together. Both require seat's live Position (unchanged since movement,
+// at every call site this is read from) to equal node — Festival's
+// already-drawn target (ctx.festivalNode, buildGlobalEventContext) or
+// Distracted Guard's flagged sector (incCtx.sector). A seat that declared
+// Circulation Permit this round is exempt from Distracted Guard's half
+// (GDD §12: immune to the incident means neither the boon nor its
+// trace-suppression fires for them) but not from Festival's, which is an
+// unrelated global event card.
+//
+// Scoped to cargo-taken and item-purchased — the two sight-gated entry
+// kinds a seat can actually contribute at its own ending node; fresh
+// tracks already excludes a seat's own ending node unconditionally
+// (addFreshTracks), and confrontation/post-staked are Anchor rows neither
+// card's text touches. Never populates Obscured (D13) — same as Vanish.
+func ownTraceSuppressed(s MatchState, ctx globalEventContext, incCtx incidentContext, validated map[game.SeatID]game.Order, seat game.SeatID, node game.NodeID) bool {
+	if s.Players[seat].Position != node {
+		return false
+	}
+	if ctx.live && ctx.card == EventFestival && node == ctx.festivalNode {
+		return true
+	}
+	if incCtx.live && incCtx.card == IncidentDistractedGuard && s.Graph.Nodes[node].Sector == *incCtx.sector &&
+		!hasDiscard(validated[seat], game.ItemCirculationPermit) {
+		return true
+	}
+	return false
 }
 
 // addCargoTakenAndDecoy adds GDD §7.3 row 1's "Cargo left here" entry for
@@ -117,9 +150,9 @@ func festivalNoTrace(ctx globalEventContext, seat game.SeatID, node game.NodeID,
 // resolves" (event.go's EventCargoTaken doc), since neither action a seat
 // takes this round can itself change that same seat's own Infamy again
 // between here and Step N+1 having already run.
-func addCargoTakenAndDecoy(s MatchState, roundEvents []game.Event, validated map[game.SeatID]game.Order, seats []game.SeatID, entries map[game.NodeID][]game.TrailEntry, ctx globalEventContext) {
+func addCargoTakenAndDecoy(s MatchState, roundEvents []game.Event, validated map[game.SeatID]game.Order, seats []game.SeatID, entries map[game.NodeID][]game.TrailEntry, ctx globalEventContext, incCtx incidentContext) {
 	for _, e := range roundEvents {
-		if e.Kind != game.EventCargoTaken || festivalNoTrace(ctx, e.Seat, e.Node, s) {
+		if e.Kind != game.EventCargoTaken || ownTraceSuppressed(s, ctx, incCtx, validated, e.Seat, e.Node) {
 			continue
 		}
 		entries[e.Node] = append(entries[e.Node], cargoTakenEntry(s, e.Node, e.Seat))
@@ -127,7 +160,7 @@ func addCargoTakenAndDecoy(s MatchState, roundEvents []game.Event, validated map
 
 	for _, seat := range seats {
 		for _, d := range validated[seat].Items {
-			if d.Item == game.ItemDecoy && !festivalNoTrace(ctx, seat, d.Target, s) {
+			if d.Item == game.ItemDecoy && !ownTraceSuppressed(s, ctx, incCtx, validated, seat, d.Target) {
 				entries[d.Target] = append(entries[d.Target], cargoTakenEntry(s, d.Target, seat))
 			}
 		}
@@ -209,9 +242,9 @@ func addConfrontation(roundEvents []game.Event, entries map[game.NodeID][]game.T
 // entry for every EventItemPurchased this round, named iff the buyer's live
 // Infamy is >= 6 — the same "at the moment it resolves" reasoning as
 // cargoTakenEntry.
-func addItemPurchased(s MatchState, roundEvents []game.Event, entries map[game.NodeID][]game.TrailEntry, ctx globalEventContext) {
+func addItemPurchased(s MatchState, roundEvents []game.Event, entries map[game.NodeID][]game.TrailEntry, ctx globalEventContext, incCtx incidentContext, validated map[game.SeatID]game.Order) {
 	for _, e := range roundEvents {
-		if e.Kind != game.EventItemPurchased || festivalNoTrace(ctx, e.Seat, e.Node, s) {
+		if e.Kind != game.EventItemPurchased || ownTraceSuppressed(s, ctx, incCtx, validated, e.Seat, e.Node) {
 			continue
 		}
 		item := e.Item
@@ -221,6 +254,133 @@ func addItemPurchased(s MatchState, roundEvents []game.Event, entries map[game.N
 			te.Actor = &actor
 		}
 		entries[e.Node] = append(entries[e.Node], te)
+	}
+}
+
+// riotEligible reports whether kind is one of D4's four sight-gated
+// archetypes eligible for Riot's permutation (GDD §14.3): cargo taken,
+// fresh tracks, confrontation, item purchased. The five global-
+// announcement kinds (delivery, post staked, lease expired, Loitering,
+// loose crate) are never constructed into writeTrail's own entries map at
+// all — only Loitering's 2nd-consecutive-round entry is, and it is not
+// among these four — so no separate exclusion is needed for the others.
+func riotEligible(kind game.EventKind) bool {
+	switch kind {
+	case game.EventCargoTaken, game.EventFreshTracks, game.EventConfrontation, game.EventItemPurchased:
+		return true
+	default:
+		return false
+	}
+}
+
+// riotParticipant returns e's true participant seat for D4's sort key: the
+// lower of the two parties for a confrontation (addConfrontation always
+// names both, unconditionally), the real actor for a cargo-taken or
+// item-purchased entry when named, 0 otherwise — an unnamed
+// cargo-taken/item-purchased (below its own Infamy gate) or a fresh-tracks
+// entry (which never carries a seat identity at all, GDD §7.3). Two
+// same-node, same-kind entries that both land on 0 here are genuinely
+// anonymous to every reader regardless of which one Riot's shuffle treats
+// as "first" — riotSites' own final tiebreak (its build order) is what
+// keeps that case fully deterministic without needing to distinguish them
+// further.
+func riotParticipant(e game.TrailEntry) game.SeatID {
+	if e.Kind == game.EventConfrontation {
+		return min(*e.Actor, *e.Target)
+	}
+	if e.Actor != nil {
+		return *e.Actor
+	}
+	return 0
+}
+
+// riotSite is one Riot-eligible entry, stripped out of entries: its
+// original TrailEntry value (Node still its true origin at this point) and
+// the sort key riotParticipant computed for it.
+type riotSite struct {
+	entry game.TrailEntry
+	seat  game.SeatID
+}
+
+// riotSitesByKey implements sort.Interface over D4's total key — origin
+// NodeID, then entry-type declaration order (this package's own EventKind
+// order), then participant SeatID — for applyRiotPermutation's sort.Stable
+// call below. A named sort.Interface type rather than an anonymous
+// closure-based sort, so this file doesn't trip
+// TestOnlyOrderingFileUsesSortSlice (ordering_test.go): RFC §6.5's "two
+// orderings" (bySeat, byFairness) are the package's only SeatID-batching
+// orderings; this is a different kind of sort (Node/Kind/seat), the same
+// "different symbol" carve-out orderConfrontationsByNode already uses via
+// the slices package.
+type riotSitesByKey []riotSite
+
+func (s riotSitesByKey) Len() int      { return len(s) }
+func (s riotSitesByKey) Swap(i, j int) { s[i], s[j] = s[j], s[i] }
+func (s riotSitesByKey) Less(i, j int) bool {
+	a, b := s[i], s[j]
+	if a.entry.Node != b.entry.Node {
+		return a.entry.Node < b.entry.Node
+	}
+	if a.entry.Kind != b.entry.Kind {
+		return a.entry.Kind < b.entry.Kind
+	}
+	return a.seat < b.seat
+}
+
+// applyRiotPermutation applies D4's mechanism for GDD §14.3's Riot: strips
+// every riotEligible entry generated this round at a node inside the
+// flagged sector out of entries, sorts them by D4's total key — origin
+// NodeID, then entry-type declaration order (this package's own EventKind
+// declaration order, which already matches GDD §7.3's table), then
+// participant SeatID, with each riotSite's own position in the collection
+// walk below (itself NodeID-ascending, then per-node construction order)
+// as a final, fully deterministic tiebreak among entries that tie on all
+// three (see riotParticipant's own doc) — and permutes their node
+// assignment via Torn Map's exact shuffle shape (RFC §6.4) at k=n,
+// PurposeIncidentRiot: a genuine, closed permutation of the real origins,
+// never inventing a target node with no real activity. Entry contents —
+// event type, whether it's named, and whose name — travel unchanged; only
+// .Node moves. No-op, zero draws, when Riot isn't this round's card or no
+// eligible entry exists (RFC §6.4's lazy-draw rule) — matches D4's own
+// n=0 case exactly.
+func applyRiotPermutation(s *MatchState, entries map[game.NodeID][]game.TrailEntry, incCtx incidentContext, r *RNG) {
+	if !incCtx.live || incCtx.card != IncidentRiot {
+		return
+	}
+	sector := *incCtx.sector
+
+	var sites []riotSite
+	for _, n := range s.Graph.Nodes {
+		list, ok := entries[n.ID]
+		if !ok || n.Sector != sector {
+			continue
+		}
+		kept := list[:0:0]
+		for _, e := range list {
+			if riotEligible(e.Kind) {
+				sites = append(sites, riotSite{entry: e, seat: riotParticipant(e)})
+			} else {
+				kept = append(kept, e)
+			}
+		}
+		entries[n.ID] = kept
+	}
+	if len(sites) == 0 {
+		return
+	}
+
+	sort.Stable(riotSitesByKey(sites))
+
+	targets := make([]game.NodeID, len(sites))
+	for i, site := range sites {
+		targets[i] = site.entry.Node
+	}
+	targets = PartialFisherYates(r, PurposeIncidentRiot, targets, len(targets))
+
+	for i, site := range sites {
+		e := site.entry
+		e.Node = targets[i]
+		entries[e.Node] = append(entries[e.Node], e)
 	}
 }
 
@@ -389,7 +549,12 @@ func seatSight(s MatchState, validated map[game.SeatID]game.Order, seat game.Sea
 		mask[post] = true // PostSight(post, post): each post's own node only.
 	}
 
-	if validated[seat].Action.Kind == game.ActionSurveil {
+	// Local Informant (GDD §14.3, issue #73) grants the identical 2-step
+	// distance mask as a declared Surveil — "sight of every node within 2
+	// steps of wherever they end their route next round," which this
+	// round's live pos already is. Player.LocalInformant is cleared by
+	// distributeTrail right after this call, consumed exactly once.
+	if validated[seat].Action.Kind == game.ActionSurveil || s.Players[seat].LocalInformant {
 		dist := s.Graph.distances(pos)
 		for _, n := range s.Graph.Nodes {
 			if d := dist[n.ID]; d >= 0 && d <= 2 {
@@ -474,6 +639,7 @@ func distributeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats 
 	for _, seat := range seats {
 		p := &s.Players[seat]
 		sight := seatSight(*s, validated, seat, blackoutActive)
+		p.LocalInformant = false // consumed exactly once (GDD §14.3, issue #73)
 		updateSeatFog(p, sight)
 
 		for _, node := range sight {

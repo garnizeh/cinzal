@@ -43,10 +43,17 @@ func TestEventKindNamesAreStable(t *testing.T) {
 		// an earlier issue.
 		EventDeadRunnerCrate:        "DeadRunnerCrate",
 		EventFenceWindfallAnnounced: "FenceWindfallAnnounced",
+
+		// Issue #73's own two: Spilled Load's public announcement (GDD
+		// §14.3, the incident-deck twin of Dead Runner) and Informant
+		// Ring's position reveal (GDD §14.3, the incident-deck twin of
+		// EventInformants).
+		EventSpilledLoadCrate: "SpilledLoadCrate",
+		EventInformantRing:    "InformantRing",
 	}
 
-	if len(want) != 20 {
-		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows plus Step 0's 6 plus #72's 2 announcements is 20, table has %d", len(want))
+	if len(want) != 22 {
+		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows plus Step 0's 6 plus #72's 2 announcements plus #73's 2 is 22, table has %d", len(want))
 	}
 
 	for kind, name := range want {

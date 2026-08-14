@@ -1,6 +1,8 @@
 package rules
 
 import (
+	"slices"
+
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/rules/gen"
 )
@@ -50,10 +52,28 @@ func initial(seed [32]byte, cfg game.Config, players int) (MatchState, error) {
 	graph.IncidentDeck = buildIncidentDeck(rng)
 
 	return MatchState{
-		Round:   0,
-		Graph:   graph,
-		Players: seatPlayers(g, graph, cfg, players),
+		Round:          0,
+		Graph:          graph,
+		Players:        seatPlayers(g, graph, cfg, players),
+		UnstableSector: initialUnstableSector(rng, cfg),
 	}, nil
+}
+
+// initialUnstableSector draws round 3's Unstable Sector (GDD §14.1, §14.3:
+// "nothing in rounds 1-2") — the one incident-deck draw that happens at
+// Setup rather than round by round, because round 3's Headline has to be
+// announceable from the MatchState round 2's Resolve call returns, and
+// nothing has run yet to produce that value any other way (see
+// MatchState.UnstableSector's own doc, state.go). nil when the match has no
+// round 3 at all (cfg.Rounds < 3) — Config.Validate already permits a
+// shorter match for scenario configs (GDD §19.1), and incident() (issue
+// #73, incidents.go) never fires without a live sector to check against.
+func initialUnstableSector(rng *RNG, cfg game.Config) *game.Sector {
+	if cfg.Rounds < 3 {
+		return nil
+	}
+	sector := PartialFisherYates(rng, PurposeIncidentSector, slices.Clone(allSectors), 1)[0]
+	return &sector
 }
 
 // newGraph converts gen's output into rules.Graph. Node.Name is left at its

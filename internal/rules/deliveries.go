@@ -36,11 +36,17 @@ func resolveDeliveries(s *MatchState, validated map[game.SeatID]game.Order, cfg 
 // regardless of who has sight of what; #71/Project distribute it to every
 // seat unconditionally).
 //
-// An unbound loose crate (Dead Runner, Spilled Load — issue #72/#73) pays
-// GDD §8.4's flat Cr$ 12/3 RP rather than the tier table, and grants no
-// Infamy (unlike a contract delivery's own +1/+2 — GDD §11 states that gain
-// against "delivering any contract," which a loose crate, by definition, is
-// not one of) and removes no contract, since it was never bound to one.
+// An unbound loose crate pays a flat rate rather than the tier table, and
+// grants no Infamy (unlike a contract delivery's own +1/+2 — GDD §11 states
+// that gain against "delivering any contract," which a loose crate, by
+// definition, is not one of) and removes no contract, since it was never
+// bound to one. Two sources produce a loose crate, at different flat
+// rates: Dead Runner (GDD §14.2, events.go's resolveDeadRunner) pays Cr$
+// 12/3 RP; Spilled Load (GDD §14.3, incidents.go's resolveSpilledLoad)
+// pays Cr$ 10/2 RP — Cargo.SpilledLoad (state.go), carried through pickup
+// onto game.CarriedCargo.SpilledLoad (actions.go's resolvePickup), is the
+// only thing that tells the two apart once both are just "an unbound crate
+// on the ground."
 //
 // ctx.gatesClosedActive (Gates Closed, GDD §14.2) halves whatever payment
 // this delivery would otherwise pay, rounded down, RP unaffected — applied
@@ -70,6 +76,8 @@ func resolveOneDelivery(s *MatchState, seat game.SeatID, cfg game.Config, ctx gl
 		}
 		contract = p.Contracts[idx]
 		payment, rp, infamyGain = Deliver(contract, cfg)
+	} else if p.Cargo.SpilledLoad {
+		payment, rp, infamyGain = spilledLoadPayout, spilledLoadRP, 0
 	} else {
 		payment, rp, infamyGain = deadRunnerPayout, deadRunnerRP, 0
 	}

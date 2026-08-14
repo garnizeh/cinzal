@@ -184,7 +184,7 @@ func TestCohabitationThreeCases(t *testing.T) {
 			s := newState()
 			walks := newSeatWalks(s, seats)
 			rng := NewRNG(testSeed(1), 1)
-			advance(&s, walks, c.validated, seats, 1, rng)
+			advance(&s, walks, c.validated, seats, 1, incidentContext{}, rng)
 
 			groups := detectCollisions(s, seats)
 			fight := len(groups) > 0
@@ -509,8 +509,8 @@ func TestAdvanceOrdinaryRouteStepDrawsNothing(t *testing.T) {
 	walks := newSeatWalks(s, seats)
 	rng := NewRNG(testSeed(1), 1)
 
-	advance(&s, walks, validated, seats, 1, rng)
-	advance(&s, walks, validated, seats, 2, rng)
+	advance(&s, walks, validated, seats, 1, incidentContext{}, rng)
+	advance(&s, walks, validated, seats, 2, incidentContext{}, rng)
 
 	if s.Players[0].Position != 2 {
 		t.Fatalf("Position = %d, want 2", s.Players[0].Position)
@@ -532,7 +532,7 @@ func TestAdvanceStationarySeatNeverMoves(t *testing.T) {
 	walks := newSeatWalks(s, seats)
 	rng := NewRNG(testSeed(1), 1)
 
-	tr := advance(&s, walks, validated, seats, 1, rng)
+	tr := advance(&s, walks, validated, seats, 1, incidentContext{}, rng)
 	if s.Players[0].Position != 0 {
 		t.Fatalf("Position = %d, want 0 (stationary)", s.Players[0].Position)
 	}
@@ -581,8 +581,8 @@ func TestAdvanceInterleavesPushOnAndScavengeLazily(t *testing.T) {
 	validated := map[game.SeatID]game.Order{0: {PushingOn: game.PushingOn{Steps: 2}}}
 	walks := newSeatWalks(s, seats)
 	rng := NewRNG(seed, round)
-	advance(&s, walks, validated, seats, 1, rng)
-	advance(&s, walks, validated, seats, 2, rng)
+	advance(&s, walks, validated, seats, 1, incidentContext{}, rng)
+	advance(&s, walks, validated, seats, 2, incidentContext{}, rng)
 
 	if s.Players[0].Position != step2 {
 		t.Errorf("advance() final position = %d, want %d (pushOnStep's own second-step result)", s.Players[0].Position, step2)
@@ -620,7 +620,7 @@ func TestAdvanceSkipsScavengeWhenBlindStepLandsOnKnownNode(t *testing.T) {
 	walks := newSeatWalks(s, seats)
 	rng := NewRNG(testSeed(1), 1)
 
-	advance(&s, walks, validated, seats, 1, rng)
+	advance(&s, walks, validated, seats, 1, incidentContext{}, rng)
 
 	if got := rng.Consumed(PurposePushonEdge); got != 1 {
 		t.Errorf("Consumed(pushon.edge) = %d, want 1", got)
