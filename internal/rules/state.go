@@ -320,6 +320,19 @@ type MatchState struct {
 	// the sector just used, which is the entire mechanism behind "the
 	// same sector cannot be flagged two rounds running."
 	UnstableSector *game.Sector
+
+	// RoundAnchors is Round's own global, unconditional position-writer
+	// facts (RFC §9.1 rows 2-4, 11, 13-14) — built once, by
+	// buildRoundAnchors (anchors.go), from that round's own []game.Event
+	// stream just before Resolve returns. Project (#75) is a pure
+	// MatchState -> game.PlayerView function with no other way to see
+	// that stream: Resolve's caller owns it and it is never persisted as
+	// state in its own right (RFC §7.4, §7.1). Rows 1, 7, 8, 12
+	// (sight-gated) are not here — they live in each seat's own
+	// Archive.Trail (writeTrail, trail.go). Rows 5, 6, 9, 10 are not here
+	// either — Project derives them directly from live Player state each
+	// time it runs, so they need no round-scoped storage at all.
+	RoundAnchors []game.Anchor
 }
 
 // NextRoundModifiers is MatchState.NextRound's shape — see that field's own
@@ -435,12 +448,24 @@ func (s MatchState) clone() MatchState {
 		sector := *s.UnstableSector
 		unstableSector = &sector
 	}
+	var roundAnchors []game.Anchor
+	if s.RoundAnchors != nil {
+		roundAnchors = make([]game.Anchor, len(s.RoundAnchors))
+		for i, a := range s.RoundAnchors {
+			roundAnchors[i] = a
+			if a.Actor != nil {
+				actor := *a.Actor
+				roundAnchors[i].Actor = &actor
+			}
+		}
+	}
 	return MatchState{
 		Round:          s.Round,
 		Graph:          s.Graph.clone(),
 		Players:        players,
 		NextRound:      s.NextRound.clone(),
 		UnstableSector: unstableSector,
+		RoundAnchors:   roundAnchors,
 	}
 }
 
