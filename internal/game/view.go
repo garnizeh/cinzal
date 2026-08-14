@@ -301,17 +301,19 @@ type TrailEntry struct {
 }
 
 // Anchor is one public, globally-broadcast fact that fixes a node in a
-// round — RFC §9.1 rows 2-6 and 9-11, reaching every seat unconditionally
-// regardless of sight. GDD §7.5's Attribution tool works backward from
-// exactly this list.
+// round — RFC §9.1 rows 2-6, 9-11, and 13-14, reaching every seat
+// unconditionally regardless of sight. GDD §7.5's Attribution tool works
+// backward from exactly this list.
 type Anchor struct {
 	Kind  EventKind   // which of RFC §9.1's global writer rows this is
 	Round RoundNumber // when it happened
 	Node  NodeID      // where it happened
 
-	// Actor is the seat named. Nil for the two node-only rows — Loitering,
-	// 3+ consecutive rounds, and a loose crate held 2+ consecutive rounds
-	// (RFC §9.1 rows 5, 6) — which fix a node without naming a player.
+	// Actor is the seat named. Nil for the four node-only rows — Loitering,
+	// 3+ consecutive rounds; a loose crate held 2+ consecutive rounds; Dead
+	// Runner's crate placement; and Fence's Windfall's standing-offer
+	// opening (RFC §9.1 rows 5, 6, 13, 14) — each of which fixes a node
+	// without naming a player.
 	Actor *SeatID
 
 	// Tier is the contract tier delivered, 0-3 indexing Config.Contracts.

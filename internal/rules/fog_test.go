@@ -383,19 +383,38 @@ func TestProjectRow8ItemPurchasedAbsentFromPriorRound(t *testing.T) {
 }
 
 // TestProjectRow12DecoyIndistinguishableFromRealPickup is D12's own
-// acceptance criterion: a real cargo pickup and a Decoy plant produce the
-// exact same game.TrailEntry shape (kind, node, actor), so two MatchStates
-// differing only in which one actually happened must serialise identically
-// through Project — the fabricated/real distinction is internal to
-// MatchState and never crosses the fog boundary.
+// acceptance criterion, exercised through the real production path rather
+// than two hand-built archives that merely assert the tautology "identical
+// input produces identical output": writeTrail (trail.go) builds a real
+// EventCargoTaken trail entry from roundEvents, and a Decoy entry from a
+// declared ItemDecoy discard, through the shared cargoTakenEntry helper
+// (addCargoTakenAndDecoy, trail.go) — this drives both of writeTrail's own
+// inputs independently, for the same seat/node/Infamy, and asserts the two
+// resulting MatchStates project to byte-identical PlayerViews. Neither
+// MatchState nor game.TrailEntry stores a fabricated/real marker; this is
+// what makes that true from the production code, not from the test's own
+// setup.
 func TestProjectRow12DecoyIndistinguishableFromRealPickup(t *testing.T) {
-	real := trailTestState(5, 0, 3)
+	real := trailTestState(5, 2)
 	real.Players[0].Infamy = 4
-	real.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, seatPtr(1))}
+	realOrders := map[game.SeatID]game.Order{0: {Action: game.ActionOrder{Kind: game.ActionNothing}}}
+	realEvents := []game.Event{{Kind: game.EventCargoTaken, Round: 5, Node: 2, Seat: 0}}
+	writeTrail(&real, realOrders, bySeat(real), trailTestWalks(2), nil, realEvents, globalEventContext{}, incidentContext{}, NewRNG(testSeed(1), int(real.Round)))
 
-	decoy := trailTestState(5, 0, 3)
+	decoy := trailTestState(5, 2)
 	decoy.Players[0].Infamy = 4
-	decoy.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, seatPtr(1))}
+	decoyOrders := map[game.SeatID]game.Order{0: {
+		Action: game.ActionOrder{Kind: game.ActionNothing},
+		Items:  []game.ItemDiscard{{Item: game.ItemDecoy, Target: 2}},
+	}}
+	writeTrail(&decoy, decoyOrders, bySeat(decoy), trailTestWalks(2), nil, nil, globalEventContext{}, incidentContext{}, NewRNG(testSeed(1), int(decoy.Round)))
+
+	if !hasTrailEntry(projectTrail(real.Players[0].Archive, 5), game.EventCargoTaken, 2) {
+		t.Fatalf("real setup produced no CargoTaken entry at node 2, want writeTrail to have written one")
+	}
+	if !hasTrailEntry(projectTrail(decoy.Players[0].Archive, 5), game.EventCargoTaken, 2) {
+		t.Fatalf("decoy setup produced no CargoTaken entry at node 2, want writeTrail to have written one")
+	}
 
 	realJSON, err := json.Marshal(Project(real, 0))
 	if err != nil {
