@@ -27,6 +27,14 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	entry := next.Snapshot()
 	resetRoundFlags(next.Players)
 
+	// Upkeep step 4's own entry snapshot (D5): s.NextRound as it stood
+	// entering this round, before Phase 6's global event deck draw below
+	// can set a fresh value for the round about to start. upkeep
+	// (upkeep.go) clears only what this captures, never a same-round-fresh
+	// flag — see that function's own doc comment and state.go's NextRound
+	// comment for why an unconditional clear is wrong.
+	entryNextRound := next.NextRound.clone()
+
 	// Global event peek (issue #72, GDD §14.2): the deck's card for this
 	// round is fixed at Setup, so buildGlobalEventContext peeks it — and,
 	// for Dragnet only, draws its target set — before validate/movement
@@ -72,7 +80,7 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	events = append(events, globalEvent(&next, ctx, events, r)...)
 	events = append(events, incident(&next, incCtx, validated, seats, walks, cfg, r)...)
 	events = append(events, pressure(&next, cfg, r)...)
-	events = append(events, upkeep(&next)...)
+	events = append(events, upkeep(&next, cfg, entryNextRound)...)
 
 	return next, events, nil
 }
@@ -151,6 +159,6 @@ func movementSteps(seats []game.SeatID, validated map[game.SeatID]game.Order) in
 // buildIncidentContext (also incidents.go) is this same issue's round-start
 // peek, called above, before validate.
 
-// upkeep is a stub — issue #74 implements Phase 8's four fixed steps
-// (contract deadlines, leases, Sinkhole, next-round modifier clear).
-func upkeep(s *MatchState) []game.Event { return nil }
+// upkeep (issue #74) is defined in upkeep.go: Phase 8's four fixed,
+// dependency-ordered steps (contract deadlines, leases, Sinkhole,
+// next-round modifier clear).

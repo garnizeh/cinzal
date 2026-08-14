@@ -298,23 +298,12 @@ type MatchState struct {
 	// reads them as ordinary live state — validate/legalView for
 	// Scaffolding and Retainer's step bonuses, Legal for Dockers' Strike,
 	// writeTrail for Blackout — before that round's own movement can
-	// change what they're evaluated against. Upkeep step 4 (D5) clears
-	// them; that step is issue #74's stub, not this one's, so a flag set
-	// here persists until #74 lands (matches the precedent trail.go's
+	// change what they're evaluated against. Upkeep step 4 (D5, upkeep.go)
+	// clears whichever of these was already active entering the round —
+	// captured by Resolve as entryNextRound before this round's own
+	// globalEvent() can set a fresh value — never one just written for the
+	// round about to start (matches the precedent trail.go's
 	// rainActive/Blackout comment already documents).
-	//
-	// Warning for #74: an unconditional "clear s.NextRound" at the end of
-	// Upkeep would delete a flag globalEvent() just set moments earlier in
-	// the very same Resolve() call, before round N+1 ever gets to read it —
-	// the identical hazard D5's own Reasoning section already worked
-	// through for Flagged/EvasiveStepPenalty ("cannot tell round N's
-	// already-consumed value apart from a value Phase 5 just wrote for
-	// round N+1"). D5's decided step 4 text — "clear whichever fired for
-	// this round" — already points at the right fix (clear only a
-	// modifier that was active entering this round, not one merely
-	// present when Upkeep runs), but that distinction needs an explicit
-	// mechanism, not just careful phrasing, or #74 reintroduces the same
-	// bug this field's own consumers were built to avoid.
 	NextRound NextRoundModifiers
 
 	// UnstableSector is the sector flagged Unstable for round Round+1 —
