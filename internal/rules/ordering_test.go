@@ -10,14 +10,14 @@ import (
 )
 
 // TestOnlyOrderingFileUsesSortSlice is the issue's own acceptance
-// criterion, verbatim: exactly two orderings exist in this package —
-// bySeat and byFairness, both in ordering.go — and any other file in the
-// package that reaches for sort.Slice is inventing a third one. Node-ID
-// orderings (selection.go's orderConfrontationsByNode) are deliberately
-// unaffected: they use the "slices" package, a different symbol, because
-// RFC §6.5's "two orderings" are specifically about SeatID batching and
-// fairness, not the pre-existing NodeID-ascending convention RFC §6.4
-// already establishes throughout.
+// criterion, verbatim: every ordering in this package — bySeat, byFairness,
+// and byFinalStanding (issue #76, RFC §6.5) — lives in ordering.go, and any
+// other file in the package that reaches for sort.Slice is inventing one
+// of its own. Node-ID orderings (selection.go's orderConfrontationsByNode)
+// are deliberately unaffected: they use the "slices" package, a different
+// symbol, because RFC §6.5's orderings are specifically about SeatID
+// batching, fairness, and final standing, not the pre-existing
+// NodeID-ascending convention RFC §6.4 already establishes throughout.
 //
 // This is a fail-closed gate (CLAUDE.md): if the directory read finds no
 // package files at all, that is a broken check, not a passing one.
@@ -42,7 +42,7 @@ func TestOnlyOrderingFileUsesSortSlice(t *testing.T) {
 			t.Fatalf("ReadFile(%s): %v", name, err)
 		}
 		if strings.Contains(string(data), "sort.Slice") && name != allowedFile {
-			t.Errorf("%s calls sort.Slice — the only two orderings in this package (byFairness, bySeat) live in %s; a third ordering does not belong anywhere else", name, allowedFile)
+			t.Errorf("%s calls sort.Slice — the only orderings in this package (byFairness, bySeat, byFinalStanding) live in %s; an independently invented one does not belong anywhere else", name, allowedFile)
 		}
 	}
 
@@ -213,5 +213,82 @@ func TestByFairnessCoinOrdersATiedGroupOfAnySize(t *testing.T) {
 	replay := byFairness(s, NewRNG(testSeed(3), 1))
 	if !reflect.DeepEqual(got, replay) {
 		t.Fatalf("byFairness() is not stable on replay: %v != %v", got, replay)
+	}
+}
+
+// TestByFinalStandingOrdersByContractsThenInfamyThenBalance is GDD §16's
+// tiebreak chain verbatim: descending contracts delivered, then descending
+// Infamy, then descending balance — mirrors
+// TestByFairnessOrdersByInfamyThenBalanceThenRP's shape, seats each tied
+// at exactly one level.
+func TestByFinalStandingOrdersByContractsThenInfamyThenBalance(t *testing.T) {
+	s := matchStateWithPlayers(
+		Player{Seat: 0, ContractsDelivered: 3, Infamy: 5, Balance: 10},
+		Player{Seat: 1, ContractsDelivered: 9, Infamy: 0, Balance: 0},  // most delivered wins outright
+		Player{Seat: 2, ContractsDelivered: 3, Infamy: 8, Balance: 0},  // ties seat 0 on delivered, wins on Infamy
+		Player{Seat: 3, ContractsDelivered: 3, Infamy: 5, Balance: 99}, // ties seat 0 on delivered+Infamy, wins on balance
+	)
+
+	got := byFinalStanding(s)
+	want := []game.SeatID{1, 2, 3, 0}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("byFinalStanding() = %v, want %v", got, want)
+	}
+}
+
+// TestByFinalStandingFullyTiedStaysInSeatOrder checks GDD §16's chain has
+// no fourth level: unlike byFairness's seeded coin, a remaining tie after
+// balance is left exactly as sort.SliceStable found it — seat order, no
+// RNG draw.
+func TestByFinalStandingFullyTiedStaysInSeatOrder(t *testing.T) {
+	s := matchStateWithPlayers(
+		Player{Seat: 0, ContractsDelivered: 2, Infamy: 4, Balance: 20},
+		Player{Seat: 1, ContractsDelivered: 2, Infamy: 4, Balance: 20},
+		Player{Seat: 2, ContractsDelivered: 2, Infamy: 4, Balance: 20},
+	)
+
+	got := byFinalStanding(s)
+	want := []game.SeatID{0, 1, 2}
+	if !reflect.DeepEqual(got, want) {
+		t.Fatalf("byFinalStanding() = %v, want %v (seat order, fully tied)", got, want)
+	}
+}
+
+// TestRankFinalScoresTotalRPIsThePrimaryKey checks rankFinalScores' actual
+// job: Total RP outranks the GDD §16 tiebreak chain entirely — a seat with
+// fewer contracts delivered but a higher Total still places first.
+func TestRankFinalScoresTotalRPIsThePrimaryKey(t *testing.T) {
+	s := matchStateWithPlayers(
+		Player{Seat: 0, ContractsDelivered: 5, Infamy: 9, Balance: 99},
+		Player{Seat: 1, ContractsDelivered: 0, Infamy: 0, Balance: 0},
+	)
+	breakdowns := []FinalScoreBreakdown{
+		{Seat: 0, Total: 10},
+		{Seat: 1, Total: 30}, // lower on every tiebreak level, but wins on Total
+	}
+
+	rankFinalScores(s, breakdowns)
+
+	if breakdowns[0].Seat != 1 || breakdowns[1].Seat != 0 {
+		t.Fatalf("rankFinalScores() order = %v, want seat 1 first (higher Total)", breakdowns)
+	}
+}
+
+// TestRankFinalScoresFallsBackToFinalStandingOnATotalTie checks the
+// secondary key actually fires when Total RP ties.
+func TestRankFinalScoresFallsBackToFinalStandingOnATotalTie(t *testing.T) {
+	s := matchStateWithPlayers(
+		Player{Seat: 0, ContractsDelivered: 1, Infamy: 0, Balance: 0},
+		Player{Seat: 1, ContractsDelivered: 4, Infamy: 0, Balance: 0}, // most delivered, same Total
+	)
+	breakdowns := []FinalScoreBreakdown{
+		{Seat: 0, Total: 20},
+		{Seat: 1, Total: 20},
+	}
+
+	rankFinalScores(s, breakdowns)
+
+	if breakdowns[0].Seat != 1 || breakdowns[1].Seat != 0 {
+		t.Fatalf("rankFinalScores() order = %v, want seat 1 first (tiebreak: most delivered)", breakdowns)
 	}
 }

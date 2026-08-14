@@ -6,11 +6,12 @@ import (
 	"github.com/garnizeh/cinzal/internal/game"
 )
 
-// The only two orderings in this package (RFC §6.5). Every "the one with
-// the least/most X" selection routes through one of them — bySeat when
-// position confers no advantage, byFairness when it does — never through an
+// The only three orderings in this package (RFC §6.5). Every "the one with
+// the least/most X" selection or ranking routes through one of them —
+// bySeat when position confers no advantage, byFairness when it does,
+// byFinalStanding for GDD §16's end-of-match placement — never through an
 // ad-hoc sort of its own. TestOnlyOrderingFileUsesSortSlice guards that: a
-// third, independently invented ordering elsewhere in this package is
+// fourth, independently invented ordering elsewhere in this package is
 // exactly the mistake this file exists to make impossible.
 
 // bySeat returns every seat in s, ascending seat index. This is the
@@ -137,6 +138,70 @@ func resolveFairnessTie(s MatchState, candidates []game.SeatID, rng *RNG) game.S
 	}
 	k := rng.Next(PurposeConfrontTiebreak, len(tied))
 	return tied[k]
+}
+
+// finalStandingCompare reports how a and b order under GDD §16's
+// final-scoring tiebreak — descending contracts delivered, then descending
+// Infamy, then descending balance — returning -1 if a ranks ahead of b, 1
+// if b ranks ahead, 0 if every level ties. Unlike fairnessCompare, this key
+// has no fourth, RNG-broken level: GDD §16 names exactly three, and a
+// remaining tie is left in seat order (sort.SliceStable) rather than
+// inventing a coin flip the spec doesn't call for.
+func finalStandingCompare(s MatchState, a, b game.SeatID) int {
+	pa, pb := s.Players[a], s.Players[b]
+
+	if pa.ContractsDelivered != pb.ContractsDelivered {
+		if pa.ContractsDelivered > pb.ContractsDelivered {
+			return -1
+		}
+		return 1
+	}
+	if pa.Infamy != pb.Infamy {
+		if pa.Infamy > pb.Infamy {
+			return -1
+		}
+		return 1
+	}
+	if pa.Balance != pb.Balance {
+		if pa.Balance > pb.Balance {
+			return -1
+		}
+		return 1
+	}
+	return 0
+}
+
+// byFinalStanding returns every seat in s, ordered by GDD §16's final
+// tiebreak key alone (finalStandingCompare). rankFinalScores uses this as
+// the secondary sort beneath total RP, the primary key a match actually
+// places on. Never used during a round and never for RNG batching (RFC
+// §6.5) — this key exists only once, at the end of round 15.
+func byFinalStanding(s MatchState) []game.SeatID {
+	seats := bySeat(s)
+	sort.SliceStable(seats, func(i, j int) bool {
+		return finalStandingCompare(s, seats[i], seats[j]) < 0
+	})
+	return seats
+}
+
+// rankFinalScores sorts breakdowns into GDD §16 match placement — Total RP
+// descending, ties broken by byFinalStanding's key — in place, rank 1
+// first. FinalScore (scoring.go) computes Total per seat but never sorts
+// it directly: every sort in this package lives here
+// (TestOnlyOrderingFileUsesSortSlice), so the actual ranking step is this
+// function, not a second sort.Slice call living in scoring.go.
+func rankFinalScores(s MatchState, breakdowns []FinalScoreBreakdown) {
+	tiebreakRank := make(map[game.SeatID]int, len(breakdowns))
+	for i, seat := range byFinalStanding(s) {
+		tiebreakRank[seat] = i
+	}
+
+	sort.SliceStable(breakdowns, func(i, j int) bool {
+		if breakdowns[i].Total != breakdowns[j].Total {
+			return breakdowns[i].Total > breakdowns[j].Total
+		}
+		return tiebreakRank[breakdowns[i].Seat] < tiebreakRank[breakdowns[j].Seat]
+	})
 }
 
 // filterBySeat returns the seats in subset, in seat order — the shape every

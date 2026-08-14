@@ -105,6 +105,7 @@ func resolveOneDelivery(s *MatchState, seat game.SeatID, cfg game.Config, ctx gl
 		p.Contracts = slices.Delete(p.Contracts, idx, idx+1)
 		ev.Contract = contract.ID
 		ev.Tier = contract.Tier
+		p.ContractsDelivered++
 	}
 	p.Cargo = nil
 

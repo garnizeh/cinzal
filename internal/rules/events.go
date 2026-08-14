@@ -103,15 +103,9 @@ func buildGlobalEventContext(s MatchState, r *RNG) globalEventContext {
 
 // drawDragnetBorders draws Dragnet's 2 sealed Borders (PurposeEventDragnet,
 // D3: "min(2, len(candidates))", candidates every Border node, sorted
-// NodeID — Graph.Nodes is already NodeID-ascending, so filtering preserves
-// that order for free).
+// NodeID — borderNodeIDs, borders.go, shared with two-player rotation).
 func drawDragnetBorders(s MatchState, r *RNG) []game.NodeID {
-	var candidates []game.NodeID
-	for _, n := range s.Graph.Nodes {
-		if n.Type == game.NodeBorder {
-			candidates = append(candidates, n.ID)
-		}
-	}
+	candidates := borderNodeIDs(s.Graph)
 	return slices.Clone(PartialFisherYates(r, PurposeEventDragnet, candidates, 2))
 }
 

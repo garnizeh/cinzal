@@ -45,6 +45,14 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	// grouping.
 	ctx := buildGlobalEventContext(next, r)
 
+	// Two-player rotating borders (GDD §6.3, D03) plus Dragnet's own seal
+	// above, combined and D26-safety-valved: blockedBordersThisRound
+	// (borders.go) is every Border this round's Deliver orders cannot
+	// route to. Nil at 3+ players whenever Dragnet didn't fire — identical
+	// to today's Dragnet-only behaviour, since rotation contributes
+	// nothing there.
+	blockedBorders := blockedBordersThisRound(next.Graph, next.Round, len(next.Players), ctx.sealedBorders)
+
 	// Sector incident peek (issue #73, GDD §14.3): the flagged sector for
 	// this round was already decided a round ago (MatchState.UnstableSector,
 	// state.go) — incidentContext is a non-consuming re-read of it plus
@@ -54,7 +62,7 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	incCtx := buildIncidentContext(next)
 
 	seats := bySeat(next)
-	validated, events := validate(next, entry, seats, orders, cfg, ctx)
+	validated, events := validate(next, entry, seats, orders, cfg, ctx, blockedBorders)
 
 	// Steps 1..N — synchronized movement (RFC §6.7). The collision check
 	// runs at least once per round even when every route is empty (GDD
