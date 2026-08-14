@@ -93,7 +93,7 @@ func TestBlockedBordersThisRoundCombinesDragnetAndRotation(t *testing.T) {
 	}
 }
 
-// TestBlockedBordersThisRoundSafetyValve is D26, verbatim: at 2 players,
+// TestBlockedBordersThisRoundSafetyValve is D28, verbatim: at 2 players,
 // Dragnet's seal can coincide with rotation's inactive set to close every
 // Border. Round 2's active set is {3} alone (see the alternation test
 // above); Dragnet sealing exactly {3} would leave zero Borders deliverable
@@ -111,7 +111,7 @@ func TestBlockedBordersThisRoundSafetyValve(t *testing.T) {
 	}
 }
 
-// TestBlockedBordersThisRoundSafetyValveNeverFiresAboveTwoPlayers is D26's
+// TestBlockedBordersThisRoundSafetyValveNeverFiresAboveTwoPlayers is D28's
 // own claim that the fallback is structurally inert at 3+ players: with
 // rotation contributing nothing there, Dragnet's own 2-Border seal out of
 // this fixture's 3 total Borders never covers every Border, so the result

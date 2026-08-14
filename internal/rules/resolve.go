@@ -46,7 +46,7 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	ctx := buildGlobalEventContext(next, r)
 
 	// Two-player rotating borders (GDD §6.3, D03) plus Dragnet's own seal
-	// above, combined and D26-safety-valved: blockedBordersThisRound
+	// above, combined and D28-safety-valved: blockedBordersThisRound
 	// (borders.go) is every Border this round's Deliver orders cannot
 	// route to. Nil at 3+ players whenever Dragnet didn't fire — identical
 	// to today's Dragnet-only behaviour, since rotation contributes

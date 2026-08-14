@@ -73,13 +73,13 @@ func inactiveBordersForRound(g Graph, round game.RoundNumber, players int) []gam
 // blockedBordersThisRound is every Border not accepting deliveries this
 // round: Dragnet's own seal (nil unless it fired, drawDragnetBorders in
 // events.go) unioned with rotation's inactive set (nil at 3+ players),
-// with D26's safety valve applied on top — if that union would cover
+// with D28's safety valve applied on top — if that union would cover
 // every Border on the map, the lowest-NodeID Border among them reopens,
 // so a Deliver order is never left with zero Borders it could possibly
 // resolve against. Provably a no-op at 3+ players: rotation contributes
 // nothing there, and Dragnet seals at most 2 of the ≥5 Borders every
 // 3+-player map has (GDD §6.2's allocation table), so the union can never
-// reach "every Border" outside the two-player, 3-Border case D26 exists
+// reach "every Border" outside the two-player, 3-Border case D28 exists
 // for.
 func blockedBordersThisRound(g Graph, round game.RoundNumber, players int, dragnetSealed []game.NodeID) []game.NodeID {
 	all := borderNodeIDs(g)

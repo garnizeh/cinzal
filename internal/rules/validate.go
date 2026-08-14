@@ -50,7 +50,7 @@ import (
 // blockedBorders is passed separately from ctx (rather than read off
 // ctx.sealedBorders directly) because it is a wider set than Dragnet
 // alone: Resolve computes it as Dragnet's seal unioned with two-player
-// rotation's inactive set, D26's safety valve applied (borders.go). ctx
+// rotation's inactive set, D28's safety valve applied (borders.go). ctx
 // keeps sealedBorders' own narrower, Dragnet-only meaning.
 func validate(s MatchState, entry EntrySnapshot, seats []game.SeatID, orders map[game.SeatID]game.Order, cfg game.Config, ctx globalEventContext, blockedBorders []game.NodeID) (map[game.SeatID]game.Order, []game.Event) {
 	validated := make(map[game.SeatID]game.Order, len(seats))
@@ -229,7 +229,7 @@ func routeEndingNode(s MatchState, seat game.SeatID, route []game.NodeID) game.N
 // blockedBorders is every Border not accepting deliveries this round
 // (borders.go's blockedBordersThisRound): Dragnet's own seal (issue #72,
 // GDD §14.2 — "every delivery must route to the ones that remain") unioned
-// with two-player rotation's inactive set (GDD §6.3), D26's safety valve
+// with two-player rotation's inactive set (GDD §6.3), D28's safety valve
 // already applied. A declared Deliver at a blocked Border is legal payload
 // shape (Deliver at a Border is otherwise always legal) that the world
 // moved under, exactly like a Stake Post target someone else already

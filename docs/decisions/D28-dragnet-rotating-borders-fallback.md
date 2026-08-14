@@ -1,4 +1,4 @@
-# D26 — What happens when Dragnet and rotating borders would close every Border at once?
+# D28 — What happens when Dragnet and rotating borders would close every Border at once?
 
 **Status:** decided
 **Blocks:** M1 — Rules core
