@@ -508,18 +508,19 @@ func TestResolveFestivalAwardInfamyToEveryoneAtTheDrawnNode(t *testing.T) {
 	}
 }
 
-// TestResolveNextRoundModifierSurvivesTheSameRoundsUpkeepStub documents and
-// guards the hazard CodeRabbit flagged in review (state.go's own NextRound
-// doc comment, and the RFC's r21 changelog entry): today, upkeep() is
-// issue #74's stub (resolve.go) and clears nothing, so a next-round
-// modifier globalEvent() sets this round must still be present on the
-// MatchState Resolve() returns — not silently erased before round N+1 ever
-// reads it. Runs the full pipeline, not just globalEvent() in isolation,
-// so a future Upkeep implementation that naively clears s.NextRound
-// unconditionally fails this test immediately rather than months later.
-// When #74 lands, this test's "still set" expectation should gain a
-// companion "cleared the round after it's consumed" case, not be deleted.
-func TestResolveNextRoundModifierSurvivesTheSameRoundsUpkeepStub(t *testing.T) {
+// TestResolveNextRoundModifierSurvivesTheSameRoundItsSet guards the hazard
+// CodeRabbit flagged in review (state.go's own NextRound doc comment, and
+// the RFC's r21 changelog entry), now that upkeep (#74, upkeep.go) is a
+// real implementation rather than a no-op stub: a next-round modifier
+// globalEvent() sets this round must still be present on the MatchState
+// Resolve() returns for THIS round — Upkeep step 4 only clears a modifier
+// that was already active entering the round (entryNextRound, captured
+// before globalEvent runs), never one just written for the round about to
+// start. Runs the full pipeline, not just globalEvent() in isolation, so an
+// Upkeep that naively clears s.NextRound unconditionally fails this test
+// immediately. See TestResolveNextRoundModifierClearedTheRoundAfterItsSet
+// for the companion case: the same modifier, one round later.
+func TestResolveNextRoundModifierSurvivesTheSameRoundItsSet(t *testing.T) {
 	s := resolveTestState() // seeded Fog, unlike eventsTestState — the full pipeline needs it
 	s.Round = 3             // Resolve increments to 4 -> EventDeck[4-4] = EventDeck[0]
 	s.Graph.EventDeck = []EventCardID{EventScaffolding}
@@ -530,7 +531,37 @@ func TestResolveNextRoundModifierSurvivesTheSameRoundsUpkeepStub(t *testing.T) {
 		t.Fatalf("Resolve() error = %v", err)
 	}
 	if next.NextRound.Scaffolding == nil {
-		t.Error("NextRound.Scaffolding = nil after Resolve(), want it set — Scaffolding fired this round and nothing clears it yet (upkeep is issue #74's stub)")
+		t.Error("NextRound.Scaffolding = nil after Resolve(), want it set — Scaffolding fired this round and Upkeep step 4 must not clear a same-round-fresh flag")
+	}
+}
+
+// TestResolveNextRoundModifierClearedTheRoundAfterItsSet is D5's other
+// half: a modifier set by round N's globalEvent() — live state for round
+// N+1 — must be gone by the time round N+1's own Resolve() returns, cleared
+// by that round's Upkeep step 4 once it has been consumed (legalView reads
+// it, validate.go). Two chained Resolve() calls, not one, because the bug
+// this guards against (an entry-snapshot fix applied to the wrong round)
+// is invisible from either round in isolation.
+func TestResolveNextRoundModifierClearedTheRoundAfterItsSet(t *testing.T) {
+	s := resolveTestState()
+	s.Round = 3
+	s.Graph.EventDeck = []EventCardID{EventScaffolding}
+	cfg := legalTestConfig()
+
+	round4, _, err := Resolve(s, map[game.SeatID]game.Order{}, cfg, NewRNG(testSeed(1), 4))
+	if err != nil {
+		t.Fatalf("Resolve() round 4 error = %v", err)
+	}
+	if round4.NextRound.Scaffolding == nil {
+		t.Fatal("round 4: NextRound.Scaffolding = nil, want it set (test setup precondition)")
+	}
+
+	round5, _, err := Resolve(round4, map[game.SeatID]game.Order{}, cfg, NewRNG(testSeed(2), 5))
+	if err != nil {
+		t.Fatalf("Resolve() round 5 error = %v", err)
+	}
+	if round5.NextRound.Scaffolding != nil {
+		t.Error("round 5: NextRound.Scaffolding != nil, want cleared — it was already active entering round 5 and Upkeep step 4 must consume it")
 	}
 }
 

@@ -76,14 +76,18 @@ func RenewedRoundsRemaining(current, blocks int, cfg game.Config) int {
 }
 
 // DecrementLease applies Upkeep step 2's ordinary per-round lease decrement
-// (RFC §6.7, D5) and reports whether it just crossed to zero — the instant
-// "The corner went quiet" fires publicly (game.EventLeaseExpired), whether
-// the lease expired on its own or was surrendered to Debt (GDD §13, §15
-// Upkeep: "the same trace whether the lease expired on its own or was
-// surrendered for debt").
+// (RFC §6.7, D5) and reports whether it just crossed to zero or below — the
+// instant "The corner went quiet" fires publicly (game.EventLeaseExpired),
+// whether the lease expired on its own or was surrendered to Debt (GDD
+// §13, §15 Upkeep: "the same trace whether the lease expired on its own or
+// was surrendered for debt"). <= 0, not == 0: Torched (GDD §14.3,
+// resolveTorched, incidents.go) "only ever decrements, never floors or
+// closes a lease itself," so a post can already sit below 1 remaining by
+// the time this runs this same round — an exact-zero check would let that
+// lease decrement straight past zero and never expire at all.
 func DecrementLease(roundsRemaining int) (next int, expires bool) {
 	next = roundsRemaining - 1
-	return next, next == 0
+	return next, next <= 0
 }
 
 // PostSight reports whether a live post at postNode grants sight of target
