@@ -215,7 +215,7 @@ Blocked by: **D3–D14**. Blocks: everything.
 - `MatchState`, `Player`, `Node`, `Graph`, `Contract` (per-player instances with their own Deadline Pause flag), the four fog states, and the eight cross-round counters from RFC §6.6.
 - `Order` + `Legal()` covering every row of GDD §15.0, and the affordance metadata RFC §10.2 requires the server to render.
 - `Resolve()` as the fixed pipeline of RFC §6.7 — validate → per-step movement with crossing and collision → actions → deliveries → add-ons → trail → event/incident/pressure/upkeep — with the entry snapshot (§6.6) and both orderings (§6.5) implemented as the only two comparators in the codebase.
-- `Project()` and `PlayerView`, including the `SeatArchive` sight/trail/obscured history (§9.2, `Obscured` excluding only rounds a real entry was actually erased by Rain or Blackout per [D13](../decisions/D13-observation-denominator.md)), `NodeStats`, and all **twelve** authorised position writers (§9.1), including Decoy's self-named row per [D12](../decisions/D12-decoy-fog-writer.md).
+- `Project()` and `PlayerView`, including the `SeatArchive` sight/trail/obscured history (§9.2, `Obscured` excluding only rounds a real entry was actually erased by Rain or Blackout per [D13](../decisions/D13-observation-denominator.md)), `NodeStats`, and all **fourteen** authorised position writers (§9.1), including Decoy's self-named row per [D12](../decisions/D12-decoy-fog-writer.md) and Dead Runner's/Fence's Windfall's own rows from issue #72.
 - Final scoring (GDD §16) and the two-player rule set (§6.3).
 - Full test suite from RFC §16.1's matrix that does not need a database: unit, property, golden replays, **fog negative tests**, cross-round counters, lazy RNG, Torn Map, tie-breaks, entry snapshot, anchor parity, headline coherence, adversarial payloads.
 
@@ -223,7 +223,7 @@ Blocked by: **D3–D14**. Blocks: everything.
 - `resolve(s, o) == resolve(s, o)` byte-identical, and a golden 15-round replay reproduces on a second machine and a second OS.
 - The RNG index count for each round matches the §6.4 table prediction **including truncation cases**.
 - Fog suite: for a state where seat A cannot see node N, `Project(s, A)` serialised to JSON contains **no occurrence of N's ID anywhere in the bytes**.
-- Anchor parity test passes: every GDD §7.3 row with a name attached maps to its correct row of RFC §9.1's twelve-writer table (or correctly to no row, for Fresh tracks); every writer row without a §7.3 counterpart cites its source section instead (RFC §16.1).
+- Anchor parity test passes: every GDD §7.3 row with a name attached maps to its correct row of RFC §9.1's fourteen-writer table (or correctly to no row, for Fresh tracks); every writer row without a §7.3 counterpart cites its source section instead (RFC §16.1).
 - A full match can be driven to final scoring from a Go test with no I/O of any kind.
 
 ---

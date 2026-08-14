@@ -82,6 +82,14 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	events = append(events, pressure(&next, cfg, r)...)
 	events = append(events, upkeep(&next, cfg, entryNextRound)...)
 
+	// RoundAnchors (#75, anchors.go): the round's own global,
+	// unconditional position-writer facts, extracted from the full event
+	// stream just before it leaves Resolve's hands — the only point in
+	// the pipeline that ever sees every event this round produced. See
+	// MatchState.RoundAnchors's own doc comment for why Project needs
+	// this stored rather than reading events directly.
+	next.RoundAnchors = buildRoundAnchors(events, next.Round)
+
 	return next, events, nil
 }
 

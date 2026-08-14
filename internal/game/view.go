@@ -21,8 +21,8 @@ type PlayerView struct {
 
 	// Others is every opponent's public state: credit band, exact Infamy
 	// and RP, and posts. Never an exact balance, and never a position
-	// unless one of RFC §9.1's eleven authorised writers puts it in Trail
-	// or Anchors instead.
+	// unless one of RFC §9.1's fourteen authorised writers puts it in
+	// Trail or Anchors instead.
 	Others []OpponentView
 
 	// Trail is this round's sight-gated log: entries at nodes this seat
@@ -30,9 +30,9 @@ type PlayerView struct {
 	Trail []TrailEntry
 
 	// Anchors is the public record of named, node-fixing facts, reaching
-	// every seat unconditionally regardless of sight (RFC §9.1 rows 2-6
-	// and 9-11). GDD §7.5's Attribution tool works backward from exactly
-	// this list.
+	// every seat unconditionally regardless of sight (RFC §9.1 rows 2-6,
+	// 9-11, and 13-14). GDD §7.5's Attribution tool works backward from
+	// exactly this list.
 	Anchors []Anchor
 
 	// Headline is the pre-order broadcast of the live event category and
@@ -258,7 +258,7 @@ type NodePost struct {
 }
 
 // OpponentView is one other seat's public state (GDD §5). Never carries a
-// position or an exact balance — RFC §9.1's eleven writers are the only
+// position or an exact balance — RFC §9.1's fourteen writers are the only
 // way a position reaches Trail or Anchors instead, and Band is the only
 // balance-shaped field this type has room for.
 type OpponentView struct {
