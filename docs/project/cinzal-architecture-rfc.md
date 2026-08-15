@@ -856,7 +856,7 @@ It still belongs in the table for two reasons. A fog test suite asserting "no un
 
 Two distinctions the implementation must not blur:
 
-**Global versus sight-gated.** Rows 2–6 and 9–11 reach every player unconditionally. Rows 1, 7, 8 and 12 are trail entries: row 7 (confrontation) names both parties, rows 1, 8 and 12 name one, but all four reach only players who had sight of that node. Treating a confrontation as global is a leak; treating a delivery as sight-gated breaks the anchor system.
+**Global versus sight-gated.** Rows 2–6, 9–11 and 13–16 reach every player unconditionally. Rows 1, 7, 8 and 12 are trail entries: row 7 (confrontation) names both parties, rows 1, 8 and 12 name one, but all four reach only players who had sight of that node. Treating a confrontation as global is a leak; treating a delivery as sight-gated breaks the anchor system.
 
 **Named versus node-only.** Rows 5 and 6 announce a *node*, not a player — "someone has been standing here", "someone is holding the runner's crate". They are still position information, and the Board must surface them, but attribution has to treat them as an unattributed fix rather than a named one. Getting this wrong in either direction is a bug: naming the player is a leak, and dropping the entry removes a real deduction input.
 

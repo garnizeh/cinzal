@@ -178,8 +178,8 @@ func projectTrail(archive game.SeatArchive, round game.RoundNumber) []game.Trail
 	return trail
 }
 
-// writeAnchors is RFC §9.1's ten unconditional, global rows (2-6, 9-11,
-// 13-14) — "The single place any of this may be written." Unlike the
+// writeAnchors is RFC §9.1's twelve unconditional, global rows (2-6, 9-11,
+// 13-16) — "The single place any of this may be written." Unlike the
 // RFC's own pseudocode, this does not also cover the four sight-gated rows
 // (1, 7, 8, 12): those are Trail's job (projectTrail above), matching
 // PlayerView's own field split (Trail vs Anchors) despite the RFC naming

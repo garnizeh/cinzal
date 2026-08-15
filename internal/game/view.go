@@ -31,7 +31,7 @@ type PlayerView struct {
 
 	// Anchors is the public record of named, node-fixing facts, reaching
 	// every seat unconditionally regardless of sight (RFC §9.1 rows 2-6,
-	// 9-11, and 13-14). GDD §7.5's Attribution tool works backward from
+	// 9-11, and 13-16). GDD §7.5's Attribution tool works backward from
 	// exactly this list.
 	Anchors []Anchor
 
@@ -306,7 +306,7 @@ type TrailEntry struct {
 }
 
 // Anchor is one public, globally-broadcast fact that fixes a node in a
-// round — RFC §9.1 rows 2-6, 9-11, and 13-14, reaching every seat
+// round — RFC §9.1 rows 2-6, 9-11, and 13-16, reaching every seat
 // unconditionally regardless of sight. GDD §7.5's Attribution tool works
 // backward from exactly this list.
 type Anchor struct {
