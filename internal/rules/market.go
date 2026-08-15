@@ -7,15 +7,19 @@ import (
 )
 
 // MarketRefreshDue reports whether round is one of GDD §12/RFC §6.4's Phase
-// 3 market-refresh rounds — the odd rounds 1, 3, 5, ..., 15 (D25). Round 1's
-// own Phase 3 is the only mechanism that populates a market's first stock:
-// Setup does not (GDD §4 lists only map generation, starting positions, and
-// the opening contract offer), and RFC §6.4's consumption table has no
-// separate at-Setup row for market.stock the way deck.event and
-// deck.incident each get one — so round 1 must be a refresh round, and
+// 3 market-refresh rounds — the odd rounds 1, 3, 5, ..., cfg.Rounds (D25).
+// Round 1's own Phase 3 is the only mechanism that populates a market's
+// first stock: Setup does not (GDD §4 lists only map generation, starting
+// positions, and the opening contract offer), and RFC §6.4's consumption
+// table has no separate at-Setup row for market.stock the way deck.event
+// and deck.incident each get one — so round 1 must be a refresh round, and
 // "every 2 rounds" measured from there lands on odd rounds, not even ones.
-func MarketRefreshDue(round game.RoundNumber) bool {
-	return round >= 1 && round <= 15 && round%2 == 1
+// The upper bound is cfg.Rounds, not a literal 15: GDD §16.2 rules out a
+// longer table today only on deck arithmetic, so a config that ever clears
+// that bar must not have markets silently stop refreshing partway through
+// (RFC §6.6 — "a rule simply stops firing, and nobody notices").
+func MarketRefreshDue(round game.RoundNumber, cfg game.Config) bool {
+	return round >= 1 && int(round) <= cfg.Rounds && round%2 == 1
 }
 
 // RollMarketStock draws 3 distinct items for one Black Market's refreshed
