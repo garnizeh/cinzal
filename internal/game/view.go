@@ -332,6 +332,13 @@ type Headline struct {
 	// Sector is nil in round 1-2, before sector incidents start (GDD
 	// §14.1, §14.3).
 	Sector *Sector
+
+	// ActiveBorders is this round's rotating-border active set (GDD §6.3):
+	// the Borders currently accepting deliveries, NodeID-ascending. Nil at
+	// 3+ players, where rotation never applies and every Border always
+	// accepts — this field must never leak the mechanic into a table it
+	// doesn't belong to.
+	ActiveBorders []NodeID
 }
 
 // DeckCounts is the Sector Incident deck's remaining composition, always

@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r21 · **Companion doc:** `cinzal-gdd.md` **v2.16**
+**Status:** draft for review · **Revision:** r22 · **Companion doc:** `cinzal-gdd.md` **v2.18**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -114,6 +114,9 @@
 > - **`MatchState` gains `NextRound NextRoundModifiers`** (`Scaffolding *Sector`, `Retainer`, `Blackout`, `DockersStrike bool`) for the four cards whose GDD text reads "next round": set by `globalEvent()` when the card fires, read as ordinary live state by the following round's `legalView` (Scaffolding's sector-scoped step bonus, Retainer's no-cargo step bonus), `Legal` (Dockers' Strike rejects a Pickup outright, since the flag was already true before the order was built) and `writeTrail`/`seatSight` (Blackout: every entry kind suppressed, sight capped to the seat's own node, no exception for a held post). Cleared by Upkeep step 4 (D5) — issue #74, still open, so a flag set here persists until that lands. **Flagged for #74, not solved here:** an unconditional "clear `s.NextRound`" at the end of Upkeep would delete a flag `globalEvent()` just set moments earlier in the same `Resolve()` call, before round N+1 ever reads it — the identical hazard D5's own Reasoning section already worked through for `Flagged`/`EvasiveStepPenalty`. D5's decided step-4 text ("clear whichever fired for this round") already points at the right fix, but it needs an explicit mechanism when #74 lands, not just careful phrasing. `TestResolveNextRoundModifierSurvivesTheSameRoundsUpkeepStub` (events_test.go) pins today's actual behavior — a next-round modifier survives its own setting round unmodified — as a trip-wire for whoever builds #74 next.
 > - **`Player` gains `MarketSurgeActive bool`** — Market Surge is "next delivery," not "next round," so it survives however many rounds pass until `resolveOneDelivery` actually applies and clears it.
 > - **A pre-existing wiring gap in `legalView` (validate.go, #67's stand-in for `Project`) is closed as part of this issue, not deferred further.** `EntrySnapshot` has carried `Infamy`, `Flagged` and `EvasiveStepPenalty` since #67, but nothing ever copied them into the `SelfState`/`StepModifiers` `Steps()` reads — every legality check silently computed against Infamy 0 and no modifiers regardless of the seat's true state. Curfew's own acceptance criterion (a route legal at submission degrades, not rejects, once Curfew's live -1 applies) is meaningless against the wrong base, so this issue finishes the copy the `StepModifiers` doc comment already flagged as scaffolded-but-unconnected.
+>
+> **Changelog r21 → r22** — final scoring needed a third ordering (issue #76)
+> - **§6.5 claimed "the only two orderings in the codebase," and final scoring (GDD §16) needs a third.** The end-of-match tiebreak — descending contracts delivered, then descending Infamy, then descending balance — is neither the fairness key (wrong direction, wrong key set, and used for contention, not ranking) nor seat index (position is exactly the thing being determined). Added `byFinalStanding` alongside `byFairness` and `bySeat`, used once, by `internal/rules.FinalScore`, to rank every seat at the end of round 15. Also documents [D28](../decisions/D28-dragnet-rotating-borders-fallback.md)'s Border-availability fallback for two-player Dragnet/rotation interaction — no RNG or ordering impact, so it gets a line here rather than its own section.
 > - **`SelfState` gains `DockersStrike bool`** — an action-legality input, not a step-formula one, so it sits beside `StepModifiers` rather than inside it.
 > - **§9.1's table gains rows 13 and 14.** Dead Runner's crate placement and Fence's Windfall's standing-offer opening are both GDD §14.2 "announced publicly" facts, global and node-only, never naming a player — the same shape as rows 5 and 6. "Twelve authorised writers" is now fourteen throughout §9.1, §16.1's Fog/Anchor-parity test rows, and the `writeAnchors` pseudocode's unconditional case list.
 > - No GDD change: every card's printed effect is unchanged: this is the resolution-shape and RNG-timing decision the deck's own text left to whoever built Phase 6, the same posture r19 took for Rain.
@@ -404,22 +407,25 @@ Two worked cases, because these are the ones that will be got wrong:
 
 The purpose string is recorded in the debug RNG trace (§15.3), so a divergent replay names the draw that went wrong rather than only the round.
 
-### 6.5 Two orderings, for two different reasons
+### 6.5 Three orderings, for three different reasons
 
-Any batch operation must iterate in a defined order or determinism dies (§6.3). But r2 left open *which* order, and the answer is not one order — it is two, and conflating them is a mistake in both directions.
+Any batch operation must iterate in a defined order or determinism dies (§6.3). But r2 left open *which* order, and the answer is not one order — it is three, and conflating them is a mistake in every direction.
 
 **Contended actions use the fairness key.** Where position in the queue confers an advantage — the last cargo at a warehouse, the last Shiv at a market — the order is the GDD §15 key: **ascending Infamy → lower balance → lower RP → seeded coin**. That key exists because it is *fair*, not because it is deterministic; determinism is a side effect.
 
-**Everything else uses seat index.** Pressure rolls, Snatch Job relocations, crate placement, confrontation dice — batches where position confers nothing, because each draw is independent and unpredictable. Here the only requirement is that the order be stable and defined, and **seat index is the right answer**: stable, unique, cheap, and immune to mid-phase state changes.
+**RNG batches use seat index.** Pressure rolls, Snatch Job relocations, crate placement, confrontation dice — batches where position confers nothing, because each draw is independent and unpredictable. Here the only requirement is that the order be stable and defined, and **seat index is the right answer**: stable, unique, cheap, and immune to mid-phase state changes.
 
 Using the fairness key for these would be worse, not merely redundant. It couples RNG index assignment to mutable state — a balance that changes earlier in the same phase could reorder the batch — which is exactly the class of subtle nondeterminism this section exists to prevent. Seat index cannot move.
 
 *(Note this is not the "seat order" the GDD deliberately removed from its tie-break chain. That removal was about a static ordering silently handing the same player every contested action for a whole match — a fairness problem. RNG batching confers no advantage by position, so the objection does not apply.)*
 
+**Final match standing uses its own key, distinct from both** (issue #76, GDD §16): **descending contracts delivered → descending Infamy → descending balance**. It is neither the fairness key (different fields, opposite direction, and used to rank everyone at once rather than to resolve a single contention) nor seat index (final placement is exactly what is being computed, so it cannot double as the tiebreak for computing it). It runs once, at the end of round 15, over `FinalScore`'s own total-RP-descending sort — never during a round, and never for RNG batching.
+
 ```go
-// The only two orderings in the codebase. Everything sorts by one of them.
-func byFairness(s State) []SeatID   // contended actions
-func bySeat(s State) []SeatID       // RNG batches
+// The only three orderings in the codebase. Everything sorts by one of them.
+func byFairness(s State) []SeatID      // contended actions
+func bySeat(s State) []SeatID          // RNG batches
+func byFinalStanding(s State) []SeatID // end-of-match ranking only (GDD §16)
 ```
 
 **Every "the one with the least/most X" needs a documented tie-break too.** Lease surrender is the visible case, but it is one of five, and all five share a failure mode: the natural implementation ranges over a map, takes the first match, and answers differently on a different machine.

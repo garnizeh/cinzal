@@ -42,6 +42,9 @@ func TestResolveDeliveriesPaysAndAnnounces(t *testing.T) {
 	if len(s.Players[0].Contracts) != 0 {
 		t.Errorf("Contracts = %+v, want none (fulfilled contract removed)", s.Players[0].Contracts)
 	}
+	if s.Players[0].ContractsDelivered != 1 {
+		t.Errorf("ContractsDelivered = %d, want 1 (GDD §16's tiebreak counter)", s.Players[0].ContractsDelivered)
+	}
 
 	var found *game.Event
 	for i := range events {
@@ -200,6 +203,9 @@ func TestResolveDeliveriesUnboundCargoPaysFlatDeadRunnerRate(t *testing.T) {
 	}
 	if s.Players[0].Cargo != nil {
 		t.Errorf("Cargo = %+v, want nil", s.Players[0].Cargo)
+	}
+	if s.Players[0].ContractsDelivered != 0 {
+		t.Errorf("ContractsDelivered = %d, want 0 (a loose crate is not a delivered contract, GDD §16)", s.Players[0].ContractsDelivered)
 	}
 
 	var found *game.Event

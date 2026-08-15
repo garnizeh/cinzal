@@ -2,6 +2,7 @@ package rules
 
 import (
 	"encoding/json"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -164,6 +165,51 @@ func TestProjectRow14FenceWindfallAbsentWithoutAnchor(t *testing.T) {
 	v := Project(s, 1)
 	if hasAnchor(v.Anchors, game.EventFenceWindfallAnnounced, 0) {
 		t.Errorf("Anchors = %+v, want no FenceWindfallAnnounced anchor", v.Anchors)
+	}
+}
+
+// --- Headline.ActiveBorders (GDD §6.3): the standing "new PlayerView
+// field needs a negative fog test" obligation (CONTRIBUTING.md) ---
+
+func bordersFogTestState(players int) MatchState {
+	s := bordersFixture(players)
+	s.Round = 1
+	for i := range s.Players {
+		s.Players[i].Fog = make([]game.FogState, len(s.Graph.Nodes))
+	}
+	return s
+}
+
+// TestProjectHeadlineActiveBordersAtTwoPlayers checks the positive case:
+// at 2 players, every seat's Headline carries the upcoming round's active
+// Border set, matching activeBordersForRound directly.
+func TestProjectHeadlineActiveBordersAtTwoPlayers(t *testing.T) {
+	s := bordersFogTestState(2)
+
+	want := activeBordersForRound(s.Graph, s.Round+1, 2)
+	if len(want) == 0 {
+		t.Fatalf("test fixture produced an empty active set — strengthen it")
+	}
+
+	for _, seat := range []game.SeatID{0, 1} {
+		v := Project(s, seat)
+		if !slices.Equal(v.Headline.ActiveBorders, want) {
+			t.Errorf("seat %d: Headline.ActiveBorders = %v, want %v", seat, v.Headline.ActiveBorders, want)
+		}
+	}
+}
+
+// TestProjectHeadlineActiveBordersNilAboveTwoPlayers is the negative half
+// this obligation exists for: rotation must never leak into a 3+ player
+// table (GDD §6.3, issue #76's own acceptance criterion).
+func TestProjectHeadlineActiveBordersNilAboveTwoPlayers(t *testing.T) {
+	for players := 3; players <= 5; players++ {
+		s := bordersFogTestState(players)
+
+		v := Project(s, 0)
+		if v.Headline.ActiveBorders != nil {
+			t.Errorf("players=%d: Headline.ActiveBorders = %v, want nil", players, v.Headline.ActiveBorders)
+		}
 	}
 }
 

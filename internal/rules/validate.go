@@ -46,7 +46,13 @@ import (
 // stake that was lost". Balance is untouched at Step 0 — nothing has spent
 // it yet, since resolveAddons (#70) runs after actions and deliveries —
 // so there is nothing to degrade against yet; that check belongs to #70.
-func validate(s MatchState, entry EntrySnapshot, seats []game.SeatID, orders map[game.SeatID]game.Order, cfg game.Config, ctx globalEventContext) (map[game.SeatID]game.Order, []game.Event) {
+//
+// blockedBorders is passed separately from ctx (rather than read off
+// ctx.sealedBorders directly) because it is a wider set than Dragnet
+// alone: Resolve computes it as Dragnet's seal unioned with two-player
+// rotation's inactive set, D28's safety valve applied (borders.go). ctx
+// keeps sealedBorders' own narrower, Dragnet-only meaning.
+func validate(s MatchState, entry EntrySnapshot, seats []game.SeatID, orders map[game.SeatID]game.Order, cfg game.Config, ctx globalEventContext, blockedBorders []game.NodeID) (map[game.SeatID]game.Order, []game.Event) {
 	validated := make(map[game.SeatID]game.Order, len(seats))
 	var events []game.Event
 
@@ -110,7 +116,7 @@ func validate(s MatchState, entry EntrySnapshot, seats []game.SeatID, orders map
 			continue
 		}
 
-		degraded, reason, ok := checkActionDegradation(s, seat, candidate, ctx.sealedBorders)
+		degraded, reason, ok := checkActionDegradation(s, seat, candidate, blockedBorders)
 		if !ok {
 			validated[seat] = degraded
 			events = append(events, reason)
@@ -220,13 +226,15 @@ func routeEndingNode(s MatchState, seat game.SeatID, route []game.NodeID) game.N
 // either, it returns o with Action nulled to Nothing, the matching event,
 // and false. Otherwise it returns o unchanged and true. The route is never
 // touched here — only truncateAtDestroyedEdge truncates a route.
-// sealedBorders is Dragnet's own set of Border nodes sealed this round
-// (issue #72, GDD §14.2) — "every delivery must route to the ones that
-// remain." A declared Deliver at a sealed Border is legal payload shape
-// (Deliver at a Border is otherwise always legal) that the world moved
-// under, exactly like a Stake Post target someone else already claimed —
-// degrade, don't reject.
-func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order, sealedBorders []game.NodeID) (game.Order, game.Event, bool) {
+// blockedBorders is every Border not accepting deliveries this round
+// (borders.go's blockedBordersThisRound): Dragnet's own seal (issue #72,
+// GDD §14.2 — "every delivery must route to the ones that remain") unioned
+// with two-player rotation's inactive set (GDD §6.3), D28's safety valve
+// already applied. A declared Deliver at a blocked Border is legal payload
+// shape (Deliver at a Border is otherwise always legal) that the world
+// moved under, exactly like a Stake Post target someone else already
+// claimed — degrade, don't reject.
+func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order, blockedBorders []game.NodeID) (game.Order, game.Event, bool) {
 	node := routeEndingNode(s, seat, o.Route)
 
 	switch o.Action.Kind {
@@ -245,7 +253,7 @@ func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order, sealed
 		}
 
 	case game.ActionDeliver:
-		if slices.Contains(sealedBorders, node) {
+		if slices.Contains(blockedBorders, node) {
 			degraded := o
 			degraded.Action = game.ActionOrder{Kind: game.ActionNothing}
 			return degraded, game.Event{Kind: game.EventDeliveryBlocked, Round: s.Round, Seat: seat, Node: node}, false

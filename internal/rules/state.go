@@ -163,6 +163,15 @@ type Player struct {
 	RP       int
 	Position game.NodeID
 
+	// ContractsDelivered counts bound (contract) deliveries this seat has
+	// resolved, match-lifetime, never decremented — GDD §16's final-scoring
+	// tiebreak primary key ("most contracts delivered"). Unlike RP, which
+	// also accumulates loose-crate payouts and other RP-granting cards,
+	// this counts only deliveries where a Contract was fulfilled
+	// (resolveOneDelivery's bound branch, deliveries.go), because that is
+	// exactly what "delivered" means in the tiebreak's own wording.
+	ContractsDelivered int
+
 	Cargo *game.CarriedCargo // nil when carrying nothing (GDD §5, §8.4)
 
 	Contracts []Contract // up to 2, per-player instances (GDD §8.1, §8.4)

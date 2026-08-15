@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.17 (scope-locked for prototype)
+## Game Design Document — v2.18 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -156,6 +156,9 @@
 > - **Constraint 7 now requires the nearby Warehouse to be *contractable*** — to have a Border at 3–4 steps, so the pair the opening offer needs provably exists. This makes §8.1's guarantee structural rather than statistical: 0 failures in 14 000 seats across the same sweep. Nothing about contracts changed — no tier, payout, eligibility or fallback rule moves, and the opening contract a player receives is an ordinary Tier I job.
 > - **Constraint 6's second sentence was deleted.** "Every delivery costs at least 3 steps" is true of every delivery that happens, but this constraint is not what makes it true — non-adjacency forces distance ≥ 2, and generated maps do produce distance-2 pairs. §8.3's tier bands, all starting at 3, are the actual floor: a distance-2 pair is in no tier's pool and can never be contracted. A placement rule was being credited with a distance guarantee, and D7's fallback reasoning had leaned on the credit.
 > - **§8.2's empty-pool sentence was wrong and is corrected.** "This can only happen if every Warehouse you Know is presently unreachable" missed the commoner mid-match cause: every reachable pair sitting outside the bands your current Infamy entitles you to. Full reasoning in [D24](../decisions/D24-opening-offer-guarantee.md).
+>
+> **Changelog v2.17 → v2.18** — Dragnet and rotating borders could combine to close every Border (D28)
+> - **§6.3's rotating borders and §14.2's Dragnet were specified independently and never checked against each other.** At 2 players the map has only 3 Borders (§6.2's allocation table); rotation leaves 1–2 of them active, and Dragnet seals 2 random Borders from the full set, unfiltered by rotation. The two can coincide and leave zero Borders deliverable — a round where Dragnet's own text, "every delivery must route to the ones that remain," has nothing left to route to. Added a sentence to §6.3: a Border can never be closed by every source at once, at least one always stays open. Full reasoning, the rejected alternatives, and why this can never trigger at 3+ players in [D28](../decisions/D28-dragnet-rotating-borders-fallback.md).
 
 ---
 
@@ -367,7 +370,7 @@ The seven rows above are every node count currently supported (§6.1's per-playe
 
 Two players average 4.5 encounters a match, and **27% of matches produce fewer than three** (§20) — figures measured on the pre-fix 19-node map, which is what motivated the changes below. A duel that runs fifteen rounds with no interaction isn't a duel, it's two spreadsheets sharing a background image. Two changes apply at this player count only:
 
-1. **Rotating borders.** Each round, only **half the Borders accept deliveries**, announced in the Headline alongside the unstable sector. The active set rotates. This concentrates every delivery run in the match into a shrinking target area, which is the most direct convergence pressure available without touching the map.
+1. **Rotating borders.** Each round, only **half the Borders accept deliveries**, announced in the Headline alongside the unstable sector. The active set rotates. This concentrates every delivery run in the match into a shrinking target area, which is the most direct convergence pressure available without touching the map. A Border can never be closed by every source at once: if Dragnet's seal (§14.2) would combine with this round's rotation to leave none open, at least one always reopens — see [D28](../decisions/D28-dragnet-rotating-borders-fallback.md).
 2. **Tighter map.** 15 nodes — already reflected in the generation table above. The 19-node figure quoted in the simulation below was the pre-fix value.
 
 Simulated together these put the two-player rate into the 9–12 band, comfortably inside target. Both are 2p-only and should never leak into 3+ player tables, where the problem is the reverse.

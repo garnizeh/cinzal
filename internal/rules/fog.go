@@ -291,9 +291,11 @@ func deriveNodeStats(archive game.SeatArchive) map[game.NodeID]game.NodeStats {
 // projectHeadline is GDD §14.1's pre-order broadcast: the next round's
 // global event category (nil before round 4, matching Category's own "nil
 // in rounds 1-3" contract — eventCardThisRound already returns live=false
-// there) and the round's Unstable Sector, which UnstableSector's own doc
+// there), the round's Unstable Sector, which UnstableSector's own doc
 // comment already states is "the sector flagged for Round+1" — exactly the
-// value this needs, unmodified.
+// value this needs, unmodified — and, at 2 players only, the upcoming
+// round's active Border set (GDD §6.3, activeBordersForRound, borders.go),
+// announced "alongside the unstable sector" per that section's own text.
 func projectHeadline(s MatchState) game.Headline {
 	var h game.Headline
 
@@ -306,6 +308,8 @@ func projectHeadline(s MatchState) game.Headline {
 		sector := *s.UnstableSector
 		h.Sector = &sector
 	}
+
+	h.ActiveBorders = activeBordersForRound(s.Graph, s.Round+1, len(s.Players))
 
 	return h
 }

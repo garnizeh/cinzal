@@ -18,7 +18,7 @@ func TestValidateAbsenceDefaultOnMissingOrder(t *testing.T) {
 	entry := s.Snapshot()
 	seats := bySeat(s)
 
-	validated, events := validate(s, entry, seats, nil, legalTestConfig(), globalEventContext{})
+	validated, events := validate(s, entry, seats, nil, legalTestConfig(), globalEventContext{}, nil)
 
 	want0 := game.Order{Action: game.ActionOrder{Kind: game.ActionNothing}, Stance: game.StanceOrder{Stance: game.StanceEvasive}}
 	if got := validated[0]; !reflect.DeepEqual(got, want0) {
@@ -53,7 +53,7 @@ func TestValidateRejectsIllegalPayload(t *testing.T) {
 		0: {Route: []game.NodeID{4}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{}, nil)
 
 	want := game.Order{Action: game.ActionOrder{Kind: game.ActionNothing}, Stance: game.StanceOrder{Stance: game.StanceEvasive}}
 	if got := validated[0]; !reflect.DeepEqual(got, want) {
@@ -77,7 +77,7 @@ func TestValidateDegradesDestroyedEdge(t *testing.T) {
 		0: {Route: []game.NodeID{1, 3}, Action: game.ActionOrder{Kind: game.ActionNothing}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{}, nil)
 
 	got := validated[0]
 	if !slices.Equal(got.Route, []game.NodeID{1}) {
@@ -104,7 +104,7 @@ func TestValidateDegradesStakeTargetTaken(t *testing.T) {
 		0: {Route: []game.NodeID{1}, Action: game.ActionOrder{Kind: game.ActionStakePost}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{}, nil)
 
 	got := validated[0]
 	if !slices.Equal(got.Route, []game.NodeID{1}) {
@@ -132,7 +132,7 @@ func TestValidateStakeOwnPostDoesNotDegrade(t *testing.T) {
 		0: {Route: []game.NodeID{1}, Action: game.ActionOrder{Kind: game.ActionStakePost}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{}, nil)
 
 	got := validated[0]
 	if got.Action.Kind != game.ActionStakePost {
@@ -156,7 +156,7 @@ func TestValidateDegradesPickupTargetGone(t *testing.T) {
 		0: {Route: []game.NodeID{1}, Action: game.ActionOrder{Kind: game.ActionPickup}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{}, nil)
 
 	got := validated[0]
 	if got.Action.Kind != game.ActionNothing {
@@ -183,7 +183,7 @@ func TestValidateDoesNotDegradeWarehousePickup(t *testing.T) {
 		0: {Action: game.ActionOrder{Kind: game.ActionPickup}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{}, nil)
 
 	if got := validated[0].Action.Kind; got != game.ActionPickup {
 		t.Errorf("validated[0].Action.Kind = %v, want Pickup (not degraded)", got)
@@ -203,7 +203,7 @@ func TestValidatePassesThroughLegalOrder(t *testing.T) {
 	o := game.Order{Route: []game.NodeID{1}, Action: game.ActionOrder{Kind: game.ActionNothing}}
 	orders := map[game.SeatID]game.Order{0: o}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{}, nil)
 
 	if got := validated[0]; !reflect.DeepEqual(got, o) {
 		t.Errorf("validated[0] = %+v, want the submitted order unchanged %+v", got, o)
@@ -230,7 +230,7 @@ func TestValidateCurfewDegradesRouteToReducedAllowance(t *testing.T) {
 		0: {Route: []game.NodeID{1, 0, 1, 2}, Action: game.ActionOrder{Kind: game.ActionNothing}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{curfewActive: true})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{curfewActive: true}, nil)
 
 	got := validated[0]
 	if !slices.Equal(got.Route, []game.NodeID{1, 0, 1}) {
@@ -260,7 +260,7 @@ func TestValidateCurfewStillRejectsGenuinelyOverAllowanceRoute(t *testing.T) {
 		0: {Route: []game.NodeID{1, 0, 1, 0, 1}, Action: game.ActionOrder{Kind: game.ActionNothing}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{curfewActive: true})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{curfewActive: true}, nil)
 
 	want := game.Order{Action: game.ActionOrder{Kind: game.ActionNothing}, Stance: game.StanceOrder{Stance: game.StanceEvasive}}
 	if got := validated[0]; !reflect.DeepEqual(got, want) {
@@ -289,7 +289,7 @@ func TestValidateDragnetDegradesDeliverAtSealedBorder(t *testing.T) {
 		0: {Action: game.ActionOrder{Kind: game.ActionDeliver}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{sealedBorders: []game.NodeID{2}})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{}, []game.NodeID{2})
 
 	if got := validated[0].Action.Kind; got != game.ActionNothing {
 		t.Errorf("validated[0].Action.Kind = %v, want Nothing", got)
@@ -311,7 +311,7 @@ func TestValidateDeliverAtUnsealedBorderDoesNotDegrade(t *testing.T) {
 		0: {Action: game.ActionOrder{Kind: game.ActionDeliver}},
 	}
 
-	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{sealedBorders: []game.NodeID{3}})
+	validated, events := validate(s, entry, seats, orders, legalTestConfig(), globalEventContext{}, []game.NodeID{3})
 
 	if got := validated[0].Action.Kind; got != game.ActionDeliver {
 		t.Errorf("validated[0].Action.Kind = %v, want Deliver (node 2 is not sealed)", got)
