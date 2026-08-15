@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.18 (scope-locked for prototype)
+## Game Design Document — v2.19 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -159,6 +159,12 @@
 >
 > **Changelog v2.17 → v2.18** — Dragnet and rotating borders could combine to close every Border (D28)
 > - **§6.3's rotating borders and §14.2's Dragnet were specified independently and never checked against each other.** At 2 players the map has only 3 Borders (§6.2's allocation table); rotation leaves 1–2 of them active, and Dragnet seals 2 random Borders from the full set, unfiltered by rotation. The two can coincide and leave zero Borders deliverable — a round where Dragnet's own text, "every delivery must route to the ones that remain," has nothing left to route to. Added a sentence to §6.3: a Border can never be closed by every source at once, at least one always stays open. Full reasoning, the rejected alternatives, and why this can never trigger at 3+ players in [D28](../decisions/D28-dragnet-rotating-borders-fallback.md).
+>
+> **Changelog v2.18 → v2.19** — the Black Market's refresh cadence was unstated, and three more item/market gaps with it (D25)
+> - **§12 said stock "refreshed every 2 rounds" without saying which rounds, and #66's own acceptance criteria had assumed even rounds — a claim that traced to no citable source.** Setup only generates the map, starting positions, and the opening contract offer (§4); nothing populates a market's first stock before round 1's own Phase 3 runs, so round 1 must be a refresh round, and "every 2 rounds" measured from there lands on the **odd** rounds — 1, 3, 5, …, 15 — not the even ones. "Even rounds only" would leave every Black Market showing no stock at all through round 1, contradicting §7.1's promise that sight of the node includes its stock.
+> - **§12 now also states the market draws 3 *distinct* items.** Nothing previously ruled out a market repeating an item in its own stock; it draws the same without-replacement way every other multi-pick RNG consumer in this game does (Torn Map, Dragnet), never independent rolls that could duplicate and undercut the market's own scarcity design.
+> - **§9.4's Bolt Hole now states what its "2 steps away" is measured from and over: the player's own position at the start of the round, walked through the player's own currently-known subgraph** — the one coordinate both player and server agree on before any order resolves, and the only distance an implementer can check against without reaching past the fog boundary into the full server-side graph. The declared node must itself be Known, not merely Rumoured — a Rumoured node carries no edges to route into (§7.1), so it cannot be the endpoint of a 2-step path over a subgraph that doesn't contain it.
+> - **§9.4's Police Band row and §7.2's matching entry now state its target restriction: any node the player is not Hidden to (Rumoured or Known), never a node they have no awareness of at all.** This isn't a new restriction so much as the floor "a node of your choice" already implied — a client can't reference a node it doesn't know exists — but it was previously unstated, unlike Decoy's explicit Known-only restriction two rows below it in the same table. Full reasoning for all four rulings in [D25](../decisions/D25-item-market-resolution-gaps.md).
 
 ---
 
@@ -410,7 +416,7 @@ Four states, per player:
 | Your **ending** position | The node and everything adjacent |
 | Each post you hold | **The node itself only** |
 | **Surveil** action | Everything within 2 steps of your position, this round |
-| *Police Band* item | One node of your choice, this round |
+| *Police Band* item | One node of your choice this round, Rumoured or Known — never Hidden |
 
 **Rumoured** is what a contract destination arrives as (§8.1). You have been told the gate exists and where it sits; you have not been told the way in. A Rumoured node becomes **Known** the moment it falls within your sight — which is to say, the moment you reach something adjacent to it.
 
@@ -778,18 +784,18 @@ Seven of the eight items in §12 are discards, and this is where you declare the
 |---|---|---|
 | **Torn Map** | — | **Immediately**, before movement |
 | **Guard Contact** | — | **Immediately**, before movement — so the −3 Infamy applies to this round's confrontations |
-| **Police Band** | a node | Immediately; sight lasts the round |
+| **Police Band** | a node you're not Hidden to (Rumoured or Known) | Immediately; sight lasts the round |
 | **Decoy** | a Known node | With the trail, at the end of the round |
 | **Shiv** | — | Armed. Fires on your **first** confrontation this round |
 | **Circulation Permit** | — | Armed. Fires on this round's incident and on the gate fee |
-| **Bolt Hole** | **a destination node, 2 steps away** | Armed. Fires if you lose a confrontation |
+| **Bolt Hole** | **a Known destination node, 2 steps away from your position at the start of the round** | Armed. Fires if you lose a confrontation |
 | *Muscle* | *not a discard* | *Permanent while held* |
 
 **Immediate discards resolve before movement**, which is what makes Guard Contact worth its Cr$ 6 — dropping three Infamy after the order phase but before the fighting is the whole point of the item.
 
 **Armed discards are spent whether or not they fire.** A Shiv declared in a round with no confrontation is gone. That is the gamble, and it is what stops item declaration from being a free default.
 
-**Bolt Hole now names its destination up front.** v2.4 said "retreat 2 nodes of your choosing", which cannot work under simultaneous orders — there is no moment at which to choose, because resolution does not pause for input. You declare the node when you declare the item, and if it has become unreachable by the time the item fires, the ordinary pushback rule (§15) applies instead.
+**Bolt Hole now names its destination up front.** v2.4 said "retreat 2 nodes of your choosing", which cannot work under simultaneous orders — there is no moment at which to choose, because resolution does not pause for input. You declare the node when you declare the item, measured 2 steps from **your position at the start of the round** — the one coordinate fixed before that round's routes and confrontations play out — over **your own currently-known subgraph only**, never the full map: the declared node must itself be Known (a Rumoured node carries no edges to route into, §7.1, so it can't be a 2-step path's endpoint), and the distance is walked through edges you know, not ones that happen to exist. If the declared node has since become unreachable by the time the item fires, the ordinary pushback rule (§15) applies instead.
 
 ### 9.5 Field 5 · ADD-ONS (optional, no action cost)
 
@@ -909,13 +915,13 @@ The result is that the two ends of the ladder play differently rather than one b
 
 ## 12. The Black Market
 
-Each Black Market shows **3 rolled items**, refreshed every 2 rounds. You see the stock if you have sight of the node. Buying requires being there (Deal action). Items in hand are **hidden**.
+Each Black Market shows **3 distinct rolled items** — never a repeat within the same market's stock — refreshing on **odd rounds: 1, 3, 5, …, 15** ([D25](../decisions/D25-item-market-resolution-gaps.md)). You see the stock if you have sight of the node. Buying requires being there (Deal action). Items in hand are **hidden**.
 
 | Item | Price | Effect |
 |---|---|---|
 | **Shiv** | Cr$ 4 | Discard: +3 in one confrontation. |
 | **Muscle** | Cr$ 7 | Permanent: +1 in all confrontations. Lost when you lose a confrontation. |
-| **Police Band** | Cr$ 3 | Discard: full sight of one node of your choice this round. |
+| **Police Band** | Cr$ 3 | Discard: full sight of one node of your choice this round — Rumoured or Known, never Hidden. |
 | **Circulation Permit** | Cr$ 5 | Discard: immune to this round's **Sector Incident** and to the gate fee. |
 | **Torn Map** | Cr$ 3 | Discard: reveal 4 random Hidden nodes as Known. |
 | **Decoy** | Cr$ 5 | Discard: plant a false "Cargo left here" trace on any Known node. |
