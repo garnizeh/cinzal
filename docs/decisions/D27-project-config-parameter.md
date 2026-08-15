@@ -18,7 +18,7 @@ No `Config` parameter, and `MatchState` carries none either. But `game/view.go`'
 - `StepAllowance` (`view.go:97-102`): "computed server-side from the full modifier chain... Project sets this from `rules.Steps(view, cfg)`."
 - `RoundsToNextOffer` (`view.go:111-115`): "Computed server-side... the hold rules on a full hand or an empty pool (D7) are not a client computation."
 
-`rules.Steps(v game.PlayerView, cfg game.Config) int` and `rules.RoundsToNextOffer(s MatchState, seat game.SeatID, cfg game.Config) int` (`internal/rules/contracts.go:151`, `internal/rules/steps.go:26`) both require a `Config` `Project`, as decided, has no way to obtain from its own parameters.
+`rules.Steps(v game.PlayerView, cfg game.Config) int` and `rules.RoundsToNextOffer(s MatchState, seat game.SeatID, cfg game.Config) int` (`internal/rules/steps.go:26`, `internal/rules/contracts.go:151`) both require a `Config` `Project`, as decided, has no way to obtain from its own parameters.
 
 ## Options
 
