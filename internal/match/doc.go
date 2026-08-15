@@ -15,4 +15,10 @@
 // operations treat their input as untrusted on every request: an unvalidated
 // draft endpoint is a fog oracle, one probe per request to learn whether a node
 // exists (docs/decisions/D02-order-draft-state.md).
+//
+// A third: wherever this package calls rules.Project, it must also fill in
+// the two SelfState fields Project's Config-free signature cannot set —
+// v.You.StepAllowance from rules.Steps(v, cfg) and v.You.RoundsToNextOffer
+// from rules.RoundsToNextOffer(s, seat, cfg) — before handing the
+// game.PlayerView to web (docs/decisions/D27-project-config-parameter.md).
 package match

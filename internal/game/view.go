@@ -96,9 +96,11 @@ type SelfState struct {
 
 	// StepAllowance is this round's step budget, computed server-side from
 	// the full modifier chain (GDD §9.1a) so the HUD number can never
-	// disagree with the server's (GDD §19.2, RFC §10.2). Project sets this
-	// from rules.Steps(view, cfg); it is never read by rules.Steps itself —
-	// StepModifiers below is that function's actual input.
+	// disagree with the server's (GDD §19.2, RFC §10.2). Project cannot set
+	// this — it has no game.Config parameter (D01; decision D27) — so
+	// internal/match fills it in from rules.Steps(view, cfg) once Project
+	// returns; it is never read by rules.Steps itself — StepModifiers below
+	// is that function's actual input.
 	StepAllowance int
 
 	// StepModifiers is the entry-snapshot-frozen input to rules.Steps (GDD
@@ -111,7 +113,10 @@ type SelfState struct {
 	// RoundsToNextOffer is the HUD's "rounds until next contract offer"
 	// invariant (GDD §8.2, §19.2). Computed server-side: the hold rules on
 	// a full hand or an empty pool (D7) are not a client computation (RFC
-	// §10.2).
+	// §10.2). Like StepAllowance above, Project cannot set this — no
+	// game.Config parameter (D01; decision D27) — so internal/match fills
+	// it in from rules.RoundsToNextOffer(s, seat, cfg) once Project
+	// returns.
 	RoundsToNextOffer int
 
 	// DockersStrike is Dockers' Strike's next-round suppression (GDD
