@@ -38,6 +38,18 @@ type Order struct {
 	// AbandonCargo drops any carried cargo at the ending node, free and
 	// costing no action (GDD §9.3).
 	AbandonCargo bool
+
+	// ContractChoice answers this round's Phase 2 offer, if one is pending
+	// (GDD §8.1-8.2; D29): nil declines, and is ignored entirely when no
+	// offer is pending this round; a non-nil value in 0-len(offer)-1
+	// accepts the correspondingly-indexed contract. It is not one of GDD
+	// §9's five order fields — the underlying rule is already fully
+	// specified there — this only carries that same-round decision
+	// through the one input surface a round has, mirroring the *NodeID
+	// "unset" shape AddOns.OpenDoorsMarket already uses below. An absent
+	// or out-of-range value against a pending offer is a GDD §15.0
+	// illegal payload, degrading to decline rather than a partial accept.
+	ContractChoice *int
 }
 
 // PushingOn is GDD §9.1's blind continuation: a step count of 0-2 past a
@@ -121,6 +133,12 @@ type AddOns struct {
 // documented equality helper the fold and the degradation path both need
 // (#67).
 func (o Order) Equal(other Order) bool {
+	if (o.ContractChoice == nil) != (other.ContractChoice == nil) {
+		return false
+	}
+	if o.ContractChoice != nil && *o.ContractChoice != *other.ContractChoice {
+		return false
+	}
 	return o.Round == other.Round &&
 		slices.Equal(o.Route, other.Route) &&
 		o.PushingOn.Equal(other.PushingOn) &&

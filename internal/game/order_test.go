@@ -4,6 +4,7 @@ import "testing"
 
 func baseOrder() Order {
 	sector := SectorIronLow
+	choice := 1
 	return Order{
 		Round: 5,
 		Route: []NodeID{1, 2, 3},
@@ -21,7 +22,8 @@ func baseOrder() Order {
 			RenewPost:   9,
 			RenewBlocks: 2,
 		},
-		AbandonCargo: true,
+		AbandonCargo:   true,
+		ContractChoice: &choice,
 	}
 }
 
@@ -50,8 +52,11 @@ func TestOrderEqualNilBiasBothSides(t *testing.T) {
 
 func TestOrderEqualDetectsEveryFieldDifference(t *testing.T) {
 	otherSector := SectorNorthVale
+	otherChoice := 2
 
 	mutations := map[string]func(o *Order){
+		"ContractChoice nil":   func(o *Order) { o.ContractChoice = nil },
+		"ContractChoice value": func(o *Order) { o.ContractChoice = &otherChoice },
 		"Round":                func(o *Order) { o.Round++ },
 		"Route length":         func(o *Order) { o.Route = append(o.Route, 4) },
 		"Route contents":       func(o *Order) { o.Route[0] = 99 },
@@ -96,6 +101,32 @@ func TestOrderEqualDoesNotAliasRouteSlice(t *testing.T) {
 	b.Route[0] = 123
 	if a.Equal(b) {
 		t.Fatalf("expected mutation of b.Route to be visible to Equal")
+	}
+}
+
+func TestOrderEqualContractChoiceNilBothSides(t *testing.T) {
+	a := baseOrder()
+	a.ContractChoice = nil
+	b := baseOrder()
+	b.ContractChoice = nil
+
+	if !a.Equal(b) {
+		t.Fatalf("expected orders with both nil ContractChoice to compare equal")
+	}
+}
+
+func TestOrderEqualContractChoiceNilVsNonNil(t *testing.T) {
+	choice := 0
+	withChoice := baseOrder()
+	withChoice.ContractChoice = &choice
+	withoutChoice := baseOrder()
+	withoutChoice.ContractChoice = nil
+
+	if withChoice.Equal(withoutChoice) {
+		t.Fatalf("expected a declared ContractChoice to differ from none")
+	}
+	if withoutChoice.Equal(withChoice) {
+		t.Fatalf("Equal is not symmetric for nil vs non-nil ContractChoice")
 	}
 }
 
