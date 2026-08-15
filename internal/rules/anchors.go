@@ -3,7 +3,7 @@ package rules
 import "github.com/garnizeh/cinzal/internal/game"
 
 // buildRoundAnchors extracts round's global, unconditional position-writer
-// facts (RFC §9.1 rows 2-4, 11, 13-14) from the round's own event stream,
+// facts (RFC §9.1 rows 2-4, 11, 13-16) from the round's own event stream,
 // for MatchState.RoundAnchors — see that field's own doc comment for why
 // this exists at all. Called once, at the end of Resolve, on the full
 // events slice it is about to return to its caller.
@@ -17,14 +17,18 @@ import "github.com/garnizeh/cinzal/internal/game"
 // the same fact.
 //
 // game.EventInformantRing and game.EventSpilledLoadCrate (#73's sector
-// incidents) are not literal rows of RFC §9.1's table — D26 (#142) is open
-// on whether they should be. Until it resolves, they are folded into rows
-// 11 and 13 respectively, on the strength of their own doc comments
-// (event.go): "the same position-reveal shape as EventInformants" and
-// "Mirrors EventDeadRunnerCrate". Kept as their own game.EventKind on the
-// resulting Anchor, not renumbered to their partner row's Kind, so a
-// recap/telemetry consumer can still tell them apart, exactly as those doc
-// comments intend.
+// incidents) are rows 15 and 16, decided by D26 (#142): a row is defined by
+// its own named GDD source (here, GDD §14.3's Informant Ring and Spilled
+// Load cards), not by matching distribution/named/node-only columns with
+// its shape-partner row — rows 5/6, 9/10 and 13/14 already pair
+// column-identical rows kept distinct for the same reason. Both share their
+// partner row's case below because the case groups by disclosure shape,
+// which is a different, and coarser, granularity than the RFC table's
+// per-source rows (D26's own reasoning). Kept as their own game.EventKind
+// on the resulting Anchor, not renumbered to their partner row's Kind, so a
+// recap/telemetry consumer can still tell them apart, exactly as their own
+// doc comments (event.go) intend: "the same position-reveal shape as
+// EventInformants" and "Mirrors EventDeadRunnerCrate".
 func buildRoundAnchors(events []game.Event, round game.RoundNumber) []game.Anchor {
 	var anchors []game.Anchor
 	for _, ev := range events {

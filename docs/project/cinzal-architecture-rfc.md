@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r22 · **Companion doc:** `cinzal-gdd.md` **v2.18**
+**Status:** draft for review · **Revision:** r23 · **Companion doc:** `cinzal-gdd.md` **v2.18**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -120,6 +120,12 @@
 > - **`SelfState` gains `DockersStrike bool`** — an action-legality input, not a step-formula one, so it sits beside `StepModifiers` rather than inside it.
 > - **§9.1's table gains rows 13 and 14.** Dead Runner's crate placement and Fence's Windfall's standing-offer opening are both GDD §14.2 "announced publicly" facts, global and node-only, never naming a player — the same shape as rows 5 and 6. "Twelve authorised writers" is now fourteen throughout §9.1, §16.1's Fog/Anchor-parity test rows, and the `writeAnchors` pseudocode's unconditional case list.
 > - No GDD change: every card's printed effect is unchanged: this is the resolution-shape and RNG-timing decision the deck's own text left to whoever built Phase 6, the same posture r19 took for Rain.
+>
+> **Changelog r22 → r23** — two sector incidents had no fog-writer row (D26)
+> - **§9.1's table gains rows 15 and 16.** `EventInformantRing` (Informant Ring, GDD §14.3) and `EventSpilledLoadCrate` (Spilled Load, GDD §14.3) landed with #73's sector incidents, after rows 13-14 were added, and were never given a row. "Fourteen authorised writers" is now sixteen throughout §9.1, §16.1's Fog test row count, and the Anchor-parity test's per-row citation list.
+> - **A row is defined by its named GDD source, not by matching distribution/named/node-only columns.** Rows 5/6, 9/10 and 13/14 already pair column-identical rows that were never folded into each other; row 12 (D12) reuses row 1's literal wire `Kind` and still got its own row. Row 8's "regardless of item" is the one real folding precedent, and it doesn't generalise here — it collapses a data attribute of one `game.EventKind`, not two `game.EventKind`s the implementation already keeps distinct specifically for recap/telemetry attribution (`internal/rules/anchors.go`, `internal/rules/incidents.go`).
+> - **No code change.** `buildRoundAnchors` (`internal/rules/anchors.go`) already routed both kinds through the case branch matching their shape, ahead of this decision; only the "pending D26" doc-comment hedges in `anchors.go` and `fog.go` are corrected to cite rows 15-16 directly. No RNG, ordering, or GDD text change. Full reasoning in [D26](../decisions/D26-sector-incident-fog-writer-rows.md).
+> - Companion pointer unchanged at GDD v2.18 — no GDD text moved.
 
 ---
 
@@ -817,9 +823,9 @@ Three implementation rules, each protecting a specific way this leaks:
 
 **Rumoured nodes carry no edges.** GDD §7.1 makes this a rule of the game; here it is also the mechanism. A Rumoured node ships with type, sector, and position, and its `Edges` field is nil — so the client physically cannot plot into it, and cannot infer the local topology from a contract destination.
 
-**Opponent position information has exactly fourteen authorised writers**, and the projection must implement all of them. The Board's anchored Attribution (GDD §7.5) is built entirely on this table; omit a row and the deduction layer has nothing to intersect.
+**Opponent position information has exactly sixteen authorised writers**, and the projection must implement all of them. The Board's anchored Attribution (GDD §7.5) is built entirely on this table; omit a row and the deduction layer has nothing to intersect.
 
-**Not every row comes from GDD §7.3's trail table, and the parity check must not assume it does.** Rows 1–5, 7 and 8 map one-to-one onto seven of §7.3's eight event types (the eighth, Fresh tracks, is never named and so has no row here by design — it is position information without a name attached, out of scope for this specific table). Rows 6, 9, 10 and 11 are sourced from other GDD sections — loose crate holding (§8.4), the Infamy ladder's tier reveals (§11), and the Informants event (§14.2); row 12 is sourced from [D12](../decisions/D12-decoy-fog-writer.md), itself grounded in GDD §9.4 and §12; rows 13 and 14 (issue #72) are sourced from GDD §14.2 directly — Dead Runner's and Fence's Windfall's own "announced publicly" card text. None of the seven is a row of §7.3's table. The check whenever either document moves is therefore two-part: every §7.3 row with a name attached must map to exactly one row here with matching sight-gated/global and named/node-only semantics, **and** every row here without a §7.3 counterpart must cite its source document and section instead — a GDD section directly for rows 6, 9–11, 13 and 14, or D12 plus its underlying GDD §§9.4 and 12 for row 12. A literal row-count or row-for-row equality check between the two tables was never correct — it would have failed at eleven rows against §7.3's eight, before D12 added a twelfth.
+**Not every row comes from GDD §7.3's trail table, and the parity check must not assume it does.** Rows 1–5, 7 and 8 map one-to-one onto seven of §7.3's eight event types (the eighth, Fresh tracks, is never named and so has no row here by design — it is position information without a name attached, out of scope for this specific table). Rows 6, 9, 10 and 11 are sourced from other GDD sections — loose crate holding (§8.4), the Infamy ladder's tier reveals (§11), and the Informants event (§14.2); row 12 is sourced from [D12](../decisions/D12-decoy-fog-writer.md), itself grounded in GDD §9.4 and §12; rows 13 and 14 (issue #72) are sourced from GDD §14.2 directly — Dead Runner's and Fence's Windfall's own "announced publicly" card text; rows 15 and 16 ([D26](../decisions/D26-sector-incident-fog-writer-rows.md)) are sourced from GDD §14.3 directly — the Informant Ring and Spilled Load sector incidents' own card text. None of the nine is a row of §7.3's table. The check whenever either document moves is therefore two-part: every §7.3 row with a name attached must map to exactly one row here with matching sight-gated/global and named/node-only semantics, **and** every row here without a §7.3 counterpart must cite its source document and section instead — a GDD section directly for rows 6, 9–11 and 13–16, or D12 plus its underlying GDD §§9.4 and 12 for row 12. A literal row-count or row-for-row equality check between the two tables was never correct — it would have failed at eleven rows against §7.3's eight, before D12 added a twelfth.
 
 | # | Source | Distribution | Names the player? | Fixes a node? |
 |---|---|---|---|---|
@@ -837,6 +843,8 @@ Three implementation rules, each protecting a specific way this leaks:
 | 12 | **Decoy** item, self-named, planter's Infamy ≥ 3 ([D12](../decisions/D12-decoy-fog-writer.md)) | Sight-gated trail | Yes, the planter only — never another player | Yes — the declared Known node |
 | 13 | **Dead Runner** event, crate placed | Global, once | **No** | Yes — the drawn node |
 | 14 | **Fence's Windfall** event, standing offer opens | Global, once | **No** | Yes — the drawn Black Market |
+| 15 | **Informant Ring** sector incident ([D26](../decisions/D26-sector-incident-fog-writer-rows.md)) | Global, once, per eligible seat | Yes | Yes |
+| 16 | **Spilled Load** sector incident, crate placed ([D26](../decisions/D26-sector-incident-fog-writer-rows.md)) | Global, once | **No** | Yes — the drawn node |
 
 **Row 1 is the most important line in this document and it was missing until r8.** A player at Infamy 3–5 is *Known*, and the Known tier does **not** reveal position — only Feared and above do. So a Known player taking cargo leaves a **named trace at a specific Warehouse while their position is otherwise entirely hidden**. That is not a redundant disclosure; it is the primary one, and it is the worked example the GDD uses to explain the whole deduction layer (§7.4: *"I see cargo taken at Docks Warehouse… I know you're crossing"*). Omitting it would have left Attribution with almost nothing to work from below Infamy 6, which is where most players spend the match.
 
@@ -855,12 +863,12 @@ Two distinctions the implementation must not blur:
 ```go
 // The single place any of this may be written.
 func writeAnchors(v *PlayerView, s State, seat SeatID) {
-    // rows 2-6, 9-11, 13-14: unconditional
+    // rows 2-6, 9-11, 13-16: unconditional
     // rows 1, 7, 8, 12: gated by hadSight(seat, node)
 }
 ```
 
-One function, fourteen cases, one test per case. The fog suite (§16.3) asserts both directions for each: present when it should be, absent when it should not.
+One function, sixteen cases, one test per case. The fog suite (§16.3) asserts both directions for each: present when it should be, absent when it should not.
 
 ### 9.2 The observation archive
 
@@ -1331,7 +1339,7 @@ Two things survive into the production build because they are diagnostics, not g
 | `rules` unit | Table-driven. Every GDD worked example becomes a test case verbatim — the Legend/Tier IV margin (§15), the pushback table, the step formula (§9.1a), the Vanish/Legend precedence (§11.1). |
 | `rules` property | Randomised orders; assert invariants hold for every reachable state. |
 | Golden replays | Recorded `{seed, config, log}` fixtures with expected final state. Any unintended rule change fails these. |
-| Fog | Negative assertions (§16.3 below), plus one positive and one negative test per row of the fourteen-writer anchor table (§9.1); for Decoy, explicitly test planter Infamy 2 as anonymous and Infamy 3 as planter-named, with sight and no-sight views, and include the Decoy-vs-real-pickup indistinguishability test ([D12](../decisions/D12-decoy-fog-writer.md)). |
+| Fog | Negative assertions (§16.3 below), plus one positive and one negative test per row of the sixteen-writer anchor table (§9.1); for Decoy, explicitly test planter Infamy 2 as anonymous and Infamy 3 as planter-named, with sight and no-sight views, and include the Decoy-vs-real-pickup indistinguishability test ([D12](../decisions/D12-decoy-fog-writer.md)). |
 | Integration | Real Postgres in a container. Full match through the HTTP layer. |
 | Concurrency | Two goroutines submitting the last order of a round; assert exactly one resolution. Submit at `deadline_at ± 1ms` against a real Postgres clock; assert the reject/accept boundary is exact and that Autopilot engages on the correct round (§8.1, §8.2). |
 | Effects | **Fold a finished match ten times; assert `outbox` gains zero rows.** The single most valuable regression test in the suite (§7.4). |
@@ -1343,7 +1351,7 @@ Two things survive into the production build because they are diagnostics, not g
 | Autopilot persistence | Engage Autopilot, then run five further rounds with no human submission; assert it stays engaged and does not flap (§8.2). This is the test that would have caught it. |
 | Melee pushback order | Three seats collide, two lose, both stationary and Evasive; assert `pushback.hop` indices are consumed in seat order and the replay is byte-identical (§6.5). |
 | Entry snapshot | Win a confrontation on step 1 as a Known player; assert the step allowance for that round does **not** drop to Feared mid-route, and that a Ledger bought the same round reports pre-round balances (§6.6). |
-| Anchor parity | For each of GDD §7.3's eight trail-entry types, assert it maps to its correct row of §9.1's fourteen-writer table (or correctly to no row, for Fresh tracks) with matching named/sight-gated semantics; separately assert rows 6, 9–11 each cite their GDD section, row 12 cites D12 plus GDD §§9.4 and 12, and rows 13–14 cite GDD §14.2 directly. A table-driven test over both lists, so a change to either fails the build. |
+| Anchor parity | For each of GDD §7.3's eight trail-entry types, assert it maps to its correct row of §9.1's sixteen-writer table (or correctly to no row, for Fresh tracks) with matching named/sight-gated semantics; separately assert rows 6, 9–11 each cite their GDD section, row 12 cites D12 plus GDD §§9.4 and 12, rows 13–14 cite GDD §14.2 directly, and rows 15–16 cite GDD §14.3 directly ([D26](../decisions/D26-sector-incident-fog-writer-rows.md)). A table-driven test over both lists, so a change to either fails the build. |
 | Known-tier pickup | A player at Infamy 4 takes cargo; assert the trace names them and that their position is otherwise absent from every rival's view (§9, row 1). |
 | `deadline_soon` race | Submit between the sweeper's check and the send; assert no mail leaves (§13.1). |
 | Outbox scoping | Two `otp` rows for the same email do not collide; two `round_resolved` rows for the same seat and round do (§13.1). |

@@ -404,9 +404,9 @@ func resolveShakedown(s *MatchState, ctx incidentContext, validated map[game.Sea
 
 // resolveInformantRing applies GDD §14.3's Informant Ring: "Every player
 // ending here has their position revealed publicly" — the same
-// position-reveal shape as EventInformants (events.go's resolveInformants),
-// a distinct Kind so recap/telemetry can attribute the reveal to the
-// incident.
+// position-reveal shape as EventInformants (events.go's resolveInformants,
+// RFC §9.1 row 11), but its own row, 15, per D26: a distinct Kind so
+// recap/telemetry can attribute the reveal to the incident.
 func resolveInformantRing(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
 	var events []game.Event
 	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
@@ -424,7 +424,8 @@ func resolveInformantRing(s *MatchState, ctx incidentContext, validated map[game
 // there, tagged SpilledLoad so resolveOneDelivery (deliveries.go) pays
 // GDD §14.3's Cr$10/2RP rather than Dead Runner's Cr$12/3RP. "Announced
 // publicly" — GDD §14.3 — so this fires an Anchor-shaped kind, the
-// incident-deck twin of EventDeadRunnerCrate. candidates is guarded before
+// incident-deck twin of EventDeadRunnerCrate (RFC §9.1 row 13) — its own
+// row, 16, per D26. candidates is guarded before
 // indexing — no crate, no announcement, no draw — for the same reason
 // resolveSinkhole's own doc gives: this candidate pool's safety is not yet
 // fully closed (D3, D8).
