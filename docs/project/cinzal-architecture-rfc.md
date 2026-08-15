@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r23 · **Companion doc:** `cinzal-gdd.md` **v2.18**
+**Status:** draft for review · **Revision:** r24 · **Companion doc:** `cinzal-gdd.md` **v2.18**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -126,6 +126,13 @@
 > - **A row is defined by its named GDD source, not by matching distribution/named/node-only columns.** Rows 5/6, 9/10 and 13/14 already pair column-identical rows that were never folded into each other; row 12 (D12) reuses row 1's literal wire `Kind` and still got its own row. Row 8's "regardless of item" is the one real folding precedent, and it doesn't generalise here — it collapses a data attribute of one `game.EventKind`, not two `game.EventKind`s the implementation already keeps distinct specifically for recap/telemetry attribution (`internal/rules/anchors.go`, `internal/rules/incidents.go`).
 > - **No code change.** `buildRoundAnchors` (`internal/rules/anchors.go`) already routed both kinds through the case branch matching their shape, ahead of this decision; only the "pending D26" doc-comment hedges in `anchors.go` and `fog.go` are corrected to cite rows 15-16 directly. No RNG, ordering, or GDD text change. Full reasoning in [D26](../decisions/D26-sector-incident-fog-writer-rows.md).
 > - Companion pointer unchanged at GDD v2.18 — no GDD text moved.
+>
+> **Changelog r23 → r24** — Phases 2 and 3 had no attachment point in the fold (D29)
+> - **§6.7's pipeline gains a `prepareNextRound()` step**, after `upkeep()`. Contract offers (GDD §8.1-8.2) and market refresh (GDD §12) were exported functions with no caller anywhere outside a test — `Resolve` ran Phases 1 and 4-8 only. Both now execute **a round ahead**, at the tail of `Resolve`, the identical timing `UnstableSector` already uses (§6.6) and for the same reason: GDD §8.2's "evaluated once per round, at Phase 2, against the state at the close of the previous round" can only be satisfied by a value that already exists before that round's Phase 4 orders are collected, which is strictly before that round's own `Resolve` call runs at all.
+> - **§6.4's `contract.offer.tier`, `contract.offer.pick` and `market.stock` rows** are marked "drawn a round ahead" — the draw's position in the `seq` stream moves; the index cost each row already stated does not.
+> - **Round 1 has no `Resolve(round 0)` to run this inside**, so `initial()` bootstraps it directly, once, unconditionally, on the Setup RNG — the same round-1 special case `initialUnstableSector` already handles for round 3's sector.
+> - **`Order` gains `ContractChoice *int`** (§11.1) — nil declines, a value in range accepts that slot — the only field this decision adds to the wire form, and the only new `MatchState`-adjacent field (`Player.PendingOffer []ContractOffer`) needed to stage an offer between the round it is generated and the round it is answered.
+> - No GDD change: GDD §8.1-8.2's contract rules and §12's market rules are unamended — this is entirely a fold-attachment and RNG-timing decision, the same posture r19-r21 already took for `market.stock`'s cadence and `globalEvent()`'s Phase 6 cards. Full reasoning in [D29](../decisions/D29-phase-2-3-fold-attachment.md).
 
 ---
 
@@ -323,9 +330,9 @@ Every consumer must be enumerated, because an unaccounted draw is a replay diver
 
 | Consumer | Purpose string | Indices consumed | Notes |
 |---|---|---|---|
-| Contract offer — tier mix | `contract.offer.tier` | 2 per offering seat, always | Phase 2 |
-| Contract offer — pool pick | `contract.offer.pick` | 0-3 per offering seat, one per filled slot | Phase 2 |
-| Market stock | `market.stock` | 3 per market refreshed | Phase 3, every 2 rounds |
+| Contract offer — tier mix | `contract.offer.tier` | 2 per offering seat, always | Phase 2 — drawn a round ahead (D29) |
+| Contract offer — pool pick | `contract.offer.pick` | 0-3 per offering seat, one per filled slot | Phase 2 — drawn a round ahead (D29) |
+| Market stock | `market.stock` | 3 per market refreshed | Phase 3, odd rounds only 1-15 ([D25](../decisions/D25-item-market-resolution-gaps.md)) — drawn a round ahead (D29) |
 | Confrontation D6 | `confront.d6` | **1 per participant, per confrontation** | Not per confrontation |
 | Tie-break coin | `confront.tiebreak` | 1, only at the fourth level | GDD §15 |
 | **Pushback, stationary loser** | `pushback.hop` | **1 per hop — a second hop if Evasive** | GDD §15; the case r1 missed |
@@ -388,6 +395,8 @@ for i, node := range sectorNodesSortedByNodeID {
 ```
 
 Minimum separation (175 units within a sector, 150 across a quadrant boundary) is a property of the fixed grid, not a runtime check — unlike Torn Map, there is no rejection branch here at all, and so no truncation case for §16.2's invariant test to cover. Total cost for a match is exactly its node count.
+
+**Phases 2 and 3 are drawn a round ahead, not at their own call site ([D29](../decisions/D29-phase-2-3-fold-attachment.md)).** GDD §8.2 requires a contract offer to be "evaluated once per round, at Phase 2, against the state at the close of the previous round" — which can only be true if the offer already exists before that round's Phase 4 orders are collected, strictly before that round's own `Resolve` call runs. So `contract.offer.tier`/`.pick` and `market.stock` draw at the **tail** of `Resolve`, immediately after `upkeep()` (§6.7), against the state `Resolve` is about to return: contract offers first, seat-ascending, into a new `Player.PendingOffer`; market stock second, `NodeID`-ascending over Black Markets, whenever the *upcoming* round is due (`MarketRefreshDue(next round)`, not the round just closed). Both are skipped once no further round remains. Round 1 has no `Resolve(round 0)` to run this inside, so `initial(seed, cfg)` performs the identical two steps once, unconditionally, on the Setup RNG, immediately after seating players — the same shape it already uses to bootstrap round 3's `UnstableSector`. The player's accept/decline answer travels back into the fold as `Order.ContractChoice` (§11.1), applied at the *head* of the following `Resolve` call, before `validate`, with no RNG cost of its own.
 
 **Conditional draws are lazy. A branch not taken consumes nothing.**
 
@@ -530,9 +539,18 @@ upkeep()                      → fixed order, load-bearing (D5, GDD "Upkeep" in
                                 3. Sinkhole decrement  → clear at zero, no anchor
                                 4. next-round modifier clear (Streets Blocked, Distracted
                                    Guard, Scaffolding, Retainer, Dockers' Strike, Blackout)
+  ↓
+prepareNextRound()             → Phases 2-3 for the round about to start (D29), against the
+                                state just closed, skipped once no round remains:
+                                1. contract offers  → seat-ascending, D6/D7's tier mix and
+                                   fallback cascade, staged on Player.PendingOffer
+                                2. market refresh    → NodeID-ascending Black Markets, D25's
+                                   odd-round cadence, applied to the upcoming round
 ```
 
 Every step emits `Event` values. Events are the substrate for the trail, the recap, email bodies, the debug trace, and telemetry — one representation, six consumers. `upkeep()` runs after every round, round 15 included, before final scoring (GDD §16) reads the resulting state — D5 settles this explicitly; there is no truncated final round.
+
+**`prepareNextRound()` runs after `upkeep()`, round 15 included, and is a no-op there** ([D29](../decisions/D29-phase-2-3-fold-attachment.md)): `int(next.Round) >= cfg.Rounds` skips both of its steps, mirroring the guard `nextUnstableSector` already uses so `UnstableSector` doesn't draw a value for a round that never happens. Applying a seat's `ContractChoice` against the offer this step staged the round before is not part of this step — it happens at the *head* of the following `Resolve` call, before `validate`, so a same-round `Pickup` against a freshly-accepted contract is legal exactly when GDD §8.4 says it is.
 
 **The collision check runs at least once per round** even when every route is empty, which is the boundary case GDD §15 calls out for a table where nobody moves.
 
@@ -1016,6 +1034,8 @@ stake           0–6
 items[]         {item, target?}    — GDD §9.4, up to the hand limit of 3
 addons[]        ledger, renew:{postID}:{blocks}
 abandon_cargo   bool
+contract_choice optional, index into this round's offered contracts — absent
+                or out of range declines (D29)
 ```
 
 `items[]` carries an optional target: a node for Police Band and Decoy, a **pre-declared destination** for Bolt Hole. Torn Map, Guard Contact, Shiv and Circulation Permit take none. GDD §9.4 has the resolution timing — immediate discards land before movement, armed discards fire on their trigger and are spent either way.
