@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare lint generate generate-check packages purity fog debug-isolation secrets check clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity fog debug-isolation secrets check clean
 
 ## help      list these targets
 help:
@@ -94,6 +94,15 @@ bench-baseline:
 bench-compare: require-benchstat
 	$(GO) test -run '^$$' -bench . -benchmem -count=$(BENCH_COUNT) $(ALL) | tee candidate.bench
 	./scripts/check-bench-regression.sh $(BASELINE) candidate.bench
+
+## bench-regression-selftest  fixture coverage for check-bench-regression.sh (issue #150)
+#
+# Deterministic and fast — fixed synthetic .bench data, no `go test -bench`
+# involved — so unlike bench-compare it carries none of the real-benchmark
+# noise that keeps bench-compare advisory. See
+# scripts/check-bench-regression_test.sh's own header.
+bench-regression-selftest: require-benchstat
+	./scripts/check-bench-regression_test.sh
 
 ## lint      go vet and golangci-lint
 lint: require-golangci-lint
@@ -177,11 +186,13 @@ generate-check: generate
 # bench-compare is deliberately absent from this line too, but for the
 # opposite reason: it can run, and deciding it should still not block is the
 # point of issue #113 — see bench-compare's own comment and
-# CONTRIBUTING.md "What is deliberately not a gate".
+# CONTRIBUTING.md "What is deliberately not a gate". bench-regression-selftest
+# is not the same script and carries none of that noise — see its own
+# comment above — so it is listed here rather than kept out alongside it.
 #
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
-check: packages purity fog debug-isolation secrets lint test prod dev
+check: packages purity fog debug-isolation secrets lint test bench-regression-selftest prod dev
 
 ## clean     remove build output
 clean:
