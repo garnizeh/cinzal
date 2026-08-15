@@ -13,6 +13,15 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 
+# Pinned rather than inherited from the caller's environment: the assertions
+# below hang on these exact values (a 19% uniform move must clear
+# CINZAL_BENCH_GEOMEAN_THRESHOLD, and Case 3 greps the literal
+# "threshold 20%" the checker prints), so a caller with either variable set
+# to something else would make this fixture pass or fail for the wrong
+# reason.
+export CINZAL_BENCH_THRESHOLD=20
+export CINZAL_BENCH_GEOMEAN_THRESHOLD=10
+
 tmp="$(mktemp -d)"
 trap 'rm -rf "$tmp"' EXIT
 
