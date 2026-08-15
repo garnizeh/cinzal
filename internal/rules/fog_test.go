@@ -49,7 +49,7 @@ func hasTrailEntry(trail []game.TrailEntry, kind game.EventKind, node game.NodeI
 	return false
 }
 
-// --- Rows 2-4, 11, 13-14: global, sourced from MatchState.RoundAnchors ---
+// --- Rows 2-4, 11, 13-16: global, sourced from MatchState.RoundAnchors ---
 
 func TestProjectRow2DeliveryPresentWhenAnchored(t *testing.T) {
 	s := trailTestState(5, 0, 3)
@@ -225,7 +225,7 @@ func TestProjectRoundAnchorsIdenticalAcrossEverySeat(t *testing.T) {
 	a0, a1 := v0.Anchors[0], v1.Anchors[0]
 	if a0.Kind != a1.Kind || a0.Round != a1.Round || a0.Node != a1.Node || a0.Tier != a1.Tier ||
 		(a0.Actor == nil) != (a1.Actor == nil) || (a0.Actor != nil && *a0.Actor != *a1.Actor) {
-		t.Errorf("global anchor differs by viewer: %+v vs %+v — rows 2-4, 11, 13-14 reach every seat unconditionally", a0, a1)
+		t.Errorf("global anchor differs by viewer: %+v vs %+v — rows 2-4, 11, 13-16 reach every seat unconditionally", a0, a1)
 	}
 	if a0.Actor == a1.Actor {
 		t.Errorf("both views share the same *SeatID allocation, want each view's Anchor to own a fresh copy")

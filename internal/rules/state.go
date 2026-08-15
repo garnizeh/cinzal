@@ -331,7 +331,7 @@ type MatchState struct {
 	UnstableSector *game.Sector
 
 	// RoundAnchors is Round's own global, unconditional position-writer
-	// facts (RFC §9.1 rows 2-4, 11, 13-14) — built once, by
+	// facts (RFC §9.1 rows 2-4, 11, 13-16) — built once, by
 	// buildRoundAnchors (anchors.go), from that round's own []game.Event
 	// stream just before Resolve returns. Project (#75) is a pure
 	// MatchState -> game.PlayerView function with no other way to see

@@ -138,17 +138,18 @@ const (
 	// public announcement (GDD §14.3: "A crate appears at a random node
 	// in the sector... Announced publicly") — an Anchor-shaped fact, not
 	// a sight-gated Trail row, naming Node only. Mirrors
-	// EventDeadRunnerCrate; kept a distinct kind because the two loose
-	// crates carry different flat payouts (Cargo.SpilledLoad, cargo.go)
-	// and a recap/telemetry consumer needs to tell them apart.
+	// EventDeadRunnerCrate (row 13), but its own row, 16, per D26: kept a
+	// distinct kind because the two loose crates carry different flat
+	// payouts (Cargo.SpilledLoad, cargo.go) and a recap/telemetry
+	// consumer needs to tell them apart.
 	EventSpilledLoadCrate
 
 	// EventInformantRing is the Informant Ring sector incident (GDD
 	// §14.3): every player ending in the flagged sector has their
 	// position revealed publicly — the same position-reveal shape as
-	// EventInformants (row 11), kept a distinct kind so recap/telemetry
-	// can attribute the reveal to the incident rather than the global
-	// event card.
+	// EventInformants (row 11), but its own row, 15, per D26: kept a
+	// distinct kind so recap/telemetry can attribute the reveal to the
+	// incident rather than the global event card.
 	EventInformantRing
 )
 

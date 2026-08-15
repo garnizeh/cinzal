@@ -8,10 +8,9 @@ import (
 
 // TestBuildRoundAnchorsMapsEachGlobalEventKind covers every game.EventKind
 // buildRoundAnchors recognises — RFC §9.1 rows 2, 3, 4, 11, 13, 14, plus
-// EventInformantRing and EventSpilledLoadCrate folded into rows 11 and 13
-// respectively pending D26 (#142) — asserting the resulting Anchor's Kind,
-// Node, Actor (nil for the two node-only kinds) and Tier (EventDelivered
-// only).
+// EventInformantRing (row 15) and EventSpilledLoadCrate (row 16), decided
+// by D26 (#142) — asserting the resulting Anchor's Kind, Node, Actor (nil
+// for the three node-only kinds) and Tier (EventDelivered only).
 func TestBuildRoundAnchorsMapsEachGlobalEventKind(t *testing.T) {
 	tests := []struct {
 		name      string

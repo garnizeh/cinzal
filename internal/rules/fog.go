@@ -178,8 +178,8 @@ func projectTrail(archive game.SeatArchive, round game.RoundNumber) []game.Trail
 	return trail
 }
 
-// writeAnchors is RFC §9.1's ten unconditional, global rows (2-6, 9-11,
-// 13-14) — "The single place any of this may be written." Unlike the
+// writeAnchors is RFC §9.1's twelve unconditional, global rows (2-6, 9-11,
+// 13-16) — "The single place any of this may be written." Unlike the
 // RFC's own pseudocode, this does not also cover the four sight-gated rows
 // (1, 7, 8, 12): those are Trail's job (projectTrail above), matching
 // PlayerView's own field split (Trail vs Anchors) despite the RFC naming
@@ -191,11 +191,11 @@ func writeAnchors(v *game.PlayerView, s MatchState) {
 	var anchors []game.Anchor
 
 	// Rows 2 (Delivery), 3 (Post staked), 4 (Lease expired), 11
-	// (Informants, folded with EventInformantRing pending D26/#142), 13
-	// (Dead Runner, folded with EventSpilledLoadCrate pending D26), and 14
-	// (Fence's Windfall) — built once, at the end of Resolve, by
-	// buildRoundAnchors (anchors.go). See MatchState.RoundAnchors's own
-	// doc comment for why they cannot be read any other way here.
+	// (Informants), 13 (Dead Runner), 14 (Fence's Windfall), 15 (Informant
+	// Ring, D26/#142) and 16 (Spilled Load, D26) — built once, at the end
+	// of Resolve, by buildRoundAnchors (anchors.go). See
+	// MatchState.RoundAnchors's own doc comment for why they cannot be
+	// read any other way here.
 	for _, a := range s.RoundAnchors {
 		anchors = append(anchors, cloneAnchor(a))
 	}
