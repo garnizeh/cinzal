@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r24 · **Companion doc:** `cinzal-gdd.md` **v2.18**
+**Status:** draft for review · **Revision:** r25 · **Companion doc:** `cinzal-gdd.md` **v2.19**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -133,6 +133,11 @@
 > - **Round 1 has no `Resolve(round 0)` to run this inside**, so `initial()` bootstraps it directly, once, unconditionally, on the Setup RNG — the same round-1 special case `initialUnstableSector` already handles for round 3's sector.
 > - **`Order` gains `ContractChoice *int`** (§11.1) — meaningless and ignored while no offer is pending; once one is pending, nil declines it and a value in range accepts that slot — the only field this decision adds to the wire form, and the only new `MatchState`-adjacent field (`Player.PendingOffer []ContractOffer`) needed to stage an offer between the round it is generated and the round it is answered.
 > - No GDD change: GDD §8.1-8.2's contract rules and §12's market rules are unamended — this is entirely a fold-attachment and RNG-timing decision, the same posture r19-r21 already took for `market.stock`'s cadence and `globalEvent()`'s Phase 6 cards. Full reasoning in [D29](../decisions/D29-phase-2-3-fold-attachment.md).
+>
+> **Changelog r24 → r25** — the order form's field list was missing Open Doors' pre-declaration (D14)
+> - **§11.1's `addons[]` list stated only `ledger` and `renew:{postID}:{blocks}`**, leaving out the third add-on [D14](../decisions/D14-five-resolution-gaps.md) §4 introduced: Open Doors' pre-declared Black Market node and item — *"the one net-new piece of `Order` shape this decision introduces"*, implemented as `game.AddOns.OpenDoorsMarket *NodeID` / `.OpenDoorsItem ItemID` (`internal/game/order.go`). The form this section specified could not express a legal Open Doors declaration. Added `open_doors:{marketNode}:{item}` to the field list and a paragraph on its shape and silent-degrade behavior.
+> - **The implementer note after the field list flagged Bolt Hole's up-front declaration but not Open Doors', which shares the identical shape and the identical reason** ("there is no moment at which to choose"). Both are now flagged together.
+> - Companion doc moves to GDD v2.19, which independently corrects the Black Market's stale refresh cadence and three more item/market rulings (D25). No further RFC text change results: §6.4's `market.stock` row already states the odd-round cadence and distinct-draw method D25 settled.
 
 ---
 
@@ -1032,7 +1037,7 @@ action_target   optional
 stance          enum
 stake           0–6
 items[]         {item, target?}    — GDD §9.4, up to the hand limit of 3
-addons[]        ledger, renew:{postID}:{blocks}
+addons[]        ledger, renew:{postID}:{blocks}, open_doors:{marketNode}:{item}
 abandon_cargo   bool
 contract_choice optional, index into this round's offered contracts —
                 meaningless and ignored when no offer is pending; when one
@@ -1041,7 +1046,9 @@ contract_choice optional, index into this round's offered contracts —
 
 `items[]` carries an optional target: a node for Police Band and Decoy, a **pre-declared destination** for Bolt Hole. Torn Map, Guard Contact, Shiv and Circulation Permit take none. GDD §9.4 has the resolution timing — immediate discards land before movement, armed discards fire on their trigger and are spent either way.
 
-Bolt Hole is worth flagging for the implementer: its destination *must* be declared in the order, because simultaneous resolution never pauses for input. If the declared node is unreachable when the item fires, the ordinary pushback rule applies and the item is still consumed.
+`addons[]`'s third form, `open_doors:{marketNode}:{item}`, is Open Doors' pre-declaration ([D14](../decisions/D14-five-resolution-gaps.md) §4; `game.AddOns.OpenDoorsMarket *NodeID` / `.OpenDoorsItem ItemID`): a Black Market node and an item from its currently-visible stock, declared up front. It carries no action cost and is always legal to submit — it simply never fires if Open Doors doesn't trigger for the player this round, if the declared item is no longer on offer, or if nothing was declared.
+
+Bolt Hole and Open Doors are both worth flagging for the implementer, for the same reason: each destination or choice *must* be declared in the order, because simultaneous resolution never pauses for input — there is no moment at which to choose once Phase 4 closes. Bolt Hole's declared node falls back to the ordinary pushback rule, and the item is still consumed, if it has become unreachable when the item fires. Open Doors carries no such cost: it is a free add-on, not a held item, so it simply doesn't fire — no purchase, no penalty — if its declared market or item has stopped being valid by resolution.
 
 Every field is a plain input. Resubmission is the same POST. Absence of JavaScript degrades to a working — if tedious — form, which matters more than it sounds: it means the async flow is testable with `curl`, and it means a broken WASM load does not brick the game.
 
