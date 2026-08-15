@@ -33,6 +33,32 @@
 # would actually be felt as" — that stays the single gated signal. benchstat
 # still prints B/op and allocs/op in its normal output for a human to read;
 # they are informational here, not compared against a threshold.
+#
+# WHY THE geomean ROW IS ALSO CHECKED, AND WITH A SEPARATE, LOWER THRESHOLD
+# (issue #148).
+#
+# The per-case scan below skips the geomean row on purpose — it is an
+# aggregate, not a benchmark — but that made the gate per-case ONLY: a change
+# that slowed every benchmark by the same ~19% passed clean, because no
+# single row crossed the 20% threshold even though benchstat's own geomean
+# row read +19.00%. Verified directly: a synthetic candidate built by scaling
+# every ns/op in a real 10-count sample of internal/rules/gen's suite by
+# 1.19 produced exactly that — 18/18 rows individually "+19.00%, below
+# threshold" and a geomean of "+19.00%" — and the unpatched script exited 0.
+#
+# Gating the geomean row at the SAME threshold as individual cases cannot fix
+# this: when every row moves by the same percentage, the geomean moves by
+# that identical percentage (it is a mean), so a uniform slowdown that stays
+# under THRESHOLD per row is, by construction, also under THRESHOLD in
+# aggregate. Catching it needs a threshold the uniform case can actually
+# cross — CINZAL_BENCH_GEOMEAN_THRESHOLD, lower than THRESHOLD by default.
+#
+# The gap is safe to spend because aggregating cancels a good deal of
+# per-row noise: measured directly, two independent 10-count same-runner
+# samples of identical code — the same setup #124/#125 characterised at
+# ~1-6% drift for a single untouched benchmark — moved the geomean by only
+# +0.71%. The default (10%) leaves >10x that margin, comfortably below
+# THRESHOLD's own 20% and well clear of the 19% synthetic case above.
 
 set -euo pipefail
 
@@ -43,9 +69,10 @@ fi
 
 BASELINE="$1"
 CANDIDATE="$2"
-THRESHOLD="${CINZAL_BENCH_THRESHOLD:-20}" # percent, slower-than-base, see header
+THRESHOLD="${CINZAL_BENCH_THRESHOLD:-20}"                 # percent, slower-than-base, see header
+GEOMEAN_THRESHOLD="${CINZAL_BENCH_GEOMEAN_THRESHOLD:-10}" # percent, aggregate, see "WHY THE geomean ROW..." above
 
-# A non-numeric THRESHOLD silently disables this whole check rather than
+# A non-numeric threshold silently disables the check it gates rather than
 # erroring: awk's `pct + 0 > threshold` falls back to a string comparison
 # against anything that isn't a POSIX numeric string — and that includes
 # something that merely looks numeric, like "1.2.3" — and every percentage
@@ -56,10 +83,15 @@ THRESHOLD="${CINZAL_BENCH_THRESHOLD:-20}" # percent, slower-than-base, see heade
 # flagged — the opposite of "fail closed". Matched with bash's =~ rather
 # than a case glob for exactly that reason: a glob like *[!0-9.]* accepts
 # "1.2.3", which still hits the same bug once it reaches awk.
-if ! [[ "$THRESHOLD" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
-	echo "check-bench-regression: CINZAL_BENCH_THRESHOLD must be a non-negative number, got '$THRESHOLD'" >&2
-	exit 1
-fi
+for pair in "THRESHOLD:CINZAL_BENCH_THRESHOLD" "GEOMEAN_THRESHOLD:CINZAL_BENCH_GEOMEAN_THRESHOLD"; do
+	var="${pair%%:*}"
+	env_name="${pair#*:}"
+	val="${!var}"
+	if ! [[ "$val" =~ ^[0-9]+([.][0-9]+)?$ ]]; then
+		echo "check-bench-regression: $env_name must be a non-negative number, got '$val'" >&2
+		exit 1
+	fi
+done
 
 for f in "$BASELINE" "$CANDIDATE"; do
 	if [ ! -s "$f" ]; then
@@ -121,6 +153,31 @@ regressions="$(printf '%s\n' "$csv" | awk -F',' -v threshold="$THRESHOLD" '
 	}
 ')"
 
+# Catches a uniform slowdown no single row is loud enough to trip — see
+# "WHY THE geomean ROW IS ALSO CHECKED" above. Same table, same threshold,
+# same "only a genuine +pct past threshold counts" shape as the scan above;
+# the only difference is $1 == "geomean" instead of excluding it.
+geomean_regression="$(printf '%s\n' "$csv" | awk -F',' -v threshold="$GEOMEAN_THRESHOLD" '
+	/^,sec\/op,/ { intable = 1; next }
+	intable && /^$/ { intable = 0 }
+	intable && $1 == "geomean" && NF >= 7 {
+		vs = $(NF - 1)
+		if (vs != "~" && vs ~ /^\+/) {
+			pct = vs
+			gsub(/[+%]/, "", pct)
+			if (pct + 0 > threshold) {
+				printf "geomean: %s slower than baseline (geomean threshold %s%%) — every benchmark moved together; no single case crossed the per-case threshold\n", vs, threshold
+			}
+		}
+	}
+')"
+
+ns=$'\n'
+all_regressions="$regressions"
+if [ -n "$geomean_regression" ]; then
+	all_regressions="${all_regressions:+$all_regressions$ns}$geomean_regression"
+fi
+
 if [ "$comparable_rows" -eq 0 ]; then
 	# benchstat pairs rows on the benchmark name AND on the configuration
 	# lines above it (goos, goarch, pkg, cpu), so a differing cpu: line alone
@@ -132,12 +189,12 @@ if [ "$comparable_rows" -eq 0 ]; then
 	# is not clean.
 	verdict="check-bench-regression: no comparable sec/op rows between $BASELINE and $CANDIDATE — inconclusive, not clean (renamed benchmark, or differing goos/goarch/pkg/cpu metadata — compare the two files' headers)"
 	status=1
-elif [ -n "$regressions" ]; then
+elif [ -n "$all_regressions" ]; then
 	verdict="check-bench-regression: possible regression(s) detected (sec/op, vs $BASELINE):
-$regressions"
+$all_regressions"
 	status=1
 else
-	verdict="check-bench-regression: no sec/op regression past ${THRESHOLD}% vs $BASELINE ($comparable_rows row(s) compared)"
+	verdict="check-bench-regression: no sec/op regression past ${THRESHOLD}% per-case or ${GEOMEAN_THRESHOLD}% geomean vs $BASELINE ($comparable_rows row(s) compared)"
 	status=0
 fi
 
