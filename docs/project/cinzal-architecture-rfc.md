@@ -131,7 +131,7 @@
 > - **§6.7's pipeline gains a `prepareNextRound()` step**, after `upkeep()`. Contract offers (GDD §8.1-8.2) and market refresh (GDD §12) were exported functions with no caller anywhere outside a test — `Resolve` ran Phases 1 and 4-8 only. Both now execute **a round ahead**, at the tail of `Resolve`, the identical timing `UnstableSector` already uses (§6.6) and for the same reason: GDD §8.2's "evaluated once per round, at Phase 2, against the state at the close of the previous round" can only be satisfied by a value that already exists before that round's Phase 4 orders are collected, which is strictly before that round's own `Resolve` call runs at all.
 > - **§6.4's `contract.offer.tier`, `contract.offer.pick` and `market.stock` rows** are marked "drawn a round ahead" — the draw's position in the `seq` stream moves; the index cost each row already stated does not.
 > - **Round 1 has no `Resolve(round 0)` to run this inside**, so `initial()` bootstraps it directly, once, unconditionally, on the Setup RNG — the same round-1 special case `initialUnstableSector` already handles for round 3's sector.
-> - **`Order` gains `ContractChoice *int`** (§11.1) — nil declines, a value in range accepts that slot — the only field this decision adds to the wire form, and the only new `MatchState`-adjacent field (`Player.PendingOffer []ContractOffer`) needed to stage an offer between the round it is generated and the round it is answered.
+> - **`Order` gains `ContractChoice *int`** (§11.1) — meaningless and ignored while no offer is pending; once one is pending, nil declines it and a value in range accepts that slot — the only field this decision adds to the wire form, and the only new `MatchState`-adjacent field (`Player.PendingOffer []ContractOffer`) needed to stage an offer between the round it is generated and the round it is answered.
 > - No GDD change: GDD §8.1-8.2's contract rules and §12's market rules are unamended — this is entirely a fold-attachment and RNG-timing decision, the same posture r19-r21 already took for `market.stock`'s cadence and `globalEvent()`'s Phase 6 cards. Full reasoning in [D29](../decisions/D29-phase-2-3-fold-attachment.md).
 
 ---
@@ -1034,8 +1034,9 @@ stake           0–6
 items[]         {item, target?}    — GDD §9.4, up to the hand limit of 3
 addons[]        ledger, renew:{postID}:{blocks}
 abandon_cargo   bool
-contract_choice optional, index into this round's offered contracts — absent
-                or out of range declines (D29)
+contract_choice optional, index into this round's offered contracts —
+                meaningless and ignored when no offer is pending; when one
+                is pending, absent or out of range declines it (D29)
 ```
 
 `items[]` carries an optional target: a node for Police Band and Decoy, a **pre-declared destination** for Bolt Hole. Torn Map, Guard Contact, Shiv and Circulation Permit take none. GDD §9.4 has the resolution timing — immediate discards land before movement, armed discards fire on their trigger and are spent either way.
