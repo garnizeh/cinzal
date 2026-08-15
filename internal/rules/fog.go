@@ -15,11 +15,12 @@ import (
 //
 // Project's signature is fixed by D01 and matches the RFC's own citation of
 // it verbatim: no game.Config parameter. That leaves You.StepAllowance and
-// You.RoundsToNextOffer unset (their zero value) even though their own
-// field comments (game/view.go) say Project computes them from
-// rules.Steps(view, cfg) and rules.RoundsToNextOffer(s, seat, cfg) — both
-// need a Config this function structurally has no way to obtain. See
-// https://github.com/garnizeh/cinzal/issues/143 (D27), open.
+// You.RoundsToNextOffer unset (their zero value) — decided in D27
+// (https://github.com/garnizeh/cinzal/issues/143), not a gap: Config feeds
+// formulas, not visibility, so those two fields are internal/match's
+// responsibility to fill from rules.Steps(view, cfg) and
+// rules.RoundsToNextOffer(s, seat, cfg) once Project returns, the same way
+// it already supplies Config to Legal for order validation.
 func Project(s MatchState, seat game.SeatID) game.PlayerView {
 	p := s.Players[seat]
 
