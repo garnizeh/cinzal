@@ -392,6 +392,12 @@ func TestLegalViewRetainerBonusRequiresNoCargo(t *testing.T) {
 func TestLegalViewNodesSharesProjectNodes(t *testing.T) {
 	s := resolveTestState()
 	s.Graph.Nodes[1].Post = &Post{Owner: 0, RoundsRemaining: 3}
+	// Also staked on the Hidden and Rumoured nodes below, so their negative
+	// assertions prove the fog gate actually strips a real Post rather than
+	// reflecting a field that was already empty (RFC §16.3: hidden facts
+	// must be shown absent, not merely unused).
+	s.Graph.Nodes[3].Post = &Post{Owner: 1, RoundsRemaining: 3}
+	s.Graph.Nodes[4].Post = &Post{Owner: 1, RoundsRemaining: 3}
 	entry := s.Snapshot()
 
 	v := legalView(s, entry, 0, false)
@@ -406,8 +412,9 @@ func TestLegalViewNodesSharesProjectNodes(t *testing.T) {
 
 	// The DeepEqual check above already proves legalView's fog-filtering is
 	// projectNodes's, byte for byte — this makes that guarantee legible here
-	// too, without a second implementation to diverge (resolveTestState:
-	// node 3 Hidden, node 4 Rumoured).
+	// too, and, since both nodes carry a real Post (staked above), proves
+	// the gate strips it rather than reflecting a field that was already
+	// empty (resolveTestState: node 3 Hidden, node 4 Rumoured).
 	if _, ok := v.Nodes[3]; ok {
 		t.Errorf("Nodes[3] = %+v, want an absent key for a Hidden node", v.Nodes[3])
 	}
