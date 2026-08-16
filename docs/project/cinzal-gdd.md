@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.19 (scope-locked for prototype)
+## Game Design Document — v2.20 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -165,6 +165,9 @@
 > - **§12 now also states the market draws 3 *distinct* items.** Nothing previously ruled out a market repeating an item in its own stock; it draws the same without-replacement way every other multi-pick RNG consumer in this game does (Torn Map, Dragnet), never independent rolls that could duplicate and undercut the market's own scarcity design.
 > - **§9.4's Bolt Hole now states what its "2 steps away" is measured from and over: the player's own position at the start of the round, walked through the player's own currently-known subgraph** — the one coordinate both player and server agree on before any order resolves, and the only distance an implementer can check against without reaching past the fog boundary into the full server-side graph. The declared node must itself be Known, not merely Rumoured — a Rumoured node carries no edges to route into (§7.1), so it cannot be the endpoint of a 2-step path over a subgraph that doesn't contain it.
 > - **§9.4's Police Band row and §7.2's matching entry now state its target restriction: any node the player is not Hidden to (Rumoured or Known), never a node they have no awareness of at all.** This isn't a new restriction so much as the floor "a node of your choice" already implied — a client can't reference a node it doesn't know exists — but it was previously unstated, unlike Decoy's explicit Known-only restriction two rows below it in the same table. Full reasoning for all four rulings in [D25](../decisions/D25-item-market-resolution-gaps.md).
+>
+> **Changelog v2.19 → v2.20** — §7.1 promised every node a disclosed name, and nothing said how a node gets one (D31)
+> - **§6.2 gains one paragraph stating the naming scheme.** A node's name is its sector, its type, and its 1-based rank among same-type nodes in that sector — e.g. "Old Docks Warehouse 2" — assigned once at map generation, deterministically, from facts already fixed by then. No new randomness, no new deck, no new item. Full reasoning, the rejected alternatives (a drawn name from per-district pools; treating the name as a render-only label), and why the deterministic reading is the more literal one given how §2 and §7.1 already refer to nodes in prose, in [D31](../decisions/D31-node-display-name.md).
 
 ---
 
@@ -370,6 +373,8 @@ Undirected graph, generated procedurally per match from a recorded seed (needed 
 The seven rows above are every node count currently supported (§6.1's per-player-count table, plus §19.1's scenario sizes). The table is the readable form; the rule is the authority a new supported node count is computed against.
 
 **Cut in v1.1: the warehouse supply limit.** v1.0 said each warehouse released only 2 cargo per round. With 6 warehouses, hidden positions, and contracts pointing players at different origins, three players converging on the same warehouse in the same round is close to a never-event. It was a rule that added a line to the reference card and fired approximately zero times per match. Cut. If playtesting shows warehouses genuinely contested, it comes back — but as a **Dockers' Strike** effect, which is where scarcity belongs.
+
+**Node names (D31).** Every node has a display name, disclosed alongside its type and sector from Rumoured onward (§7.1): its sector, its type, and its 1-based rank among nodes of that same type within that sector, ranks assigned by scanning the map's nodes in ascending `NodeID` order — the first node of a given (sector, type) pair encountered that way is rank 1, the next is rank 2, and so on — e.g. **"Old Docks Warehouse 2"**. Assigned once at map generation, deterministically, from facts already fixed by that point — no randomness, no authored name pool. Full reasoning in [D31](../decisions/D31-node-display-name.md).
 
 
 ### 6.3 Two-player rules
