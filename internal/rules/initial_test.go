@@ -75,6 +75,47 @@ func TestInitialSeatsPlayers(t *testing.T) {
 	}
 }
 
+// TestInitialBootstrapsPhase2And3 is D29/#163's own acceptance criterion
+// for round 1's bootstrap: a Black Market never held stock and a seat's
+// opening offer never generated until prepareNextRound was wired into
+// initial() — this checks initial()'s direct output, with no Resolve call
+// and no test-local RNG stand-in, for every supported player count.
+// GDD §8.1/D24 guarantees round 1's own opening offer is always
+// delivered (never held), so PendingOffer is asserted non-nil outright,
+// not merely "if any seat happened to get one."
+func TestInitialBootstrapsPhase2And3(t *testing.T) {
+	cfg := game.DefaultConfig()
+
+	for _, players := range []int{2, 3, 4, 5} {
+		seed := testSeed(byte(140 + players))
+
+		s, err := initial(seed, cfg, players)
+		if err != nil {
+			t.Fatalf("players=%d: initial() = %v", players, err)
+		}
+
+		for seat, p := range s.Players {
+			if len(p.PendingOffer) == 0 {
+				t.Errorf("players=%d: Players[%d].PendingOffer is empty, want a delivered opening offer (D24)", players, seat)
+			}
+		}
+
+		sawMarket := false
+		for _, n := range s.Graph.Nodes {
+			if n.Type != game.NodeBlackMarket {
+				continue
+			}
+			sawMarket = true
+			if len(n.Market) != 3 {
+				t.Errorf("players=%d: node %d (Black Market) has %d rolled items, want 3", players, n.ID, len(n.Market))
+			}
+		}
+		if !sawMarket {
+			t.Fatalf("players=%d: no Black Market node on the generated graph — this test needs a different seed to cover its own assertion", players)
+		}
+	}
+}
+
 // TestInitialFogSeededByD23 guards the game.FogState zero-value trap
 // (enums.go reserves FogState's zero value as invalid, so every entry must
 // be explicitly set, never left at a plain make([]game.FogState, n)'s zero)
@@ -193,7 +234,7 @@ func TestInitialSkipsEventDeckUnderSuppressEvents(t *testing.T) {
 	seed := testSeed(60)
 
 	rng := NewRNG(seed, 0)
-	if _, err := gen.Generate(genRand(rng), gen.Params{
+	g, err := gen.Generate(genRand(rng), gen.Params{
 		Nodes:              cfg.MapByPlayers[4].Nodes,
 		MinEdges:           cfg.MapByPlayers[4].MinEdges,
 		MaxEdges:           cfg.MapByPlayers[4].MaxEdges,
@@ -201,10 +242,20 @@ func TestInitialSkipsEventDeckUnderSuppressEvents(t *testing.T) {
 		MaxAttempts:        cfg.MaxGenAttempts,
 		OpeningMinDistance: cfg.Contracts[0].MinDistance,
 		OpeningMaxDistance: cfg.Contracts[0].MaxDistance,
-	}); err != nil {
+	})
+	if err != nil {
 		t.Fatalf("reference gen.Generate() = %v", err)
 	}
 	wantIncidentDeck := buildIncidentDeck(rng)
+
+	// D29: prepareNextRound draws between the deck builds and
+	// initialUnstableSector, so the reference sequence has to include it
+	// too, on the same graph/seating initial() itself builds, or this
+	// test's own divergence check would trip on an unrelated stream
+	// shift rather than on a real event-deck draw.
+	refGraph := newGraph(g)
+	boot := MatchState{Graph: refGraph, Players: seatPlayers(g, refGraph, cfg, 4)}
+	prepareNextRound(&boot, cfg, rng)
 	wantSector := initialUnstableSector(rng, cfg)
 
 	s, err := initial(seed, cfg, 4)

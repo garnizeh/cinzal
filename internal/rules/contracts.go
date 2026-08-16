@@ -221,6 +221,43 @@ func GenerateOffer(s MatchState, seat game.SeatID, cfg game.Config, rng *RNG) (o
 	return filled, true
 }
 
+// prepareNextRound runs D29's Phase 2 (contract offer) and Phase 3
+// (market refresh) a round ahead — s.Round standing in for "the round
+// about to begin is s.Round+1", the same convention nextUnstableSector
+// (incidents.go) already uses for the Headline. It has exactly two call
+// sites: the tail of Resolve, where s (next) is the fully-closed state for
+// the round just folded in, and initial()'s round-1 bootstrap, where s is
+// round 0's freshly-seated state — sharing this one function means a
+// reader learns a single mechanism rather than two, and every consumer of
+// state = fold(Resolve, initial(seed, cfg), orderLog) gets both phases
+// correct automatically (D29's Reasoning).
+//
+// Contract offers run first, seat-ascending (RFC §6.5's RNG-batch
+// default): GenerateOffer's own offerDue check is what decides whether a
+// seat draws at all, so a seat whose Contact Cooldown hasn't elapsed costs
+// zero RNG draws and leaves PendingOffer untouched (nil, or whatever an
+// unrelated earlier round already delivered — never possible in practice,
+// since a delivered offer is always answered, never left pending, before
+// this runs again for the same seat).
+//
+// Market stock refreshes second, gated on MarketRefreshDue(s.Round+1,
+// cfg) — the *upcoming* round, not s.Round itself: at Resolve's tail
+// s.Round is the round just closed, and at initial()'s bootstrap s.Round
+// is 0, so "+1" is what makes both call sites ask the same question,
+// "is the round about to begin a refresh round."
+func prepareNextRound(s *MatchState, cfg game.Config, r *RNG) {
+	for _, seat := range bySeat(*s) {
+		offer, delivered := GenerateOffer(*s, seat, cfg, r)
+		if delivered {
+			s.Players[seat].PendingOffer = offer
+		}
+	}
+
+	if MarketRefreshDue(s.Round+1, cfg) {
+		*s = RefreshMarkets(*s, r)
+	}
+}
+
 // nextContractID assigns a slot-index ID for a new contract, given the
 // contracts a seat already holds (0 or 1 of them — GenerateOffer never
 // delivers when a seat is already at the 2-contract cap, so AcceptOffer is
@@ -280,4 +317,42 @@ func DeclineOffer(s MatchState, seat game.SeatID, round game.RoundNumber) MatchS
 
 	s.Players = players
 	return s
+}
+
+// applyContractChoices is Resolve's head-of-round step (D29), run
+// immediately after resetRoundFlags and before validate — before, not
+// after, because a seat already standing at the newly-accepted contract's
+// origin can legally Pickup in the very same round, and validate's
+// legality check needs p.Contracts to already reflect the acceptance.
+//
+// A seat whose PendingOffer is nil is skipped entirely: ContractChoice is
+// not read, AcceptOffer/DeclineOffer are not called, and LastOfferRound is
+// left untouched — there is nothing to accept or decline, and calling
+// DeclineOffer anyway would incorrectly restart a cooldown that was never
+// due. Only when PendingOffer is non-nil does this read
+// orders[seat].ContractChoice: nil, or an index outside 0..len(offer)-1,
+// is GDD §15.0's illegal-payload category and degrades to declining that
+// offer — never a partial or best-effort accept. A seat absent from
+// orders entirely (GDD §18's absence default) reads as the same nil
+// ContractChoice, so an absent player never commits to a job it didn't
+// choose, for free.
+//
+// No RNG draw either way: applying a choice, or leaving one unmade, is a
+// deterministic state mutation, zero index cost, exactly like
+// resetRoundFlags itself.
+func applyContractChoices(s *MatchState, orders map[game.SeatID]game.Order, cfg game.Config, round game.RoundNumber) {
+	for _, seat := range bySeat(*s) {
+		offer := s.Players[seat].PendingOffer
+		if offer == nil {
+			continue
+		}
+
+		choice := orders[seat].ContractChoice
+		if choice != nil && *choice >= 0 && *choice < len(offer) {
+			*s = AcceptOffer(*s, seat, offer[*choice], cfg, round)
+		} else {
+			*s = DeclineOffer(*s, seat, round)
+		}
+		s.Players[seat].PendingOffer = nil
+	}
 }

@@ -277,6 +277,17 @@ type Player struct {
 	// strictly after resetRoundFlags would already have cleared a
 	// same-round-only field.
 	LocalInformant bool
+
+	// PendingOffer is this seat's delivered-but-unanswered Phase 2 offer
+	// (D29): written by prepareNextRound at the tail of the round before
+	// it is shown, nil whenever no offer is currently awaiting an answer
+	// (offerDue was false, or every cascade came up empty). Read and
+	// cleared to nil by applyContractChoices at the head of the next
+	// round's Resolve call, the same "decide early, use once" lifecycle
+	// NextRound's four modifiers already follow — never resetRoundFlags's
+	// "next round only" list, since a held offer (D7) must survive until
+	// it is actually answered, not just one round.
+	PendingOffer []ContractOffer
 }
 
 // MatchState is the match's authoritative state: the graph and every seat,
@@ -575,6 +586,11 @@ func (p Player) clone() Player {
 	if p.Ledger != nil {
 		clone.Ledger = make([]game.LedgerEntry, len(p.Ledger))
 		copy(clone.Ledger, p.Ledger)
+	}
+
+	if p.PendingOffer != nil {
+		clone.PendingOffer = make([]ContractOffer, len(p.PendingOffer))
+		copy(clone.PendingOffer, p.PendingOffer)
 	}
 
 	clone.Archive = cloneArchive(p.Archive)

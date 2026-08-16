@@ -118,6 +118,63 @@ func TestResolveIncrementsRound(t *testing.T) {
 	}
 }
 
+// TestResolvePrepareNextRoundRNGAccounting is #163's own acceptance
+// criterion, checked at Resolve's relocated call site rather than
+// GenerateOffer/RefreshMarkets in isolation: prepareNextRound draws
+// contract.offer.tier for every offering seat mid-match, and draws
+// nothing at all — for any of the three D29-relocated purposes — once
+// next.Round reaches cfg.Rounds, matching prepareNextRound's own
+// int(next.Round) >= cfg.Rounds guard (mirroring nextUnstableSector's).
+// resolveTestState's two seats both have LastOfferRound's zero value
+// (never offered), so offerDue is unconditionally true for both — 2
+// contract.offer.tier draws each, 4 total — and its tiny graph has no
+// (Warehouse, Border) pair inside Tier 0-3's distance bands and no
+// NodeBlackMarket at all, so contract.offer.pick and market.stock stay at
+// 0 in both cases regardless of the round-15 guard, isolating exactly
+// what the guard controls.
+func TestResolvePrepareNextRoundRNGAccounting(t *testing.T) {
+	cfg := legalTestConfig()
+
+	t.Run("mid-match draws the offer-tier check for every offering seat", func(t *testing.T) {
+		s := resolveTestState() // Round: 4, next.Round: 5 < cfg.Rounds (15)
+		rng := NewRNG(testSeed(40), int(s.Round)+1)
+
+		if _, _, err := Resolve(s, nil, cfg, rng); err != nil {
+			t.Fatalf("Resolve() error = %v, want nil", err)
+		}
+
+		if got := rng.Consumed(PurposeContractOfferTier); got != 2*len(s.Players) {
+			t.Errorf("Consumed(contract.offer.tier) = %d, want %d (2 per offering seat)", got, 2*len(s.Players))
+		}
+		if got := rng.Consumed(PurposeContractOfferPick); got != 0 {
+			t.Errorf("Consumed(contract.offer.pick) = %d, want 0 (no candidate pair fits any tier's band on this graph)", got)
+		}
+		if got := rng.Consumed(PurposeMarketStock); got != 0 {
+			t.Errorf("Consumed(market.stock) = %d, want 0 (no Black Market node on this graph)", got)
+		}
+	})
+
+	t.Run("final round consumes nothing — prepareNextRound has no further round to prepare for", func(t *testing.T) {
+		s := resolveTestState()
+		s.Round = game.RoundNumber(cfg.Rounds - 1) // next.Round == cfg.Rounds
+		rng := NewRNG(testSeed(41), int(s.Round)+1)
+
+		if _, _, err := Resolve(s, nil, cfg, rng); err != nil {
+			t.Fatalf("Resolve() error = %v, want nil", err)
+		}
+
+		if got := rng.Consumed(PurposeContractOfferTier); got != 0 {
+			t.Errorf("Consumed(contract.offer.tier) = %d, want 0 (round %d, no further round to prepare for)", got, cfg.Rounds)
+		}
+		if got := rng.Consumed(PurposeContractOfferPick); got != 0 {
+			t.Errorf("Consumed(contract.offer.pick) = %d, want 0", got)
+		}
+		if got := rng.Consumed(PurposeMarketStock); got != 0 {
+			t.Errorf("Consumed(market.stock) = %d, want 0", got)
+		}
+	})
+}
+
 // TestMovementStepsAtLeastOneWhenEveryRouteEmpty is the acceptance
 // criterion verbatim: "Collision evaluation runs on a round where every
 // route is empty" (RFC §6.7, GDD §15 — a table where nobody moves still
