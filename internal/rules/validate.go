@@ -263,14 +263,24 @@ func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order, blocke
 	return o, game.Event{}, true
 }
 
-// legalView builds the minimal game.PlayerView Legal actually reads,
-// directly from live MatchState plus entry's frozen Balance/Position —
-// standing in for Project (#75, not built yet and not a blocker of this
-// issue). Legal reads only v.You (Position, Balance, Items, Posts,
-// Contracts, Cargo) and v.Nodes (fog-filtered); v.Others is read only for
-// its length, by legalPostCap. Everything else on game.PlayerView (Trail,
-// Anchors, Headline, Deck, Archive, NodeStats) is Project's job, not
-// Legal's, and is left zero-valued here.
+// legalView builds the minimal game.PlayerView Legal actually reads, from
+// live MatchState plus entry's frozen Balance/Position. Legal reads only
+// v.You (Position, Balance, Items, Posts, Contracts, Cargo) and v.Nodes
+// (fog-filtered); v.Others is read only for its length, by legalPostCap.
+// Everything else on game.PlayerView (Trail, Anchors, Headline, Deck,
+// Archive, NodeStats) is Project's job, not Legal's, and is left
+// zero-valued here.
+//
+// v.Nodes is built by projectNodes (fog.go) — the same fog-filtering Project
+// itself uses, rather than a second, independently-maintained walk of
+// p.Fog. That reuse is sound because timing does not diverge here: p.Fog is
+// untouched between "end of the previous round" (what Project would read on
+// s) and this call — movement.go and trail.go are the only two places that
+// mutate Fog, and both run in Resolve after validate (resolve.go). Sharing
+// projectNodes also means a future legality rule reading NodeView.Post or
+// .Market would see the same values Legal is later re-invoked against from
+// Project's own output (internal/match), rather than silently diverging
+// (issue #161).
 //
 // You.Infamy and You.StepModifiers.Flagged/EvasiveStepPenalty complete a
 // wiring gap this function always had: EntrySnapshot has carried Infamy,
@@ -283,26 +293,9 @@ func checkActionDegradation(s MatchState, seat game.SeatID, o game.Order, blocke
 // snap.Position (the same frozen position every other entry-snapshot
 // consumer here already uses), Retainer against live p.Cargo, which
 // movement has not yet touched at the point validate calls this.
-//
-// TODO(#75): remove this second MatchState -> game.PlayerView construction
-// once Project exists, and have Legal read Project's output instead — two
-// fog-filter implementations can otherwise drift apart.
 func legalView(s MatchState, entry EntrySnapshot, seat game.SeatID, curfewActive bool) game.PlayerView {
 	p := s.Players[seat]
 	snap := entry.Seats[seat]
-
-	nodes := make(map[game.NodeID]game.NodeView, len(p.Fog))
-	for i, fog := range p.Fog {
-		if fog < game.FogRumoured {
-			continue
-		}
-		n := s.Graph.Nodes[i]
-		view := game.NodeView{Fog: fog, Name: n.Name, Type: n.Type, Sector: n.Sector, X: n.X, Y: n.Y}
-		if fog >= game.FogKnown {
-			view.Edges = n.Edges
-		}
-		nodes[game.NodeID(i)] = view
-	}
 
 	scaffolding := s.NextRound.Scaffolding != nil && *s.NextRound.Scaffolding == s.Graph.Nodes[snap.Position].Sector
 
@@ -327,7 +320,7 @@ func legalView(s MatchState, entry EntrySnapshot, seat game.SeatID, curfewActive
 			DockersStrike: s.NextRound.DockersStrike,
 		},
 		Others: make([]game.OpponentView, len(s.Players)-1),
-		Nodes:  nodes,
+		Nodes:  projectNodes(s, p),
 	}
 }
 

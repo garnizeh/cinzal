@@ -384,6 +384,27 @@ func TestLegalViewRetainerBonusRequiresNoCargo(t *testing.T) {
 	}
 }
 
+// TestLegalViewNodesSharesProjectNodes guards issue #161: legalView's
+// v.Nodes must come from the same fog-filtering projectNodes (fog.go) uses,
+// not a second, independently-maintained walk of p.Fog — so a field like
+// Post can never populate under one and stay nil under the other just
+// because a future legality rule started reading it.
+func TestLegalViewNodesSharesProjectNodes(t *testing.T) {
+	s := resolveTestState()
+	s.Graph.Nodes[1].Post = &Post{Owner: 0, RoundsRemaining: 3}
+	entry := s.Snapshot()
+
+	v := legalView(s, entry, 0, false)
+	want := projectNodes(s, s.Players[0])
+
+	if !reflect.DeepEqual(v.Nodes, want) {
+		t.Errorf("legalView v.Nodes = %+v, want exactly projectNodes(s, p)'s output %+v", v.Nodes, want)
+	}
+	if v.Nodes[1].Post == nil {
+		t.Error("Nodes[1].Post = nil, want populated — legalView must not zero out fields Legal doesn't itself read")
+	}
+}
+
 func hasEvent(events []game.Event, kind game.EventKind, seat game.SeatID) bool {
 	for _, e := range events {
 		if e.Kind == kind && e.Seat == seat {
