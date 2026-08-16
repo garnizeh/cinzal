@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.21 (scope-locked for prototype)
+## Game Design Document — v2.22 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -171,6 +171,11 @@
 >
 > **Changelog v2.20 → v2.21** — "Orders never silently fail" read as scoped to Step 0 only, leaving four resolution-time action categories (six failure causes) silently doing nothing (D30)
 > - **§15.0's Step 0 paragraph gains a clause: the "never silently fail" promise applies at every resolution step, not only Step 0.** A Deal that loses the market race or whose balance no longer covers it, a Pickup that loses a dropped crate or finds its own cargo slot full, a Stake Post that's already at cap, and a Ledger purchase the balance no longer covers all now name the specific reason to the acting player — the same "legal order can no longer complete" category Step 0 already covers, just discovered one or more steps later. Open Doors is named as the one exception, out of scope rather than silently fixed, and stays exactly as [D14](../decisions/D14-five-resolution-gaps.md) §4 already decided it: a pre-declared, conditionally-triggered boon that may never fire at all isn't a failed action. Full reasoning in [D30](../decisions/D30-contended-action-loss-notification.md).
+>
+> **Changelog v2.21 → v2.22** — §21's randomness inventory never gained D03's card-target draws (issue #159)
+> - **§21 gains entries 16–23**: Dragnet's two sealed Borders, Festival's node, Scaffolding's sector, Shipping Boom's Warehouse, Fence's Windfall's Black Market, Sinkhole's node, Riot's permutation, and Torn Map's four revealed nodes — each a genuine, separate randomness source [D03](../decisions/D03-rng-consumption-table.md) (and, for Riot, [D04](../decisions/D04-riot-trail-randomization.md)) priced into RFC §6.4's table but never counted here. Entry 4's cadence is corrected from the stale "every 2 rounds" to the odd-round schedule §12 already states (D25).
+> - **The closing P2-audit count is re-run against all twenty-three entries, not the old fifteen.** Six resolve before commitment (unchanged). Of the seventeen that don't, six are opt-in, four are avoidable by routing around the flagged sector, and four of the eight new entries turn out to be boons the existing Boon Rule (§14.0) already keeps fair — earned by a decision already made, or won as an open contest — leaving only three genuinely blind draws: the event card itself, Dragnet's Border seal, and the fourth-level tie-break. The count of blind draws does not grow from adding eight entries, because the audit's real question is fairness, not row count, and most of the newly-listed sources were already covered by an existing rule that just hadn't been credited against them in this table.
+> - No rule change: every source counted here was already live in the code and already governed by D03, D04, D25 or the Boon Rule. This closes a documentation gap, not a design gap. Companion RFC moves to r27, which runs the matching correction against §6.4's consumption table.
 
 ---
 
@@ -1495,7 +1500,7 @@ Watch for Tier IV contracts being accepted and then abandoned. If nobody volunta
 | 1 | Map generation, including node layout (§6.4, D10) | Setup | Before | Nothing — but it's symmetric and constrained (§6) |
 | 2 | Starting positions | Setup | Before | Nothing — minimum distance 4 guaranteed |
 | 3 | Contract offer (3 drawn) | Phase 2 | **Before** | Choose 1 of 3, or decline |
-| 4 | Market stock (3 items) | Phase 3, every 2 rounds | **Before** | Choose whether to travel there |
+| 4 | Market stock (3 items) | Phase 3, odd rounds only (1, 3, …, 15) | **Before** | Choose whether to travel there |
 | 5 | Global event **category** | Phase 1 | **Before** | Plan against that category's remaining candidates — never fewer than 3 (§14.2) |
 | 6 | Unstable **sector** | Phase 1 | **Before** | Route around it, or accept the risk |
 | 7 | Global event **card** | Phase 6 | After | Category was known; ~4 candidates within it (§14.2) |
@@ -1507,8 +1512,16 @@ Watch for Tier IV contracts being accepted and then abandoned. If nobody volunta
 | 13 | Blind edge selection during **Pushing On** | Phase 5, per blind step | After | Opt-in entirely; steered by the declared sector bias |
 | 14 | Pushback destination for a **stationary** loser | Phase 5 | After | Only reachable by choosing to stand still and fight |
 | 15 | Tie-break coin at the fourth level (§15) | Phase 5 | After | Genuinely symmetric situation by that point |
+| 16 | **Dragnet's** two sealed Borders | Phase 6 | After | Category (POLICE) was known, not which Borders; a Deliver order already aimed at one that gets sealed degrades rather than fails silently (§15.0) |
+| 17 | **Festival's** node | Phase 6 | After | Nothing to avoid — it's a boon (§14.0): whoever's route already ended there gains, no downside for anyone else |
+| 18 | **Scaffolding's** sector | Phase 6 | After | Nothing to avoid — a boon; the step bonus only helps players already in the sector |
+| 19 | **Shipping Boom's** Warehouse | Phase 6 | After | Nothing to avoid — a boon; only pays whoever already picked up there |
+| 20 | **Fence's Windfall's** Black Market | Phase 6 | After | Race to be first arrival once it's announced — a contest, not a certainty (§14.0) |
+| 21 | **Sinkhole's** node | Phase 7 | After | Sector was known; route around it, or accept the risk |
+| 22 | **Riot's** permutation of this round's trail entries | Phase 7 | After | Sector was known; route around it to keep your own traces out of reach |
+| 23 | **Torn Map's** four revealed nodes | Phase 5, immediately before movement | After | Opt-in entirely — buying and using the item is the player's own choice |
 
-**Six of fifteen sources resolve before the player commits.** Of the nine that don't, seven are either opt-in (9, 10, 11, 13, 14) or avoidable by routing (8, 12), leaving the event card draw and the fourth-level tie-break as the only randomness that can reach a player who did nothing to invite it. That's the P2 audit, and it should be re-run against this table any time a new random element is proposed.
+**Six of twenty-three sources resolve before the player commits.** Of the seventeen that don't: six are opt-in (9, 10, 11, 13, 14, 23); four are avoidable by routing around the flagged sector (8, 12, 21, 22); four are boons the Boon Rule (§14.0) already keeps fair — earned by a decision already made, or won as an open contest, never a surprise punishment (17, 18, 19, 20) — leaving the global event card draw, Dragnet's Border seal, and the fourth-level tie-break as the only randomness that can reach a player who did nothing to invite it and stands to gain nothing from it (7, 15, 16). That's the P2 audit, and it should be re-run against this table any time a new random element is proposed.
 
 ### Dice, specifically
 

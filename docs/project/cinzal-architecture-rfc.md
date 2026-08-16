@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r26 · **Companion doc:** `cinzal-gdd.md` **v2.21**
+**Status:** draft for review · **Revision:** r27 · **Companion doc:** `cinzal-gdd.md` **v2.22**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -142,6 +142,12 @@
 > **Changelog r25 → r26** — "Orders never silently fail" read as scoped to Step 0, leaving §9.1's writer-table framework silent on why the Step 0 kinds need no row (D30)
 > - **§9.1 gains one sentence after the writer-table code block**, stating explicitly what had previously only ever lived in `internal/game/event.go`'s code comment: a producer-side event naming only the acting seat and disclosing no other seat's position needs no row, regardless of whether the underlying fact was already knowable at declaration. This now also covers the resolution-time degradation kinds D30 adds for `Deal`, `Pickup`, `Stake Post`'s cap, and the Ledger.
 > - No pipeline or `PlayerView` shape change — this is a documentation gap closing, not a new mechanism. Companion doc moves to GDD v2.21, which states the same generalisation on the game-rules side: §15.0's "never silently fail" promise isn't Step-0-scoped. Full reasoning in [D30](../decisions/D30-contended-action-loss-notification.md).
+>
+> **Changelog r26 → r27** — §6.4's table was never brought up to date with the decision that expanded it (issue #159)
+> - **§6.4's table goes from 16 rows to 35, matching `internal/rules/rng_purpose.go`'s `ConsumptionTable` — the code, not this document, has been the accurate source since #56, #59 and #60 each landed without their own table edit.** [D03](../decisions/D03-rng-consumption-table.md)'s eleven-row change lands in full: the two opaque `deck.event`/`deck.incident` rows are replaced by the four decomposed `.select`/`.order` rows its own Reasoning argued for, and the nine card-target consumers it resolved (Dragnet, Bridge Down, Festival, Scaffolding, Shipping Boom, Fence's Windfall, Sinkhole, plus Riot's row completed by [D04](../decisions/D04-riot-trail-randomization.md)) are added. The nine `gen.*` rows from #59/#60 are added alongside the pre-existing `gen.layout` row, in actual generation-pipeline order (confirmed against `internal/rules/gen/generate.go`'s call sequence, not guessed from issue numbers). A sentence now states rotating borders' absence is deliberate — zero draws, no purpose string, priced at zero by D03 rather than overlooked.
+> - **`market.stock`'s row already carried [D25](../decisions/D25-item-market-resolution-gaps.md)'s odd-round cadence**, fixed by #166 shortly after this issue was filed, **but not its distinct-item draw method**; added.
+> - **The deck-shuffle code sample and prose now name `ShuffleConstrained`'s real two-purpose signature** (`selectPurpose, orderPurpose`), not the single-purpose sketch r2 originally wrote before D03 split the draw.
+> - No behaviour change anywhere in this entry: `ConsumptionTable` was already correct: this brings the document to match it, not the reverse. Companion doc moves to GDD v2.22, which runs the same correction against §21's randomness inventory.
 
 ---
 
@@ -341,20 +347,43 @@ Every consumer must be enumerated, because an unaccounted draw is a replay diver
 |---|---|---|---|
 | Contract offer — tier mix | `contract.offer.tier` | 2 per offering seat, always | Phase 2 — drawn a round ahead (D29) |
 | Contract offer — pool pick | `contract.offer.pick` | 0-3 per offering seat, one per filled slot | Phase 2 — drawn a round ahead (D29) |
-| Market stock | `market.stock` | 3 per market refreshed | Phase 3, odd rounds only 1-15 ([D25](../decisions/D25-item-market-resolution-gaps.md)) — drawn a round ahead (D29) |
+| Market stock | `market.stock` | 3 per market refreshed | Phase 3, odd rounds only 1-15 ([D25](../decisions/D25-item-market-resolution-gaps.md)) — drawn a round ahead (D29); 3 *distinct* items via partial Fisher-Yates, no duplicates (D25) |
 | Confrontation D6 | `confront.d6` | **1 per participant, per confrontation** | Not per confrontation |
 | Tie-break coin | `confront.tiebreak` | 1, only at the fourth level | GDD §15 |
 | **Pushback, stationary loser** | `pushback.hop` | **1 per hop — a second hop if Evasive** | GDD §15; the case r1 missed |
 | Blind edge selection | `pushon.edge` | 1 per blind step | GDD §9.1 |
 | Scavenging | `scavenge.d6` | 1 per **newly** explored node | Zero if the node was already Known |
 | Pressure D6 | `pressure.d6` | 1 per Legend | Phase 7 |
-| **Event deck shuffle** | `deck.event` | **at Setup only** | See below |
-| **Incident deck shuffle** | `deck.incident` | **at Setup only** | See below |
+| **Event deck — category-constrained selection** | `deck.event.select` | **12** (3 per category × 4 categories), 0 under `Suppress.Events` | Setup only. Partial Fisher-Yates per category, candidates in fixed canonical card order, never map iteration ([D03](../decisions/D03-rng-consumption-table.md)); the event deck is never built — not drawn and discarded — under `Config.Suppress.Events` ([D11](../decisions/D11-config-suppression-flags.md)) |
+| **Event deck — final round order** | `deck.event.order` | **11**, 0 under `Suppress.Events` | Setup only. Full Fisher-Yates shuffle of the 12 selected cards (`n − 1` for `n = 12`) — required because §14.2's "4.0 candidates in the final round" property depends on the 12 not being grouped by category (D03); skipped alongside `deck.event.select` under `Config.Suppress.Events` (D11) |
+| **Incident deck — hazard/boon-constrained selection** | `deck.incident.select` | **13** (9 of 11 hazards + 4 of 5 boons), 0 under `Suppress.Incidents` | Setup only. Same partial Fisher-Yates, two pools (D03); the incident deck is never built under `Config.Suppress.Incidents` (D11) |
+| **Incident deck — final round order** | `deck.incident.order` | **12**, 0 under `Suppress.Incidents` | Setup only. Full Fisher-Yates shuffle of the 13 selected cards (`n − 1` for `n = 13`) (D03); skipped alongside `deck.incident.select` (D11) |
 | Unstable sector | `incident.sector` | 1 | Phase 1 — drawn where it is announced |
 | Snatch Job relocation | `incident.relocate` | 1 per affected player | Phase 7 |
 | Crate placement | `crate.node` | 1 | Dead Runner, Spilled Load |
 | **Torn Map item** | `item.tornmap` | **exactly `min(4, hidden)`** | Method mandated below |
-| **Node layout — coordinate assignment** | `gen.layout` | **exactly `n` per sector — total node count over the whole map** | `rules/gen`, Setup only, after node-type assignment (D9), before the event/incident deck shuffles. Method mandated by [D10](../decisions/D10-map-layout.md) below §6.4's Torn Map passage. |
+| **Dragnet — two Borders sealed** | `event.dragnet` | **`min(2, len(candidates))`** | Phase 6 — revealed, not drawn: drawn at `Resolve`'s round-start peek (issue #72), before `validate`, because Deliver's Step 0 legality needs the sealed set the same round. Candidates: all Border nodes, sorted by `NodeID`, partial Fisher-Yates ([D03](../decisions/D03-rng-consumption-table.md)) |
+| **Bridge Down — one edge destroyed** | `event.bridgedown` | **`min(1, len(candidates))`** | Phase 6. Candidates: all edges in the currently navigable graph, sorted by `(min(NodeID), max(NodeID))`, partial Fisher-Yates (D03) |
+| **Festival — one node** | `event.festival` | **1** | Phase 6 — revealed, not drawn: drawn at the same round-start peek (issue #72), before `writeTrail`'s own-entry suppression needs the node. Candidates: all nodes, sorted by `NodeID` (D03) |
+| **Scaffolding — one sector** | `event.scaffolding` | **1** | Phase 6. Candidates: the four sectors, sorted by `SectorID` (D03) |
+| **Shipping Boom — one Warehouse** | `event.shippingboom` | **1** | Phase 6 — revealed, not drawn: drawn at the same round-start peek (issue #72), before `resolveActions`'s Pickup bonus needs the node. Candidates: all Warehouse nodes, sorted by `NodeID` (D03) |
+| **Fence's Windfall — one Black Market** | `event.fenceswindfall` | **1** | Phase 6. Candidates: all Black Market nodes, sorted by `NodeID` (D03) |
+| **Sinkhole — one node in the sector** | `incident.sinkhole` | **1** | Phase 7. Candidates: nodes in the flagged sector, sorted by `NodeID` (D03; pool non-emptiness rests on [D8](../decisions/D08-sector-size-constraint.md)'s 3-node sector floor) |
+| **Riot — trail entries randomized** | `incident.riot` | **exactly `n`, one per eligible entry (`n = 0` in a quiet round)** | Phase 7. Permutes, never invents: candidates are only the round's sight-gated trail entries in the flagged sector — cargo taken, fresh tracks, confrontation, item purchased. Partial Fisher-Yates at `k = n` — Torn Map's selection shape, not the deck's `n − 1` shuffle shape. Full method in [D04](../decisions/D04-riot-trail-randomization.md) |
+| **Sector assignment** | `gen.sectorassign` | **exactly `Nodes-1`, always** | `rules/gen`, Setup only. Full shuffle assigning every node to a sector slot (GDD §6.1 constraint 3, floor lowered to 3 by [D8](../decisions/D08-sector-size-constraint.md)); issue #59 |
+| **Sector spanning tree** | `gen.sectortree` | **`2·size − 3` per sector, summed over the four sectors** | `rules/gen`, Setup only. Per-sector random spanning tree for internal connectivity (GDD §6.1 constraint 3); issue #59 |
+| **Sector adjacency** | `gen.adjacency` | **exactly 5, always** | `rules/gen`, Setup only. Spanning tree over the four sectors, choosing which 3 of the 6 possible pairs carry chokepoints (D8 fixes sector count at four); issue #59 |
+| **Target edge count** | `gen.edgecount` | **exactly 1, always** | `rules/gen`, Setup only. Draws this attempt's target total edge count within the match's `[MinEdges, MaxEdges]` band (GDD §6.1's per-player-count Edges column); issue #59 |
+| **Chokepoint count** | `gen.chokepoint.count` | **exactly 3, one per adjacent sector pair** | `rules/gen`, Setup only. Chokepoint edge count per pair, 3–5 (GDD §6.1 constraint 4); issue #59 |
+| **Chokepoint selection** | `gen.chokepoint.select` | **`candidates − 1` per pair, summed over 3 pairs** | `rules/gen`, Setup only. Full shuffle of each pair's cross-sector candidate edges, walked in degree-preferring order to fill that pair's count; issue #59 |
+| **Fill remaining edges** | `gen.filledge` | **`remaining-candidates − 1`** | `rules/gen`, Setup only. Full shuffle of every remaining valid edge, degree-tiered selection, to reach the attempt's target edge count; issue #59 |
+| **Node type assignment** | `gen.typeassign` | **up to `Nodes` per walk (fewer on a walk that deadlocks early), summed over however many walks a graph attempt needed (bounded)** | `rules/gen`, Setup only. Per-node type choice satisfying [D9](../decisions/D09-node-type-rounding.md)'s counts and GDD §6.1 constraint 6 (no Warehouse adjacent to a Border); a deadlocked walk retries fresh against the same topology, before the caller discards the whole graph attempt; issue #60 |
+| **Starting position selection** | `gen.startselect` | **exactly `Nodes-1`, always** | `rules/gen`, Setup only. Full shuffle of every node to select starting positions ≥4 apart, each within 2 steps of a Warehouse that itself has a Border inside Tier I's contract band (GDD §6.1 constraints 5 and 7, as strengthened by [D24](../decisions/D24-opening-offer-guarantee.md)); issue #60 |
+| **Node layout — coordinate assignment** | `gen.layout` | **exactly `n` per sector — total node count over the whole map** | `rules/gen`, Setup only, after node-type assignment (D9) and starting-position selection, before the event/incident deck shuffles. Method mandated by [D10](../decisions/D10-map-layout.md) below §6.4's Torn Map passage. |
+
+**Rotating borders (D03) is deliberately absent from this table.** §6.3's active-half rotation is a pure function of round number over the sorted Border list — zero draws, no purpose string — so it is not an RNG consumer at all, not an omission. It is the one row D03 considered and priced at zero rather than never considered.
+
+**Map generation's nine `gen.*` rows (issues #59, #60) reuse the identical partial- and full-Fisher-Yates shapes already mandated above and below for Torn Map and Node layout: sort deterministically, shuffle, done.** Nothing here is a new selection method — it is the same §6.3 no-map-iteration discipline, applied nine more times to the graph itself rather than to a card or a hidden-node reveal. `internal/rules/gen/purpose.go` carries the per-consumer candidate-set definitions [D8](../decisions/D08-sector-size-constraint.md), [D9](../decisions/D09-node-type-rounding.md) and [D24](../decisions/D24-opening-offer-guarantee.md) pin down; this table's job is only to make each one a named, indexed row rather than an implementation detail invisible to a replay trace.
 
 **Why the decks are shuffled at setup.** r2 had the event card drawn in Phase 6 and the incident card in Phase 7. That is impossible: GDD §14.1 publishes the event's **category** and the incident's **sector** in the Headline, at Phase 1, before orders are submitted. You cannot reveal metadata about a card you have not selected yet, and selecting it at Phase 1 while claiming to draw it at Phase 6 is the same bug wearing a hat.
 
@@ -362,11 +391,11 @@ Both decks are therefore built and ordered in `initial(seed, cfg)`:
 
 ```go
 // Setup. Consumes a defined, auditable number of indices.
-eventDeck    = shuffleConstrained(allEvents,    3, perCategory)  // 12 of 24
-incidentDeck = shuffleConstrained(allIncidents, 9, 4)            // 13 of 16: 9 hazards, 4 boons
+eventDeck    = ShuffleConstrained(rng, PurposeDeckEventSelect,    PurposeDeckEventOrder,    allEvents,    3, perCategory) // 12 of 24
+incidentDeck = ShuffleConstrained(rng, PurposeDeckIncidentSelect, PurposeDeckIncidentOrder, allIncidents, 9, 4)           // 13 of 16: 9 hazards, 4 boons
 ```
 
-`shuffleConstrained` enforces the GDD §14.2 and §14.3 draw guarantees — exactly 3 per category, exactly 4 boons — which is also the only place those constraints can be enforced, since they are properties of the whole match deck rather than of any single draw.
+`ShuffleConstrained` enforces the GDD §14.2 and §14.3 draw guarantees — exactly 3 per category, exactly 4 boons — which is also the only place those constraints can be enforced, since they are properties of the whole match deck rather than of any single draw. It draws under **two** purpose strings, not one ([D03](../decisions/D03-rng-consumption-table.md)): a `.select` phase, partial Fisher-Yates per category/pool against the fixed candidate order, and a separate `.order` phase, a full Fisher-Yates over the selected cards into final round order. A single opaque purpose spanning both stages would tell a divergent replay that *something* went wrong inside a 23- or 25-draw operation without saying which half — the decomposition exists so a category-quota bug and an ordering bug remain distinguishable from the trace alone, at zero runtime cost.
 
 At runtime, Phase 1 **peeks** at the head of each deck to print the Headline, and Phases 6 and 7 **pop** it. Neither consumes an index. The deck order is derived from the seed, so it does not need storing: refolding reproduces it.
 
