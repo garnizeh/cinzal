@@ -64,15 +64,16 @@ func projectSelf(s MatchState, p Player) game.SelfState {
 	scaffolding := s.NextRound.Scaffolding != nil && *s.NextRound.Scaffolding == s.Graph.Nodes[p.Position].Sector
 
 	return game.SelfState{
-		Balance:   p.Balance,
-		Infamy:    p.Infamy,
-		RP:        p.RP,
-		Position:  p.Position,
-		Cargo:     cargo,
-		Contracts: contractsInHand(p.Contracts),
-		Items:     slices.Clone(p.Items),
-		Posts:     postsHeld(s, p.Posts),
-		Ledger:    slices.Clone(p.Ledger),
+		Balance:      p.Balance,
+		Infamy:       p.Infamy,
+		RP:           p.RP,
+		Position:     p.Position,
+		Cargo:        cargo,
+		Contracts:    contractsInHand(p.Contracts),
+		PendingOffer: offersInHand(p.PendingOffer),
+		Items:        slices.Clone(p.Items),
+		Posts:        postsHeld(s, p.Posts),
+		Ledger:       slices.Clone(p.Ledger),
 		StepModifiers: game.StepModifiers{
 			Flagged:            p.Flagged,
 			EvasiveStepPenalty: p.EvasiveStepPenalty,
