@@ -7,6 +7,23 @@ import (
 	"github.com/garnizeh/cinzal/internal/rules/gen"
 )
 
+// NewMatch is the exported entry point into state = fold(Resolve,
+// initial(seed, cfg), orderLog) (RFC §7.1) — the only way a package outside
+// internal/rules can build a match (#157). It is a thin wrapper over
+// initial, kept unexported and unrenamed below: every doc comment and RFC
+// citation in this package already quotes the fold formula by that name,
+// and #157's own scope treats the exported entry point as the requirement,
+// not a rename.
+//
+// The MatchState it returns is round 0 — Setup's output, nothing resolved
+// yet. Resolve is the only legitimate way to advance it from there: one
+// call per round, in round order, over that round's collected orders
+// (RFC §7.1, §7.4). Nothing else this package exports mutates a MatchState
+// into a later round.
+func NewMatch(seed [32]byte, cfg game.Config, players int) (MatchState, error) {
+	return initial(seed, cfg, players)
+}
+
 // initial is the setup half of state = fold(Resolve, initial(seed, cfg),
 // orderLog) (RFC §7.1): it runs the generator, seats the players, and builds
 // both card decks. Setup runs entirely on one *RNG bound to round 0 — the

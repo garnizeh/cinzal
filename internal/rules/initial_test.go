@@ -187,6 +187,30 @@ func TestInitialDeterministic(t *testing.T) {
 	}
 }
 
+// TestNewMatchDelegatesToInitial is #157's acceptance criterion applied at
+// the unit level: the exported constructor must produce exactly what
+// initial() produces for the same arguments, since it is nothing but a
+// thin wrapper — see the external-package smoke test in
+// newmatch_external_test.go for the "no access to unexported identifiers"
+// half of #157's acceptance.
+func TestNewMatchDelegatesToInitial(t *testing.T) {
+	cfg := game.DefaultConfig()
+	seed := testSeed(54)
+
+	want, err := initial(seed, cfg, 4)
+	if err != nil {
+		t.Fatalf("initial() = %v", err)
+	}
+	got, err := NewMatch(seed, cfg, 4)
+	if err != nil {
+		t.Fatalf("NewMatch() = %v", err)
+	}
+
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("NewMatch() produced a different MatchState than initial() for identical arguments")
+	}
+}
+
 // TestInitialRejectsInvalidPlayerCount asserts initial() surfaces
 // Config.Validate's error rather than panicking or indexing an absent
 // MapByPlayers/PostCapByPlayers entry.
