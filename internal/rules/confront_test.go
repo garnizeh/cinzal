@@ -790,6 +790,67 @@ func TestResolveConfrontationsMeleeLosersDrawPushbackInSeatOrder(t *testing.T) {
 	}
 }
 
+// TestResolveConfrontationsMeleeTwoStationaryEvasiveLosersPushbackHopInSeatOrder
+// is issue #77's own worked case, distinct from the Neutral-losers test
+// above: two *stationary Evasive* losers, 2 pushback.hop draws each (4
+// total), still consumed in seat order. Unlike the Neutral case — where
+// every loser draws the same one hop each, so the total alone pins the
+// ordering claim only indirectly — this asserts genuine order directly, the
+// same reference-replay technique
+// TestAdvanceInterleavesPushOnAndScavengeLazily (movement_test.go) already
+// established for pushon.edge/scavenge.d6: call pushback (confront.go)
+// directly, seat 1 then seat 2, on a fresh RNG of the identical seed/round,
+// and require production's own losers land on the exact same two positions.
+// If resolveOneConfrontation ever drew seat 2's hops before seat 1's, at
+// least one of the four draws would land on a different seq than this
+// reference assumes, and the position comparison below would diverge.
+func TestResolveConfrontationsMeleeTwoStationaryEvasiveLosersPushbackHopInSeatOrder(t *testing.T) {
+	build := func() (MatchState, map[game.SeatID]*seatWalk) {
+		s := confrontTestState(14, 14, 14) // node 14: a hub whose leaves each have a further escape (18/19/20) — a genuine second hop, never boxed in
+		s.Players[0].Infamy = 9
+		return s, confrontWalks(map[game.SeatID][]game.NodeID{0: {14}, 1: {14}, 2: {14}})
+	}
+	cfg := legalTestConfig()
+	seed, round := testSeed(9), 6
+	c := confrontation{Node: 14, Seats: []game.SeatID{0, 1, 2}}
+
+	evasiveOrder := game.Order{Stance: game.StanceOrder{Stance: game.StanceEvasive}}
+	validated := map[game.SeatID]game.Order{
+		0: dominantOrder(), // floor 7 at this non-Alley node; both losers' Evasive ceiling is 5 — always decisive
+		1: evasiveOrder,
+		2: evasiveOrder,
+	}
+
+	refS, refWalks := build()
+	ref := NewRNG(seed, round)
+	// resolveOneConfrontation draws all 3 participants' confront.d6 totals
+	// (seat order) before any pushback.hop — mirror that seq offset here so
+	// the reference's own two pushback draws land where production's do.
+	ref.Next(PurposeConfrontD6, 6)
+	ref.Next(PurposeConfrontD6, 6)
+	ref.Next(PurposeConfrontD6, 6)
+	pushback(&refS, c, 1, true, refWalks, ref)
+	pushback(&refS, c, 2, true, refWalks, ref)
+
+	s, walks := build()
+	r := NewRNG(seed, round)
+	events := resolveConfrontations(&s, []confrontation{c}, validated, walks, cfg, r)
+
+	if got := r.Consumed(PurposeConfrontD6); got != 3 {
+		t.Errorf("confront.d6 consumed = %d, want 3 (one per participant)", got)
+	}
+	if got := r.Consumed(PurposePushbackHop); got != 4 {
+		t.Errorf("pushback.hop consumed = %d, want 4 (2 hops each for 2 stationary Evasive losers)", got)
+	}
+	if s.Players[1].Position != refS.Players[1].Position || s.Players[2].Position != refS.Players[2].Position {
+		t.Errorf("losers' pushback positions = (%d, %d), want (%d, %d) from the seat-ordered reference — pushback.hop was not consumed in seat order",
+			s.Players[1].Position, s.Players[2].Position, refS.Players[1].Position, refS.Players[2].Position)
+	}
+	if len(events) != 2 {
+		t.Fatalf("events = %v, want 2 (one per loser, winner named in each)", events)
+	}
+}
+
 // --- resolveConfrontations: crossing correction ---
 
 // TestResolveConfrontationsCrossingSnapsBothToTheSameNode builds a genuine
