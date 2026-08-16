@@ -92,8 +92,9 @@ func projectSelf(s MatchState, p Player) game.SelfState {
 // "NodeView{Type: \"\"}" leak this representation makes unspellable), a
 // Rumoured node carries no Edges (RFC §9.1: "the client physically cannot
 // plot into it"), and Post/Market only populate from Known/InSight per
-// GDD §7.1's own table. Extends legalView's node loop (validate.go) with
-// the two fields Legal never needs.
+// GDD §7.1's own table. Also legalView's (validate.go) sole source for
+// v.Nodes — the one fog-filtering walk of p.Fog in the package, not two
+// (issue #161).
 func projectNodes(s MatchState, p Player) map[game.NodeID]game.NodeView {
 	var nodes map[game.NodeID]game.NodeView
 	for i, fog := range p.Fog {

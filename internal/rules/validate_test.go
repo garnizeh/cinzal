@@ -384,6 +384,52 @@ func TestLegalViewRetainerBonusRequiresNoCargo(t *testing.T) {
 	}
 }
 
+// TestLegalViewNodesSharesProjectNodes guards issue #161: legalView's
+// v.Nodes must come from the same fog-filtering projectNodes (fog.go) uses,
+// not a second, independently-maintained walk of p.Fog — so a field like
+// Post can never populate under one and stay nil under the other just
+// because a future legality rule started reading it.
+func TestLegalViewNodesSharesProjectNodes(t *testing.T) {
+	s := resolveTestState()
+	s.Graph.Nodes[1].Post = &Post{Owner: 0, RoundsRemaining: 3}
+	// Also staked on the Hidden and Rumoured nodes below, so their negative
+	// assertions prove the fog gate actually strips a real Post rather than
+	// reflecting a field that was already empty (RFC §16.3: hidden facts
+	// must be shown absent, not merely unused).
+	s.Graph.Nodes[3].Post = &Post{Owner: 1, RoundsRemaining: 3}
+	s.Graph.Nodes[4].Post = &Post{Owner: 1, RoundsRemaining: 3}
+	entry := s.Snapshot()
+
+	v := legalView(s, entry, 0, false)
+	want := projectNodes(s, s.Players[0])
+
+	if !reflect.DeepEqual(v.Nodes, want) {
+		t.Errorf("legalView v.Nodes = %+v, want exactly projectNodes(s, p)'s output %+v", v.Nodes, want)
+	}
+	if v.Nodes[1].Post == nil {
+		t.Error("Nodes[1].Post = nil, want populated — legalView must not zero out fields Legal doesn't itself read")
+	}
+
+	// The DeepEqual check above already proves legalView's fog-filtering is
+	// projectNodes's, byte for byte — this makes that guarantee legible here
+	// too, and, since both nodes carry a real Post (staked above), proves
+	// the gate strips it rather than reflecting a field that was already
+	// empty (resolveTestState: node 3 Hidden, node 4 Rumoured).
+	if _, ok := v.Nodes[3]; ok {
+		t.Errorf("Nodes[3] = %+v, want an absent key for a Hidden node", v.Nodes[3])
+	}
+	rumoured, ok := v.Nodes[4]
+	if !ok {
+		t.Fatalf("Nodes[4] missing, want a Rumoured entry")
+	}
+	if rumoured.Edges != nil {
+		t.Errorf("Nodes[4].Edges = %v, want nil — Rumoured carries no topology", rumoured.Edges)
+	}
+	if rumoured.Post != nil {
+		t.Errorf("Nodes[4].Post = %+v, want nil — Post only populates from Known onward", rumoured.Post)
+	}
+}
+
 func hasEvent(events []game.Event, kind game.EventKind, seat game.SeatID) bool {
 	for _, e := range events {
 		if e.Kind == kind && e.Seat == seat {
