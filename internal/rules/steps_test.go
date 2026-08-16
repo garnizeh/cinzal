@@ -85,6 +85,22 @@ func TestStepsEveryTierBase(t *testing.T) {
 	}
 }
 
+// TestStepsPinnedToNobodyUnderSuppressInfamyTiers is D11's consequence for
+// Suppress.InfamyTiers: the tier lookup always returns the Nobody row,
+// regardless of actual Infamy — a Legend-Infamy seat (9) still gets the
+// flat Nobody base (4), not Legend's (2) (issue #158). GDD §11's Gains and
+// Losses table is unmodified by this: only the ladder-derived step base is
+// gated, exactly as ApplyInfamyDelta's own doc already states.
+func TestStepsPinnedToNobodyUnderSuppressInfamyTiers(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Suppress.InfamyTiers = true
+
+	v := selfStateWithInfamy(9, game.StepModifiers{})
+	if got := Steps(v, cfg); got != 4 {
+		t.Fatalf("Steps() at Infamy 9 under Suppress.InfamyTiers = %d, want 4 (flat Nobody base)", got)
+	}
+}
+
 // TestStepsFloorAppliedOnceAndLast checks the floor lands on 1, never lower,
 // even when the modifier sum goes well past -1 — "the floor is applied
 // exactly once, at the end" (GDD §9.1a).

@@ -8,7 +8,17 @@ import "github.com/garnizeh/cinzal/internal/game"
 // that enum reserves 0 as an invalid sentinel (its constants start at 1),
 // while Config.StepsByTier is documented and indexed 0=Nobody..3=Legend —
 // using int(game.TierNobody) here would silently read the wrong array slot.
-func infamyTierIndex(infamy int) int {
+//
+// Under cfg.Suppress.InfamyTiers (D11), this always returns Nobody's index:
+// the single early return that pins every ladder-derived effect — step
+// base, combat bonus, Contact Cooldown — to the Nobody row regardless of
+// the seat's actual Infamy. GDD §11's Gains and Losses table is unmodified
+// by this: Infamy itself keeps accumulating normally, only this lookup is
+// gated.
+func infamyTierIndex(infamy int, cfg game.Config) int {
+	if cfg.Suppress.InfamyTiers {
+		return int(game.TierNobody) - 1
+	}
 	return int(TierOf(infamy)) - 1
 }
 
@@ -24,7 +34,7 @@ func infamyTierIndex(infamy int) int {
 // that discipline is the caller's (see internal/rules/steps_test.go's
 // entry-snapshot case).
 func Steps(v game.PlayerView, cfg game.Config) int {
-	steps := cfg.StepsByTier[infamyTierIndex(v.You.Infamy)]
+	steps := cfg.StepsByTier[infamyTierIndex(v.You.Infamy, cfg)]
 
 	m := v.You.StepModifiers
 	if m.Flagged {

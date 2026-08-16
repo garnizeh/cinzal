@@ -146,7 +146,7 @@ func TestResolveDebtTwoDebtsOneFlagOneStep(t *testing.T) {
 
 	cfg := game.DefaultConfig()
 	got := Steps(selfStateWithInfamy(0, game.StepModifiers{Flagged: flagged}), cfg)
-	if base := cfg.StepsByTier[infamyTierIndex(0)]; got != base-1 {
+	if base := cfg.StepsByTier[infamyTierIndex(0, cfg)]; got != base-1 {
 		t.Fatalf("Steps() with Flagged folded from two debts = %d, want %d (base %d, exactly one step lost, not two)", got, base-1, base)
 	}
 }

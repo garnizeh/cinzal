@@ -279,6 +279,28 @@ func TestLegalRejectsStakeBeyondPostCap(t *testing.T) {
 	wantReason(t, Legal(v, o, cfg), ReasonPostCapExceeded)
 }
 
+// TestLegalRejectsStakePostUnderSuppressLeases is D11's consequence for
+// Suppress.Leases: Stake Post is illegal outright, not merely legal-but-
+// free — rejected before the post cap or any other check runs, exactly as
+// this order would be accepted without the flag (issue #158).
+func TestLegalRejectsStakePostUnderSuppressLeases(t *testing.T) {
+	v := legalTestView()
+	cfg := legalTestConfig()
+	cfg.Suppress.Leases = true
+	o := game.Order{Action: game.ActionOrder{Kind: game.ActionStakePost}}
+	wantReason(t, Legal(v, o, cfg), ReasonLeasesSuppressed)
+}
+
+// TestLegalAcceptsStakePostWithoutSuppressLeases is the negative baseline
+// for the check above.
+func TestLegalAcceptsStakePostWithoutSuppressLeases(t *testing.T) {
+	v := legalTestView()
+	o := game.Order{Action: game.ActionOrder{Kind: game.ActionStakePost}}
+	if err := Legal(v, o, legalTestConfig()); err != nil {
+		t.Fatalf("Legal() = %v, want nil", err)
+	}
+}
+
 // TestLegalRejectsDealAtHandLimit: D14/#52's row — a Deal that would exceed
 // the hand limit of 3 after this order's own Field 4 discards.
 func TestLegalRejectsDealAtHandLimit(t *testing.T) {
@@ -287,6 +309,30 @@ func TestLegalRejectsDealAtHandLimit(t *testing.T) {
 	v.You.Items = []game.ItemID{game.ItemShiv, game.ItemMuscle, game.ItemPoliceBand}
 	o := game.Order{Action: game.ActionOrder{Kind: game.ActionDeal}}
 	wantReason(t, Legal(v, o, legalTestConfig()), ReasonHandLimitExceeded)
+}
+
+// TestLegalRejectsDealUnderSuppressItems is D11's consequence for
+// Suppress.Items: Deal is illegal outright, rejected the same way Stake
+// Post is under Suppress.Leases — before the node-type check that would
+// otherwise accept a Deal at a Black Market (issue #158).
+func TestLegalRejectsDealUnderSuppressItems(t *testing.T) {
+	v := legalTestView()
+	v.Nodes[0] = game.NodeView{Fog: game.FogKnown, Type: game.NodeBlackMarket, Edges: []game.NodeID{1, 4}}
+	cfg := legalTestConfig()
+	cfg.Suppress.Items = true
+	o := game.Order{Action: game.ActionOrder{Kind: game.ActionDeal}}
+	wantReason(t, Legal(v, o, cfg), ReasonItemsSuppressed)
+}
+
+// TestLegalAcceptsDealWithoutSuppressItems is the negative baseline for the
+// check above.
+func TestLegalAcceptsDealWithoutSuppressItems(t *testing.T) {
+	v := legalTestView()
+	v.Nodes[0] = game.NodeView{Fog: game.FogKnown, Type: game.NodeBlackMarket, Edges: []game.NodeID{1, 4}}
+	o := game.Order{Action: game.ActionOrder{Kind: game.ActionDeal}}
+	if err := Legal(v, o, legalTestConfig()); err != nil {
+		t.Fatalf("Legal() = %v, want nil", err)
+	}
 }
 
 // TestLegalRejectsDiscardOfUnheldItem: a discard declared for an item this
