@@ -93,10 +93,18 @@ func TestAnchorParityTableShapeIsSixteenRowsInOrder(t *testing.T) {
 	if len(rfc91Rows) != 16 {
 		t.Fatalf("len(rfc91Rows) = %d, want 16", len(rfc91Rows))
 	}
+	// Rows 1, 7, 8 and 12 are RFC §9.1's own sight-gated set — every other
+	// row must be global. An aggregate 12/4 count alone would still pass if
+	// one row swapped Distribution with another, so each row is checked
+	// against this list individually, not just the totals.
+	sightGatedRows := map[int]bool{1: true, 7: true, 8: true, 12: true}
 	var global, sightGated int
 	for i, r := range rfc91Rows {
 		if r.row != i+1 {
 			t.Errorf("rfc91Rows[%d].row = %d, want %d — rows must be in order with no gap", i, r.row, i+1)
+		}
+		if wantGlobal := !sightGatedRows[r.row]; r.global != wantGlobal {
+			t.Errorf("row %d global = %v, want %v", r.row, r.global, wantGlobal)
 		}
 		if r.global {
 			global++
@@ -180,10 +188,13 @@ func TestAnchorParityGlobalWriterRowsMatchBuildRoundAnchors(t *testing.T) {
 	for _, n := range []int{2, 3, 4, 11, 13, 14, 15, 16} {
 		r := rfc91RowByNumber(t, n)
 		t.Run(fmt.Sprintf("row%d", n), func(t *testing.T) {
-			ev := game.Event{Kind: r.kind, Node: 3, Seat: 1}
+			ev := game.Event{Kind: r.kind, Node: 3, Round: 7, Seat: 1}
 			anchors := buildRoundAnchors([]game.Event{ev}, 7)
 			if len(anchors) != 1 {
 				t.Fatalf("buildRoundAnchors(%v) = %+v, want exactly 1 anchor", r.kind, anchors)
+			}
+			if got := anchors[0]; got.Kind != r.kind || got.Node != 3 || got.Round != 7 {
+				t.Errorf("row %d anchor = %+v, want Kind %v, Node 3, Round 7", n, got, r.kind)
 			}
 			if named := anchors[0].Actor != nil; named != r.named {
 				t.Errorf("row %d anchor named = %v, want %v", n, named, r.named)

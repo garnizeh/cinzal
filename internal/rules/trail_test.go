@@ -580,8 +580,12 @@ func TestWriteTrailDecoyInfamyAndSightMatrix(t *testing.T) {
 				t.Fatalf("watcher's archive has %d Decoy entries at node 2, want 0 — no sight of the declared node", len(found))
 			}
 			if tc.wantPresent {
-				if gotNamed := found[0].Actor != nil; gotNamed != tc.wantNamed {
-					t.Errorf("Decoy entry named = %v, want %v", gotNamed, tc.wantNamed)
+				if tc.wantNamed {
+					if found[0].Actor == nil || *found[0].Actor != 0 {
+						t.Errorf("Decoy entry Actor = %v, want the planter (seat 0)", found[0].Actor)
+					}
+				} else if found[0].Actor != nil {
+					t.Errorf("Decoy entry Actor = %v, want nil (anonymous)", found[0].Actor)
 				}
 			}
 		})

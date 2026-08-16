@@ -30,6 +30,18 @@ func hasAnchor(anchors []game.Anchor, kind game.EventKind, node game.NodeID) boo
 	return false
 }
 
+// hasAnchorKind reports whether anchors contains kind at any node — for an
+// absence assertion that must not pass merely because the leak landed at a
+// different node than the one under test.
+func hasAnchorKind(anchors []game.Anchor, kind game.EventKind) bool {
+	for _, a := range anchors {
+		if a.Kind == kind {
+			return true
+		}
+	}
+	return false
+}
+
 func findAnchor(t *testing.T, anchors []game.Anchor, kind game.EventKind, node game.NodeID) game.Anchor {
 	t.Helper()
 	for _, a := range anchors {
@@ -189,8 +201,8 @@ func TestProjectRow15InformantRingAbsentWithoutAnchor(t *testing.T) {
 	s := trailTestState(5, 0, 3)
 
 	v := Project(s, 1)
-	if hasAnchor(v.Anchors, game.EventInformantRing, 4) {
-		t.Errorf("Anchors = %+v, want no InformantRing anchor", v.Anchors)
+	if hasAnchorKind(v.Anchors, game.EventInformantRing) {
+		t.Errorf("Anchors = %+v, want no InformantRing anchor at any node", v.Anchors)
 	}
 }
 
@@ -209,8 +221,8 @@ func TestProjectRow16SpilledLoadAbsentWithoutAnchor(t *testing.T) {
 	s := trailTestState(5, 0, 3)
 
 	v := Project(s, 0)
-	if hasAnchor(v.Anchors, game.EventSpilledLoadCrate, 4) {
-		t.Errorf("Anchors = %+v, want no SpilledLoadCrate anchor", v.Anchors)
+	if hasAnchorKind(v.Anchors, game.EventSpilledLoadCrate) {
+		t.Errorf("Anchors = %+v, want no SpilledLoadCrate anchor at any node", v.Anchors)
 	}
 }
 
