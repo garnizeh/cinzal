@@ -374,7 +374,7 @@ The seven rows above are every node count currently supported (§6.1's per-playe
 
 **Cut in v1.1: the warehouse supply limit.** v1.0 said each warehouse released only 2 cargo per round. With 6 warehouses, hidden positions, and contracts pointing players at different origins, three players converging on the same warehouse in the same round is close to a never-event. It was a rule that added a line to the reference card and fired approximately zero times per match. Cut. If playtesting shows warehouses genuinely contested, it comes back — but as a **Dockers' Strike** effect, which is where scarcity belongs.
 
-**Node names (D31).** Every node has a display name, disclosed alongside its type and sector from Rumoured onward (§7.1): its sector, its type, and its 1-based rank among nodes of that same type within that sector, e.g. **"Old Docks Warehouse 2"**. Assigned once at map generation, deterministically, from facts already fixed by that point — no randomness, no authored name pool. Full reasoning in [D31](../decisions/D31-node-display-name.md).
+**Node names (D31).** Every node has a display name, disclosed alongside its type and sector from Rumoured onward (§7.1): its sector, its type, and its 1-based rank among nodes of that same type within that sector, ranks assigned by scanning the map's nodes in ascending `NodeID` order — the first node of a given (sector, type) pair encountered that way is rank 1, the next is rank 2, and so on — e.g. **"Old Docks Warehouse 2"**. Assigned once at map generation, deterministically, from facts already fixed by that point — no randomness, no authored name pool. Full reasoning in [D31](../decisions/D31-node-display-name.md).
 
 
 ### 6.3 Two-player rules

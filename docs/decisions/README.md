@@ -63,7 +63,7 @@ Status is `open` until a document exists here.
 
 **On D15.** It arrived in [roadmap §3.2](../project/cinzal-implementation-plan.md) alongside twelve genuine decisions and it is not one of them. RFC §6.5 cites a card called "Blitz" that GDD §14.2 does not contain — the card with that behaviour is **Raid** — and GDD §9.2 still caps Stake Post at 5, which §10.3 replaced with 4/4/4/3. There is no question to answer and no option to weigh: both are wrong sentences, so they produce a pull request against the specs rather than a document here.
 
-The row stays, struck through, because the numbering is cited elsewhere and a silently vanished D15 reads as an oversight. **D3–D14 are the twelve decisions that block M1** — joined since by D23–D29 and D31, surfaced later in M1's own implementation rather than in the original roadmap pass (D30 is still open); see the table below for the complete current list.
+The row stays, struck through, because the numbering is cited elsewhere and a silently vanished D15 reads as an oversight. **D3–D14 are the twelve decisions that block M1** — joined since by D23–D29, surfaced later in M1's own implementation rather than in the original roadmap pass (D30 is still open). D31 surfaced the same way but blocks nothing in M1 itself — its own dependents are a fog test asserting on `NodeView.Name` and M5's map rendering; see the table below for the complete current list.
 
 | # | Question | Status |
 |---|---|---|
