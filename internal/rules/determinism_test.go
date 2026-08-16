@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -50,7 +51,7 @@ var determinismFixtures = []determinismFixture{
 	{players: 5, seed: testSeed(104)},
 }
 
-// runDeterminismScript plays one full 15-round match — seat 0 scripted,
+// recordDeterminismScript plays one full 15-round match — seat 0 scripted,
 // every other seat idle — exactly the shape
 // TestGoldenMatchFinalScoreLandsInGDDBands (golden_test.go, issue #76)
 // already established, generalized to an arbitrary player count and a
@@ -66,13 +67,17 @@ var determinismFixtures = []determinismFixture{
 // (CLAUDE.md: no gratuitous refactors of a working test). This suite's
 // goal — RNG index accounting and byte-identical replay across every
 // player count — genuinely needs its own driver.
-func runDeterminismScript(t *testing.T, seed [32]byte, players int) (final MatchState, log orderLog, cfg game.Config) {
-	t.Helper()
+//
+// It returns a plain error rather than calling t.Fatalf directly, so it can
+// be memoized once per player count (determinismScriptCache, below) and
+// shared across every test that needs the recording, instead of each test
+// independently replaying the identical real match.
+func recordDeterminismScript(seed [32]byte, players int) (final MatchState, log orderLog, cfg game.Config, err error) {
 	cfg = game.DefaultConfig()
 
 	s, err := initial(seed, cfg, players)
 	if err != nil {
-		t.Fatalf("initial() error = %v", err)
+		return MatchState{}, nil, cfg, fmt.Errorf("initial() error = %w", err)
 	}
 	homeSector := s.Graph.Nodes[s.Players[0].Position].Sector
 
@@ -85,7 +90,7 @@ func runDeterminismScript(t *testing.T, seed [32]byte, players int) (final Match
 		}
 	}
 	if !foundBorder {
-		t.Fatalf("seed %x at %d players produced a map with no Border node at all — needs a different seed", seed, players)
+		return MatchState{}, nil, cfg, fmt.Errorf("seed %x at %d players produced a map with no Border node at all — needs a different seed", seed, players)
 	}
 
 	idleOrder := game.Order{
@@ -112,9 +117,19 @@ func runDeterminismScript(t *testing.T, seed [32]byte, players int) (final Match
 
 	log = orderLog{}
 
+	// offerCutoffRoundsBeforeEnd: stop taking new Tier 0 offers once fewer
+	// than this many rounds remain, mirroring golden_test.go's own reasoning
+	// (predictPressureD6's doc comment below repeats it) — a contract still
+	// active at match end costs GDD §16's -2 penalty instead of its RP, so a
+	// fixed "leave 2 rounds of slack" cutoff scales with cfg.Rounds rather
+	// than hardcoding an absolute round number that silently stops meaning
+	// the same thing if cfg.Rounds ever changes.
+	const offerCutoffRoundsBeforeEnd = 2
+	offerCutoffRound := game.RoundNumber(cfg.Rounds - offerCutoffRoundsBeforeEnd)
+
 	for round := game.RoundNumber(1); round <= game.RoundNumber(cfg.Rounds); round++ {
 		var contractChoice *int
-		if round <= 13 && len(s.Players[0].Contracts) < 2 {
+		if round <= offerCutoffRound && len(s.Players[0].Contracts) < 2 {
 			for i, o := range s.Players[0].PendingOffer {
 				if o.Tier == 0 {
 					idx := i
@@ -194,7 +209,7 @@ func runDeterminismScript(t *testing.T, seed [32]byte, players int) (final Match
 
 		next, events, err := Resolve(s, orders, cfg, NewRNG(seed, int(round)))
 		if err != nil {
-			t.Fatalf("round %d: Resolve() error = %v", round, err)
+			return MatchState{}, nil, cfg, fmt.Errorf("round %d: Resolve() error = %w", round, err)
 		}
 		for _, e := range events {
 			if e.Kind == game.EventDeadRunnerCrate || e.Kind == game.EventSpilledLoadCrate {
@@ -205,7 +220,53 @@ func runDeterminismScript(t *testing.T, seed [32]byte, players int) (final Match
 		s = next
 	}
 
-	return s, log, cfg
+	return s, log, cfg, nil
+}
+
+// determinismScriptResult is recordDeterminismScript's memoized output.
+type determinismScriptResult struct {
+	final MatchState
+	log   orderLog
+	cfg   game.Config
+	err   error
+}
+
+// determinismScriptCache memoizes recordDeterminismScript once per player
+// count (sync.OnceValue, so concurrent subtests share a single recording
+// rather than racing to produce their own). The recorded log is an
+// immutable, pure function of (seed, players) — replaying the identical
+// real 15-round match once per fixture and sharing the result across every
+// test that needs it (TestFoldLogIsPureSameLogProducesSameFinalState,
+// TestGoldenFixturesAreByteIdenticalAcrossFiftyInProcessRuns,
+// TestGoldenFixturesFinalStateMatchesCommittedHash,
+// TestPerRoundRNGConsumptionMatchesPredictions) changes nothing any of them
+// assert, since none of them ever mutate what they get back.
+var determinismScriptCache = func() map[int]func() determinismScriptResult {
+	cache := make(map[int]func() determinismScriptResult, len(determinismFixtures))
+	for _, fx := range determinismFixtures {
+		cache[fx.players] = sync.OnceValue(func() determinismScriptResult {
+			final, log, cfg, err := recordDeterminismScript(fx.seed, fx.players)
+			return determinismScriptResult{final: final, log: log, cfg: cfg, err: err}
+		})
+	}
+	return cache
+}()
+
+// runDeterminismScript is the *testing.T-facing entry point every test in
+// this file actually calls: a cached lookup by player count (see
+// determinismScriptCache) that turns a stored recording error into
+// t.Fatalf, so callers never have to check an error themselves.
+func runDeterminismScript(t *testing.T, players int) (final MatchState, log orderLog, cfg game.Config) {
+	t.Helper()
+	get, ok := determinismScriptCache[players]
+	if !ok {
+		t.Fatalf("no determinism fixture registered for %d players", players)
+	}
+	result := get()
+	if result.err != nil {
+		t.Fatalf("recordDeterminismScript(%d players): %v", players, result.err)
+	}
+	return result.final, result.log, result.cfg
 }
 
 // foldLog is state = fold(Resolve, initial(seed, cfg), orderLog) (RFC
@@ -279,7 +340,7 @@ func canonicalEvents(t *testing.T, events []game.Event) string {
 func TestFoldLogIsPureSameLogProducesSameFinalState(t *testing.T) {
 	for _, fx := range determinismFixtures {
 		t.Run(fmt.Sprintf("%dp", fx.players), func(t *testing.T) {
-			_, log, cfg := runDeterminismScript(t, fx.seed, fx.players)
+			_, log, cfg := runDeterminismScript(t, fx.players)
 
 			s1, events1, err1 := foldLog(fx.seed, cfg, fx.players, log)
 			s2, events2, err2 := foldLog(fx.seed, cfg, fx.players, log)
@@ -310,7 +371,7 @@ func TestGoldenFixturesAreByteIdenticalAcrossFiftyInProcessRuns(t *testing.T) {
 	const runs = 50
 	for _, fx := range determinismFixtures {
 		t.Run(fmt.Sprintf("%dp", fx.players), func(t *testing.T) {
-			_, log, cfg := runDeterminismScript(t, fx.seed, fx.players)
+			_, log, cfg := runDeterminismScript(t, fx.players)
 
 			var want string
 			for i := range runs {
@@ -354,7 +415,7 @@ var goldenHashes = map[int]string{
 func TestGoldenFixturesFinalStateMatchesCommittedHash(t *testing.T) {
 	for _, fx := range determinismFixtures {
 		t.Run(fmt.Sprintf("%dp", fx.players), func(t *testing.T) {
-			final, _, cfg := runDeterminismScript(t, fx.seed, fx.players)
+			final, _, cfg := runDeterminismScript(t, fx.players)
 
 			if int(final.Round) != cfg.Rounds {
 				t.Fatalf("final.Round = %d, want %d", final.Round, cfg.Rounds)
@@ -426,36 +487,19 @@ func predictEventBridgeDown(f roundFacts) int {
 	return min(1, len(navigableEdges(f.pre.Graph)))
 }
 
-func predictEventFestival(f roundFacts) int {
-	card, live := eventCardForRound(f)
-	if !live || card != EventFestival {
-		return 0
+// predictOneDrawEventCard returns a predictor for any event card that, per
+// the ConsumptionTable, consumes exactly one draw when it is this round's
+// live card and zero otherwise — Festival, Scaffolding, Shipping Boom, and
+// Fence's Windfall are identical in shape, differing only in which card they
+// watch for.
+func predictOneDrawEventCard(want EventCardID) consumptionPredictor {
+	return func(f roundFacts) int {
+		card, live := eventCardForRound(f)
+		if !live || card != want {
+			return 0
+		}
+		return 1
 	}
-	return 1
-}
-
-func predictEventScaffolding(f roundFacts) int {
-	card, live := eventCardForRound(f)
-	if !live || card != EventScaffolding {
-		return 0
-	}
-	return 1
-}
-
-func predictEventShippingBoom(f roundFacts) int {
-	card, live := eventCardForRound(f)
-	if !live || card != EventShippingBoom {
-		return 0
-	}
-	return 1
-}
-
-func predictEventFencesWindfall(f roundFacts) int {
-	card, live := eventCardForRound(f)
-	if !live || card != EventFencesWindfall {
-		return 0
-	}
-	return 1
 }
 
 // predictIncidentSector mirrors nextUnstableSector's own two guards
@@ -567,10 +611,10 @@ func predictContractOfferTier(f roundFacts) int {
 var consumptionPredictors = map[Purpose]consumptionPredictor{
 	PurposeEventDragnet:        predictEventDragnet,
 	PurposeEventBridgeDown:     predictEventBridgeDown,
-	PurposeEventFestival:       predictEventFestival,
-	PurposeEventScaffolding:    predictEventScaffolding,
-	PurposeEventShippingBoom:   predictEventShippingBoom,
-	PurposeEventFencesWindfall: predictEventFencesWindfall,
+	PurposeEventFestival:       predictOneDrawEventCard(EventFestival),
+	PurposeEventScaffolding:    predictOneDrawEventCard(EventScaffolding),
+	PurposeEventShippingBoom:   predictOneDrawEventCard(EventShippingBoom),
+	PurposeEventFencesWindfall: predictOneDrawEventCard(EventFencesWindfall),
 	PurposeIncidentSector:      predictIncidentSector,
 	PurposeIncidentSinkhole:    predictIncidentSinkhole,
 	PurposeCrateNode:           predictCrateNode,
@@ -669,6 +713,28 @@ func TestConsumptionPredictorsAccountForEveryNonSetupRow(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("found zero non-Setup-only rows in ConsumptionTable — this would make the check above vacuous")
 	}
+
+	// The reverse direction: a predictor or exemption naming a Purpose that
+	// ConsumptionTable no longer lists as a live, non-Setup-only row — the
+	// row was deleted or reclassified Setup-only — would otherwise sit here
+	// stale forever, since the forward loop above only ever walks the table
+	// and would simply stop mentioning it.
+	live := map[Purpose]bool{}
+	for _, row := range ConsumptionTable {
+		if !setupOnly(row) {
+			live[row.Purpose] = true
+		}
+	}
+	for purpose := range consumptionPredictors {
+		if !live[purpose] {
+			t.Errorf("predictor for Purpose %q is stale: the row is gone from ConsumptionTable or is now Setup-only", purpose)
+		}
+	}
+	for purpose := range consumptionExemptions {
+		if !live[purpose] {
+			t.Errorf("exemption for Purpose %q is stale: the row is gone from ConsumptionTable or is now Setup-only", purpose)
+		}
+	}
 }
 
 // TestPerRoundRNGConsumptionMatchesPredictions is #77's own heart: RFC
@@ -677,7 +743,7 @@ func TestConsumptionPredictorsAccountForEveryNonSetupRow(t *testing.T) {
 func TestPerRoundRNGConsumptionMatchesPredictions(t *testing.T) {
 	for _, fx := range determinismFixtures {
 		t.Run(fmt.Sprintf("%dp", fx.players), func(t *testing.T) {
-			_, log, cfg := runDeterminismScript(t, fx.seed, fx.players)
+			_, log, cfg := runDeterminismScript(t, fx.players)
 
 			s, err := initial(fx.seed, cfg, fx.players)
 			if err != nil {
