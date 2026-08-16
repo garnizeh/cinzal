@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.20 (scope-locked for prototype)
+## Game Design Document — v2.21 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -168,6 +168,9 @@
 >
 > **Changelog v2.19 → v2.20** — §7.1 promised every node a disclosed name, and nothing said how a node gets one (D31)
 > - **§6.2 gains one paragraph stating the naming scheme.** A node's name is its sector, its type, and its 1-based rank among same-type nodes in that sector — e.g. "Old Docks Warehouse 2" — assigned once at map generation, deterministically, from facts already fixed by then. No new randomness, no new deck, no new item. Full reasoning, the rejected alternatives (a drawn name from per-district pools; treating the name as a render-only label), and why the deterministic reading is the more literal one given how §2 and §7.1 already refer to nodes in prose, in [D31](../decisions/D31-node-display-name.md).
+>
+> **Changelog v2.20 → v2.21** — "Orders never silently fail" read as scoped to Step 0 only, leaving five resolution-time paths silently doing nothing (D30)
+> - **§15.0's Step 0 paragraph gains a clause: the "never silently fail" promise applies at every resolution step, not only Step 0.** A Deal that loses the market race, a Pickup that loses a dropped crate, a Stake Post that's already at cap, and a Ledger purchase the balance no longer covers all now name the specific reason to the acting player — the same "legal order, world moved" category Step 0 already covers, just discovered one or more steps later. Open Doors is named as the one exception, and stays exactly as [D14](../decisions/D14-five-resolution-gaps.md) §4 already decided it: a pre-declared, conditionally-triggered boon that may never fire at all isn't a failed action. Full reasoning in [D30](../decisions/D30-contended-action-loss-notification.md).
 
 ---
 
@@ -1137,7 +1140,7 @@ The degradation rule only means something once "invalid" is defined. Two categor
 
 Rejection falls back to the absence default rather than to a partial execution, because a malformed payload means the client's state and the server's state disagree, and guessing the player's intent from a broken order is worse than doing nothing.
 
-**Step 0 — Degradation.** This is the other category: the order was legal when submitted and the world moved underneath it. The target node got staked by someone else, a Bridge Down destroyed an edge, funds went to a stake you lost. Here the game **degrades** rather than rejects: the route truncates at the last valid step and the action becomes **Nothing**. The player is notified with the specific reason. Orders never silently fail.
+**Step 0 — Degradation.** This is the other category: the order was legal when submitted and the world moved underneath it. The target node got staked by someone else, a Bridge Down destroyed an edge, funds went to a stake you lost. Here the game **degrades** rather than rejects: the route truncates at the last valid step and the action becomes **Nothing**. The player is notified with the specific reason. Orders never silently fail — this holds at every resolution step where a legal order's target can move before it's resolved, not only here at Step 0: a Deal that loses the market race, a Pickup that loses a dropped crate, and any other action a later step discovers can no longer complete all still name the specific reason to the player who declared them (D30). The one standing exception is a pre-declared, conditionally-triggered boon like Open Doors, whose trigger genuinely may never fire at all — that isn't a failed action, it's an unmet condition (D14 §4).
 
 **Steps 1 to N — Synchronized movement.** Everyone takes their first step; then everyone takes their second; and so on to the longest route on the table. After **each** step:
 
