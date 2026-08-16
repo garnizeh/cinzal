@@ -64,10 +64,22 @@ func initial(seed [32]byte, cfg game.Config, players int) (MatchState, error) {
 		graph.IncidentDeck = buildIncidentDeck(rng)
 	}
 
+	// D29: round 1 has no Resolve(round 0) call for Phase 2/3 to run
+	// inside, so initial() bootstraps them directly here, on the same
+	// Setup rng, before initialUnstableSector's own draw — the same
+	// prepareNextRound every later round's tail-of-Resolve call uses, so
+	// a reader never has to learn a second convention for round 1.
+	// Unconditional in effect: LastOfferRound's zero value means every
+	// seat's Contact Cooldown has already elapsed (offerDue's own
+	// documented short-circuit), and MarketRefreshDue(1, cfg) is
+	// trivially true.
+	boot := MatchState{Graph: graph, Players: seatPlayers(g, graph, cfg, players)}
+	prepareNextRound(&boot, cfg, rng)
+
 	return MatchState{
 		Round:          0,
-		Graph:          graph,
-		Players:        seatPlayers(g, graph, cfg, players),
+		Graph:          boot.Graph,
+		Players:        boot.Players,
 		UnstableSector: initialUnstableSector(rng, cfg),
 	}, nil
 }

@@ -27,6 +27,15 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	entry := next.Snapshot()
 	resetRoundFlags(next.Players)
 
+	// Phase 2's own answer (D29): before validate, so a seat already
+	// standing at a newly-accepted contract's origin can legally Pickup
+	// this same round — applyContractChoices reads orders directly
+	// (raw, not yet validated), applying whatever offer.go's
+	// prepareNextRound staged onto PendingOffer at the tail of the
+	// round that just closed (or, for round 1, at initial()'s own
+	// bootstrap).
+	applyContractChoices(&next, orders, cfg, next.Round)
+
 	// Upkeep step 4's own entry snapshot (D5): s.NextRound as it stood
 	// entering this round, before Phase 6's global event deck draw below
 	// can set a fresh value for the round about to start. upkeep
@@ -89,6 +98,16 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	events = append(events, incident(&next, incCtx, validated, seats, walks, cfg, r)...)
 	events = append(events, pressure(&next, cfg, r)...)
 	events = append(events, upkeep(&next, cfg, entryNextRound)...)
+
+	// Phases 2 and 3 for the round about to begin (D29): staged here,
+	// after upkeep and before RoundAnchors, using next — the fully-
+	// closed state this call is about to return — and the same *RNG
+	// parameter r every other draw in this package already uses. Skipped
+	// entirely once there is no further round to prepare for, mirroring
+	// nextUnstableSector's own guard (incidents.go).
+	if int(next.Round) < cfg.Rounds {
+		prepareNextRound(&next, cfg, r)
+	}
 
 	// RoundAnchors (#75, anchors.go): the round's own global,
 	// unconditional position-writer facts, extracted from the full event
