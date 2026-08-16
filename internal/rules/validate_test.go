@@ -403,6 +403,24 @@ func TestLegalViewNodesSharesProjectNodes(t *testing.T) {
 	if v.Nodes[1].Post == nil {
 		t.Error("Nodes[1].Post = nil, want populated — legalView must not zero out fields Legal doesn't itself read")
 	}
+
+	// The DeepEqual check above already proves legalView's fog-filtering is
+	// projectNodes's, byte for byte — this makes that guarantee legible here
+	// too, without a second implementation to diverge (resolveTestState:
+	// node 3 Hidden, node 4 Rumoured).
+	if _, ok := v.Nodes[3]; ok {
+		t.Errorf("Nodes[3] = %+v, want an absent key for a Hidden node", v.Nodes[3])
+	}
+	rumoured, ok := v.Nodes[4]
+	if !ok {
+		t.Fatalf("Nodes[4] missing, want a Rumoured entry")
+	}
+	if rumoured.Edges != nil {
+		t.Errorf("Nodes[4].Edges = %v, want nil — Rumoured carries no topology", rumoured.Edges)
+	}
+	if rumoured.Post != nil {
+		t.Errorf("Nodes[4].Post = %+v, want nil — Post only populates from Known onward", rumoured.Post)
+	}
 }
 
 func hasEvent(events []game.Event, kind game.EventKind, seat game.SeatID) bool {
