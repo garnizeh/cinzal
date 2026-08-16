@@ -10,23 +10,44 @@ import (
 // first roll, and "every 2 rounds" from there lands on odd rounds — 1, 3,
 // 5, ..., 15 — not even ones.
 func TestMarketRefreshDueOddRoundsOnly(t *testing.T) {
+	cfg := game.Config{Rounds: 15}
 	for round := 1; round <= 15; round++ {
 		want := round%2 == 1
-		if got := MarketRefreshDue(game.RoundNumber(round)); got != want {
+		if got := MarketRefreshDue(game.RoundNumber(round), cfg); got != want {
 			t.Errorf("MarketRefreshDue(%d) = %v, want %v", round, got, want)
 		}
 	}
 }
 
 // TestMarketRefreshDueBoundedToMatchLength confirms the odd-round rule
-// stays inside GDD §4's fixed 15-round match — an out-of-range round (0, or
-// past 15) is never due, even though it would satisfy the bare "odd"
-// arithmetic.
+// stays inside the configured match length — an out-of-range round (0, or
+// past cfg.Rounds) is never due, even though it would satisfy the bare
+// "odd" arithmetic.
 func TestMarketRefreshDueBoundedToMatchLength(t *testing.T) {
+	cfg := game.Config{Rounds: 15}
 	for _, round := range []int{0, -1, 16, 17, 101} {
-		if got := MarketRefreshDue(game.RoundNumber(round)); got {
+		if got := MarketRefreshDue(game.RoundNumber(round), cfg); got {
 			t.Errorf("MarketRefreshDue(%d) = true, want false (outside the 15-round match)", round)
 		}
+	}
+}
+
+// TestMarketRefreshDueFollowsConfigRounds asserts the coupling to
+// cfg.Rounds directly, at a non-15 value: round 15 is due under a 15-round
+// config but not under a shorter one, and the shorter config's own last odd
+// round is still due (D25's odd-round cadence must not be pinned to the
+// literal 15).
+func TestMarketRefreshDueFollowsConfigRounds(t *testing.T) {
+	cfg := game.Config{Rounds: 5}
+
+	if got := MarketRefreshDue(game.RoundNumber(15), cfg); got {
+		t.Errorf("MarketRefreshDue(15, Rounds=5) = true, want false")
+	}
+	if got := MarketRefreshDue(game.RoundNumber(5), cfg); !got {
+		t.Errorf("MarketRefreshDue(5, Rounds=5) = false, want true")
+	}
+	if got := MarketRefreshDue(game.RoundNumber(6), cfg); got {
+		t.Errorf("MarketRefreshDue(6, Rounds=5) = true, want false (even round)")
 	}
 }
 
