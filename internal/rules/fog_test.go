@@ -2,6 +2,7 @@ package rules
 
 import (
 	"encoding/json"
+	"reflect"
 	"slices"
 	"strconv"
 	"strings"
@@ -165,6 +166,51 @@ func TestProjectRow14FenceWindfallAbsentWithoutAnchor(t *testing.T) {
 	v := Project(s, 1)
 	if hasAnchor(v.Anchors, game.EventFenceWindfallAnnounced, 0) {
 		t.Errorf("Anchors = %+v, want no FenceWindfallAnnounced anchor", v.Anchors)
+	}
+}
+
+// TestProjectRow15InformantRingPresentWhenAnchored and its Absent partner
+// are D26's (#142) addition to the writer table, exercised through Project
+// exactly like rows 2-4, 11, 13-14 above — the RoundAnchors path, not yet
+// covered here even though anchors_test.go already covers buildRoundAnchors
+// itself producing this Anchor.
+func TestProjectRow15InformantRingPresentWhenAnchored(t *testing.T) {
+	s := trailTestState(5, 0, 3)
+	s.RoundAnchors = []game.Anchor{{Kind: game.EventInformantRing, Round: 5, Node: 4, Actor: seatPtr(0)}}
+
+	v := Project(s, 1)
+	a := findAnchor(t, v.Anchors, game.EventInformantRing, 4)
+	if a.Actor == nil || *a.Actor != 0 {
+		t.Errorf("InformantRing anchor Actor = %v, want seat 0", a.Actor)
+	}
+}
+
+func TestProjectRow15InformantRingAbsentWithoutAnchor(t *testing.T) {
+	s := trailTestState(5, 0, 3)
+
+	v := Project(s, 1)
+	if hasAnchor(v.Anchors, game.EventInformantRing, 4) {
+		t.Errorf("Anchors = %+v, want no InformantRing anchor", v.Anchors)
+	}
+}
+
+func TestProjectRow16SpilledLoadPresentWhenAnchored(t *testing.T) {
+	s := trailTestState(5, 0, 3)
+	s.RoundAnchors = []game.Anchor{{Kind: game.EventSpilledLoadCrate, Round: 5, Node: 4}}
+
+	v := Project(s, 0)
+	a := findAnchor(t, v.Anchors, game.EventSpilledLoadCrate, 4)
+	if a.Actor != nil {
+		t.Errorf("SpilledLoadCrate anchor Actor = %v, want nil (node only)", a.Actor)
+	}
+}
+
+func TestProjectRow16SpilledLoadAbsentWithoutAnchor(t *testing.T) {
+	s := trailTestState(5, 0, 3)
+
+	v := Project(s, 0)
+	if hasAnchor(v.Anchors, game.EventSpilledLoadCrate, 4) {
+		t.Errorf("Anchors = %+v, want no SpilledLoadCrate anchor", v.Anchors)
 	}
 }
 
@@ -697,6 +743,180 @@ func TestProjectSerialisationOmitsHiddenNodeID(t *testing.T) {
 	}
 	if _, ok := v.Nodes[4]; ok {
 		t.Fatalf("test setup error: node 4 should be Hidden")
+	}
+}
+
+// TestProjectSerialisationRumouredNodeHasNoEdgeBytes is #78's own "Rumoured-
+// node edge nilness, asserted through serialisation as well as structurally"
+// criterion — TestProjectNodesHiddenAbsentRumouredNoEdges above only checks
+// the Go-level nil slice; a leak through a second, aliased field or a
+// custom MarshalJSON would pass that check and still ship edges on the
+// wire. game.NodeView has no json struct tags anywhere in internal/game, so
+// encoding/json's default behaviour applies: a nil slice marshals as the
+// literal `null`, never an omitted key or an empty array — this asserts
+// that literal.
+func TestProjectSerialisationRumouredNodeHasNoEdgeBytes(t *testing.T) {
+	s := trailTestState(5, 0, 3)
+	fogTestSight(&s, 0, game.FogRumoured, 1)
+
+	v := Project(s, 0)
+	rumoured, ok := v.Nodes[1]
+	if !ok || rumoured.Edges != nil {
+		t.Fatalf("test setup error: node 1 should be a Rumoured, edge-nil node")
+	}
+
+	b, err := json.Marshal(rumoured)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	if !strings.Contains(string(b), `"Edges":null`) {
+		t.Errorf("serialised Rumoured NodeView = %s, want an explicit \"Edges\":null, never a populated array", b)
+	}
+}
+
+// --- NodeStats rate correctness (RFC §9.1, §16.1's Archive layer row) ---
+
+// TestProjectNodeStatsTrafficRate is RFC §16.1's Archive row verbatim: "a
+// node watched 6 rounds with traffic in 4 reports 4/6."
+func TestProjectNodeStatsTrafficRate(t *testing.T) {
+	s := trailTestState(6, 0, 3)
+	sight := game.RoundSet(0)
+	for r := game.RoundNumber(1); r <= 6; r++ {
+		sight = sight.With(r)
+	}
+	var trail []game.StampedTrailEntry
+	for _, r := range []game.RoundNumber{1, 2, 4, 6} {
+		trail = append(trail, stampedTrail(r, game.EventFreshTracks, 3, nil))
+	}
+	s.Players[0].Archive.Sight = map[game.NodeID]game.RoundSet{3: sight}
+	s.Players[0].Archive.Trail = trail
+
+	v := Project(s, 0)
+	stats, ok := v.NodeStats[3]
+	if !ok {
+		t.Fatalf("NodeStats[3] missing, want a derived entry")
+	}
+	if stats.ObservedRounds != 6 {
+		t.Errorf("ObservedRounds = %d, want 6", stats.ObservedRounds)
+	}
+	if stats.TrafficRounds != 4 {
+		t.Errorf("TrafficRounds = %d, want 4", stats.TrafficRounds)
+	}
+}
+
+// TestProjectNodeStatsZeroTrafficNotAbsent is RFC §16.1's Archive row
+// verbatim: "a node watched with no traffic reports 0/N, not absence" — the
+// distinction RFC §9.2 calls "easy to miss," since a trail-only
+// implementation would leave this node out of the map entirely rather than
+// reporting an honest zero.
+func TestProjectNodeStatsZeroTrafficNotAbsent(t *testing.T) {
+	s := trailTestState(6, 0, 3)
+	sight := game.RoundSet(0)
+	for r := game.RoundNumber(1); r <= 6; r++ {
+		sight = sight.With(r)
+	}
+	s.Players[0].Archive.Sight = map[game.NodeID]game.RoundSet{3: sight}
+	s.Players[0].Archive.Trail = nil
+
+	v := Project(s, 0)
+	stats, ok := v.NodeStats[3]
+	if !ok {
+		t.Fatalf("NodeStats[3] missing, want a present 0/6 entry, not absence")
+	}
+	if stats.ObservedRounds != 6 || stats.TrafficRounds != 0 {
+		t.Errorf("NodeStats[3] = %+v, want ObservedRounds 6, TrafficRounds 0", stats)
+	}
+}
+
+// TestProjectNodeStatsObscuredExcludedFromDenominator is D13's rate
+// consequence, reached through Project: an Obscured round is excluded from
+// ObservedRounds entirely, not counted as a zero-traffic observation
+// (RFC §9.2's own distinction between the two).
+func TestProjectNodeStatsObscuredExcludedFromDenominator(t *testing.T) {
+	s := trailTestState(6, 0, 3)
+	sight := game.RoundSet(0).With(1).With(2).With(3)
+	obscured := game.RoundSet(0).With(4).With(5)
+	s.Players[0].Archive.Sight = map[game.NodeID]game.RoundSet{3: sight}
+	s.Players[0].Archive.Obscured = map[game.NodeID]game.RoundSet{3: obscured}
+	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(1, game.EventFreshTracks, 3, nil)}
+
+	v := Project(s, 0)
+	stats, ok := v.NodeStats[3]
+	if !ok {
+		t.Fatalf("NodeStats[3] missing")
+	}
+	if stats.ObservedRounds != 3 {
+		t.Errorf("ObservedRounds = %d, want 3 — the 2 Obscured rounds must not inflate the denominator", stats.ObservedRounds)
+	}
+	if stats.TrafficRounds != 1 {
+		t.Errorf("TrafficRounds = %d, want 1", stats.TrafficRounds)
+	}
+	if stats.ObscuredRounds != 2 {
+		t.Errorf("ObscuredRounds = %d, want 2, reported rather than folded into ObservedRounds", stats.ObscuredRounds)
+	}
+}
+
+// --- Every PlayerView field has a negative assertion (#78, #55's own
+// per-field attribution comment as the checklist) ---
+
+// negativelyAssertedPlayerViewFields enumerates every field the type
+// declares in game/view.go, each mapped to the test(s) that assert its
+// hidden-fact half — present when it should be, absent when it should not.
+// TestEveryPlayerViewFieldHasNegativeAssertion below fails the build the
+// moment a field is added to PlayerView without a matching entry here,
+// which is the review-visibility #78 asks for: a silent, un-attributed new
+// field is exactly how a fog leak like this one would first appear.
+var negativelyAssertedPlayerViewFields = map[string]string{
+	"Round":     "trivial — carries no hidden fact of its own",
+	"You":       "TestProjectPendingOfferNilWhenNoOfferPending, TestProjectDoesNotAliasMatchState",
+	"Nodes":     "TestProjectNodesHiddenAbsentRumouredNoEdges, TestProjectSerialisationOmitsHiddenNodeID, TestProjectSerialisationRumouredNodeHasNoEdgeBytes",
+	"Others":    "TestProjectKnownTierPickupNamesWithoutRevealingPosition (OpponentView carries no Position field at all)",
+	"Trail":     "TestProjectRow1CargoTakenAbsentFromPriorRound, TestProjectRow7ConfrontationAbsentFromPriorRound, TestProjectRow8ItemPurchasedAbsentFromPriorRound, TestProjectRow12DecoyUnnamedBelowInfamyThree",
+	"Anchors":   "TestProjectRow2DeliveryAbsentWithoutAnchor, TestProjectRow3PostStakedAbsentWithoutAnchor, TestProjectRow4LeaseExpiredAbsentWithoutAnchor, TestProjectRow5LoiteringAbsentBelowThreeRounds, TestProjectRow6LooseCrateHeldAbsentBelowTwoRounds, TestProjectRow9FearedAbsentAtInfamyFive, TestProjectRow10LegendAbsentAtInfamyEight, TestProjectRow11InformantsAbsentWithoutAnchor, TestProjectRow13DeadRunnerCrateAbsentWithoutAnchor, TestProjectRow14FenceWindfallAbsentWithoutAnchor, TestProjectRow15InformantRingAbsentWithoutAnchor, TestProjectRow16SpilledLoadAbsentWithoutAnchor",
+	"Headline":  "TestProjectHeadlineActiveBordersNilAboveTwoPlayers, TestProjectHeadlineSilentUnderSuppressIncidents, TestProjectHeadlineSilentUnderSuppressEvents",
+	"Deck":      "trivial — the deck's remaining composition, not a hidden fact",
+	"Archive":   "TestProjectArchiveIsolatedPerSeat, TestProjectArchiveByteLevelIsolation",
+	"NodeStats": "TestProjectArchiveIsolatedPerSeat, TestProjectNodeStatsZeroTrafficNotAbsent",
+}
+
+func TestEveryPlayerViewFieldHasNegativeAssertion(t *testing.T) {
+	typ := reflect.TypeFor[game.PlayerView]()
+	for f := range typ.Fields() {
+		if _, ok := negativelyAssertedPlayerViewFields[f.Name]; !ok {
+			t.Errorf("PlayerView.%s has no entry in negativelyAssertedPlayerViewFields — a new field must cite the test(s) that cover its negative case, or a reason none is needed", f.Name)
+		}
+	}
+	for name := range negativelyAssertedPlayerViewFields {
+		if _, ok := typ.FieldByName(name); !ok {
+			t.Errorf("negativelyAssertedPlayerViewFields cites %q, which is no longer a field on PlayerView — remove the stale entry", name)
+		}
+	}
+}
+
+// --- Archive isolation, byte-level ---
+
+// TestProjectArchiveByteLevelIsolation is #78's "byte-level, for hidden
+// nodes and for another seat's archive" criterion, by the same method
+// TestProjectSerialisationOmitsHiddenNodeID uses for a hidden node: a
+// distinctive marker planted only in seat 0's archive must not appear
+// anywhere in seat 1's serialised view, structural equality checks aside.
+func TestProjectArchiveByteLevelIsolation(t *testing.T) {
+	s := trailTestState(6, 0, 3)
+	marker := game.ItemID(231) // distinctive; unlikely to collide with any other field's value in this fixture
+	s.Players[0].Archive.Trail = []game.StampedTrailEntry{
+		{TrailEntry: game.TrailEntry{Kind: game.EventItemPurchased, Node: 0, Actor: seatPtr(0), Item: &marker}, Round: 6},
+	}
+	s.Players[0].Archive.Sight = map[game.NodeID]game.RoundSet{0: game.RoundSet(0).With(6)}
+	s.Players[1].Archive.Trail = nil
+	s.Players[1].Archive.Sight = nil
+
+	v := Project(s, 1)
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatalf("Marshal failed: %v", err)
+	}
+	if strings.Contains(string(b), strconv.Itoa(int(marker))) {
+		t.Errorf("seat 1's serialised view contains seat 0's archive marker: %s", b)
 	}
 }
 
