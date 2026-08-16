@@ -6,8 +6,8 @@ import (
 	"github.com/garnizeh/cinzal/internal/game"
 )
 
-// MarketRefreshDue reports whether round is one of GDD §12/RFC §6.4's Phase
-// 3 market-refresh rounds — the odd rounds 1, 3, 5, ..., cfg.Rounds (D25).
+// MarketRefreshDue reports whether round is one of GDD §12/RFC §6.4's Phase 3
+// market-refresh rounds — the odd rounds 1, 3, 5, ..., cfg.Rounds (D25).
 // Round 1's own Phase 3 is the only mechanism that populates a market's
 // first stock: Setup does not (GDD §4 lists only map generation, starting
 // positions, and the opening contract offer), and RFC §6.4's consumption
