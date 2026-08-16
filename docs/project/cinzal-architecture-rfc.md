@@ -140,7 +140,7 @@
 > - Companion doc moves to GDD v2.19, which independently corrects the Black Market's stale refresh cadence and three more item/market rulings (D25). No further RFC text change results: §6.4's `market.stock` row already states the odd-round cadence and distinct-draw method D25 settled.
 >
 > **Changelog r25 → r26** — "Orders never silently fail" read as scoped to Step 0, leaving §9.1's writer-table framework silent on why the Step 0 kinds need no row (D30)
-> - **§9.1 gains one sentence after the writer-table code block**, stating explicitly what had previously only ever lived in `internal/game/event.go`'s code comment: a producer-side event naming only the acting seat, about a fact already known to them at declaration, discloses no other seat's position and needs no row. This now also covers the resolution-time degradation kinds D30 adds for `Deal`, `Pickup`, `Stake Post`'s cap, and the Ledger.
+> - **§9.1 gains one sentence after the writer-table code block**, stating explicitly what had previously only ever lived in `internal/game/event.go`'s code comment: a producer-side event naming only the acting seat and disclosing no other seat's position needs no row, regardless of whether the underlying fact was already knowable at declaration. This now also covers the resolution-time degradation kinds D30 adds for `Deal`, `Pickup`, `Stake Post`'s cap, and the Ledger.
 > - No pipeline or `PlayerView` shape change — this is a documentation gap closing, not a new mechanism. Companion doc moves to GDD v2.21, which states the same generalisation on the game-rules side: §15.0's "never silently fail" promise isn't Step-0-scoped. Full reasoning in [D30](../decisions/D30-contended-action-loss-notification.md).
 
 ---
@@ -897,7 +897,7 @@ func writeAnchors(v *PlayerView, s State, seat SeatID) {
 
 One function, sixteen cases, one test per case. The fog suite (§16.3) asserts both directions for each: present when it should be, absent when it should not.
 
-**Not every `Event` needs a row here.** A producer-side event that names only the acting seat, about a fact they already knew when they declared the order — Step 0's degradation kinds, and the resolution-time kinds [D30](../decisions/D30-contended-action-loss-notification.md) adds alongside them — discloses no other seat's position, so it carries no fog question and needs no writer-table row at all. It is scoped entirely to the acting seat's own view, never written into `Trail` or `Anchors`, the two surfaces this table governs.
+**Not every `Event` needs a row here.** A producer-side event that names only the acting seat and discloses no other seat's position — Step 0's degradation kinds, and the resolution-time kinds [D30](../decisions/D30-contended-action-loss-notification.md) adds alongside them — needs no writer-table row at all, whether or not the underlying fact was already knowable when the order was declared. It is scoped entirely to the acting seat's own view, never written into `Trail` or `Anchors`, the two surfaces this table governs.
 
 ### 9.2 The observation archive
 
