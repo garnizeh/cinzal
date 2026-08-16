@@ -629,6 +629,37 @@ func TestProjectNodesHiddenAbsentRumouredNoEdges(t *testing.T) {
 	}
 }
 
+// --- SelfState.PendingOffer (GDD §8.1-8.2, D29, issue #164) ---
+
+func TestProjectPendingOfferExactAndComplete(t *testing.T) {
+	s := trailTestState(5, 0, 3)
+	s.Players[0].PendingOffer = []ContractOffer{
+		{Origin: 0, Destination: 2, Tier: 1},
+		{Origin: 1, Destination: 3, Tier: 2},
+	}
+
+	v := Project(s, 0)
+
+	want := []game.ContractOffer{
+		{Origin: 0, Destination: 2, Tier: 1},
+		{Origin: 1, Destination: 3, Tier: 2},
+	}
+	if !slices.Equal(v.You.PendingOffer, want) {
+		t.Errorf("You.PendingOffer = %+v, want %+v", v.You.PendingOffer, want)
+	}
+}
+
+func TestProjectPendingOfferNilWhenNoOfferPending(t *testing.T) {
+	s := trailTestState(5, 0, 3)
+	s.Players[0].PendingOffer = nil
+
+	v := Project(s, 0)
+
+	if v.You.PendingOffer != nil {
+		t.Errorf("You.PendingOffer = %+v, want nil — no offer pending", v.You.PendingOffer)
+	}
+}
+
 // --- SeatArchive isolation ---
 
 func TestProjectArchiveIsolatedPerSeat(t *testing.T) {
@@ -675,6 +706,7 @@ func TestProjectDoesNotAliasMatchState(t *testing.T) {
 	s := trailTestState(5, 0, 3)
 	fogTestSight(&s, 0, game.FogKnown, 1)
 	s.Players[0].Items = []game.ItemID{1, 2}
+	s.Players[0].PendingOffer = []ContractOffer{{Origin: 0, Destination: 2, Tier: 1}}
 	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, seatPtr(0))}
 	before, err := json.Marshal(s)
 	if err != nil {
@@ -685,6 +717,7 @@ func TestProjectDoesNotAliasMatchState(t *testing.T) {
 
 	// Mutate everything the view exposes a handle into.
 	v.You.Items[0] = 99
+	v.You.PendingOffer[0].Tier = 99
 	if n, ok := v.Nodes[1]; ok && len(n.Edges) > 0 {
 		n.Edges[0] = 99
 	}

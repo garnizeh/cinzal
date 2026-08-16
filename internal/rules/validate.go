@@ -370,3 +370,23 @@ func contractsInHand(contracts []Contract) []game.ContractInHand {
 	}
 	return hand
 }
+
+// offersInHand converts rules.ContractOffer (the as-yet-unanswered Phase 2
+// offer) to game.ContractOffer (the fog-facing shape) — mirrors
+// contractsInHand's translation above, a plain field copy, since
+// ContractOffer carries nothing MatchState needs to hide from its own
+// owning seat.
+func offersInHand(offers []ContractOffer) []game.ContractOffer {
+	if offers == nil {
+		return nil
+	}
+	hand := make([]game.ContractOffer, len(offers))
+	for i, o := range offers {
+		hand[i] = game.ContractOffer{
+			Origin:      o.Origin,
+			Destination: o.Destination,
+			Tier:        o.Tier,
+		}
+	}
+	return hand
+}

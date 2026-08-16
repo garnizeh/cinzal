@@ -77,6 +77,13 @@ type SelfState struct {
 	// (GDD §5, §8.1, §8.4).
 	Contracts []ContractInHand
 
+	// PendingOffer is this seat's delivered-but-unanswered Phase 2 offer
+	// (GDD §8.1-8.2, D29), nil when none is pending. Order.ContractChoice
+	// indexes into this slice to accept one, or leaves it nil to decline —
+	// this field never appears on OpponentView, so an opponent's offer is
+	// never disclosed.
+	PendingOffer []ContractOffer
+
 	// Items is the item hand, up to 3, hidden from every other seat (GDD
 	// §12).
 	Items []ItemID
@@ -197,6 +204,21 @@ type ContractInHand struct {
 	// never on the cargo or the seat, so two seats racing for the same
 	// dropped crate never share or inherit it (GDD §8.4).
 	DeadlinePauseUsed bool
+}
+
+// ContractOffer is one contract this seat has been offered but not yet
+// accepted or declined (GDD §8.1-8.2, D29). Unlike ContractInHand, it has
+// no ID, ExpiresRound, or DeadlinePauseUsed — none of those exist until
+// AcceptOffer mints a real Contract instance.
+type ContractOffer struct {
+	// Origin is the Warehouse to pick up from (GDD §8.1).
+	Origin NodeID
+
+	// Destination is the Border to deliver to (GDD §8.1).
+	Destination NodeID
+
+	// Tier is 0-3, indexing Config.Contracts (GDD §8.3).
+	Tier int
 }
 
 // Post is one node a seat holds a lease on, public regardless of fog (GDD
