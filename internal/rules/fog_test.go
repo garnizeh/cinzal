@@ -213,6 +213,77 @@ func TestProjectHeadlineActiveBordersNilAboveTwoPlayers(t *testing.T) {
 	}
 }
 
+// --- Headline.Sector / Headline.Category under D11's Suppress.Incidents
+// and Suppress.Events (issue #158) ---
+
+// TestProjectHeadlineSectorAndCategoryPopulatedWithoutSuppression is the
+// positive baseline the two suppressed tests below are a negation of: it
+// confirms initial() and Project actually produce a live Headline in the
+// ordinary, unsuppressed case, so "always nil" under suppression is a real
+// behaviour change and not merely projectHeadline never firing at all.
+func TestProjectHeadlineSectorAndCategoryPopulatedWithoutSuppression(t *testing.T) {
+	cfg := game.DefaultConfig()
+	s, err := initial(testSeed(72), cfg, 4)
+	if err != nil {
+		t.Fatalf("initial() = %v", err)
+	}
+
+	s.Round = 2 // Headline announces round 3's Unstable Sector.
+	if v := Project(s, 0); v.Headline.Sector == nil {
+		t.Fatal("Headline.Sector = nil, want non-nil (round 3's draw, announced at round 2)")
+	}
+
+	s.Round = 3 // Headline announces round 4's event category.
+	if v := Project(s, 0); v.Headline.Category == nil {
+		t.Fatal("Headline.Category = nil, want non-nil (round 4's card, announced at round 3)")
+	}
+}
+
+// TestProjectHeadlineSilentUnderSuppressIncidents is D11's consequence for
+// Suppress.Incidents, checked end-to-end through Project: with initial()'s
+// round-3 draw skipped, s.UnstableSector stays nil for the whole match, so
+// projectHeadline's existing "s.UnstableSector != nil" early-out —
+// unmodified by this PR — correctly keeps the Headline's Unstable Sector
+// line silent in every round, not merely before round 3.
+func TestProjectHeadlineSilentUnderSuppressIncidents(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Suppress.Incidents = true
+	s, err := initial(testSeed(70), cfg, 4)
+	if err != nil {
+		t.Fatalf("initial() = %v", err)
+	}
+
+	for round := 0; round <= cfg.Rounds; round++ {
+		s.Round = game.RoundNumber(round)
+		v := Project(s, 0)
+		if v.Headline.Sector != nil {
+			t.Errorf("round %d: Headline.Sector = %v, want nil under Suppress.Incidents", round, *v.Headline.Sector)
+		}
+	}
+}
+
+// TestProjectHeadlineSilentUnderSuppressEvents is the same shape for
+// Suppress.Events: with buildEventDeck skipped, s.Graph.EventDeck stays
+// nil, so projectHeadline's existing eventCardThisRound peek — unmodified
+// by this PR — reports live=false in every round, keeping the Headline's
+// event-category line silent throughout rounds 4-15 too.
+func TestProjectHeadlineSilentUnderSuppressEvents(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Suppress.Events = true
+	s, err := initial(testSeed(71), cfg, 4)
+	if err != nil {
+		t.Fatalf("initial() = %v", err)
+	}
+
+	for round := 0; round <= cfg.Rounds; round++ {
+		s.Round = game.RoundNumber(round)
+		v := Project(s, 0)
+		if v.Headline.Category != nil {
+			t.Errorf("round %d: Headline.Category = %v, want nil under Suppress.Events", round, *v.Headline.Category)
+		}
+	}
+}
+
 func TestProjectRoundAnchorsIdenticalAcrossEverySeat(t *testing.T) {
 	s := trailTestState(5, 0, 3)
 	s.RoundAnchors = []game.Anchor{{Kind: game.EventDelivered, Round: 5, Node: 3, Actor: seatPtr(0), Tier: 1}}
