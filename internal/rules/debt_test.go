@@ -214,3 +214,32 @@ func TestCreditBandForBoundaries(t *testing.T) {
 		}
 	}
 }
+
+// TestResolveDebtTiedLeasesSurrenderTheSameOneAcross100RunsAndARebuiltState
+// is issue #77's own ordering-stability case: "two leases with identical
+// rounds remaining surrender the same one across 100 runs and on a rebuilt
+// state." SelectLeaseByFewestRounds (selection.go) is provably
+// order-independent by inspection — it only ever replaces best with a
+// strictly better candidate — but that guarantee is worth a runtime
+// regression detector, not just a reading of the code: debtFixture builds
+// its posts argument from a Go map (map[game.NodeID]int), and Go
+// deliberately randomises map iteration order per range (RFC §6.3's own
+// named hazard), so calling debtFixture fresh on every one of the 100
+// iterations below — "on a rebuilt state," not a single fixture reused —
+// genuinely exercises a different underlying posts slice order each time.
+// A comparator ever weakened from strict '<' to '<=' (which would let a
+// later-seen tied post overwrite an earlier one) is exactly the class of
+// bug this would catch: nodes 2 and 5 are tied at 1 round remaining, and
+// only node 2 — the lower NodeID — must ever be reported, regardless of
+// which of the two the map happened to yield first.
+func TestResolveDebtTiedLeasesSurrenderTheSameOneAcross100RunsAndARebuiltState(t *testing.T) {
+	const runs = 100
+	for i := range runs {
+		s := debtFixture(0, map[game.NodeID]int{2: 1, 5: 1, 7: 9})
+		got := ResolveDebt(s, 0, 10)
+
+		if !got.Surrendered || got.SurrenderedPost != 2 {
+			t.Fatalf("run %d: SurrenderedPost = (%d, %v), want (2, true) — node 2 has the lowest NodeID among the two tied at 1 round remaining", i, got.SurrenderedPost, got.Surrendered)
+		}
+	}
+}
