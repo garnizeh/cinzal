@@ -48,8 +48,21 @@ func initial(seed [32]byte, cfg game.Config, players int) (MatchState, error) {
 	}
 
 	graph := newGraph(g)
-	graph.EventDeck = buildEventDeck(rng)
-	graph.IncidentDeck = buildIncidentDeck(rng)
+
+	// D11: under Suppress.Events / Suppress.Incidents, the corresponding
+	// deck is never built at all — zero draws, not a drawn-and-discarded
+	// deck (D3's RNG consumption table, ConsumptionTable in
+	// rng_purpose.go, documents this per row). Everything downstream
+	// (eventCardThisRound, incidentCardThisRound, projectHeadline)
+	// already treats a nil deck as "nothing this round, ever" — the guard
+	// belongs here, at the one place the deck is created, not sprinkled
+	// through the rest of the package.
+	if !cfg.Suppress.Events {
+		graph.EventDeck = buildEventDeck(rng)
+	}
+	if !cfg.Suppress.Incidents {
+		graph.IncidentDeck = buildIncidentDeck(rng)
+	}
 
 	return MatchState{
 		Round:          0,
@@ -68,8 +81,17 @@ func initial(seed [32]byte, cfg game.Config, players int) (MatchState, error) {
 // round 3 at all (cfg.Rounds < 3) — Config.Validate already permits a
 // shorter match for scenario configs (GDD §19.1), and incident() (issue
 // #73, incidents.go) never fires without a live sector to check against.
+//
+// nil under Suppress.Incidents (D11) too, checked before the draw so it
+// costs zero indices rather than a drawn-then-ignored one — the same
+// subsystem as the two deck skips above, and the sector this would produce
+// is what feeds projectHeadline's Unstable Sector line (fog.go), so
+// suppressing the draw is what keeps that line silent for the rest of the
+// match: buildIncidentContext (incidents.go) treats a nil
+// s.UnstableSector as "nothing live," permanently, since incident() never
+// runs to advance it without a live context.
 func initialUnstableSector(rng *RNG, cfg game.Config) *game.Sector {
-	if cfg.Rounds < 3 {
+	if cfg.Suppress.Incidents || cfg.Rounds < 3 {
 		return nil
 	}
 	sector := PartialFisherYates(rng, PurposeIncidentSector, slices.Clone(allSectors), 1)[0]

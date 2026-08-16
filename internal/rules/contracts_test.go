@@ -202,6 +202,21 @@ func TestGenerateOfferEmptyPoolHoldsWithoutRestartingCooldown(t *testing.T) {
 	}
 }
 
+// TestRoundsToNextOfferUsesNobodyCooldownUnderSuppressInfamyTiers is D11's
+// consequence for Suppress.InfamyTiers: Contact Cooldown is pinned to the
+// Nobody row regardless of actual Infamy — a Legend-Infamy seat (9) still
+// waits out Nobody's cooldown, not Legend's shorter one (issue #158).
+func TestRoundsToNextOfferUsesNobodyCooldownUnderSuppressInfamyTiers(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Suppress.InfamyTiers = true
+	s := offerTestState(9, nil, 3, 3) // Infamy 9 = Legend, but suppressed
+
+	wantCooldown := cfg.CooldownByTier[0] // Nobody's row
+	if got := RoundsToNextOffer(s, 0, cfg); got != wantCooldown {
+		t.Errorf("RoundsToNextOffer() at Infamy 9 under Suppress.InfamyTiers = %d, want %d (Nobody's cooldown)", got, wantCooldown)
+	}
+}
+
 // TestDeclineOfferRestartsCooldownAndHUDMatchesReality is GDD §8.2's
 // "always displayed, never a surprise": after a decline, RoundsToNextOffer
 // and offerDue must agree, round by round, exactly through the cooldown

@@ -319,7 +319,7 @@ func TestResolveTurfWarWinSurvivesWorstRoll(t *testing.T) {
 	ctx := incidentsTestContext(IncidentTurfWar, game.SectorNorthVale)
 	r := NewRNG(testSeed(1), 5)
 
-	resolveTurfWar(&s, ctx, validated, []game.SeatID{0}, walks, r)
+	resolveTurfWar(&s, ctx, validated, []game.SeatID{0}, walks, game.DefaultConfig(), r)
 
 	if got := s.Players[0].Position; got != 5 {
 		t.Errorf("Position = %d, want unchanged 5 (win: no retreat)", got)
@@ -341,7 +341,7 @@ func TestResolveTurfWarLossDropsCargoAndRetreats(t *testing.T) {
 	ctx := incidentsTestContext(IncidentTurfWar, game.SectorOldDocks)
 	r := NewRNG(testSeed(1), 5)
 
-	resolveTurfWar(&s, ctx, validated, []game.SeatID{0}, walks, r)
+	resolveTurfWar(&s, ctx, validated, []game.SeatID{0}, walks, game.DefaultConfig(), r)
 
 	if s.Players[0].Cargo != nil {
 		t.Error("still carries cargo, want dropped on loss")
@@ -822,6 +822,26 @@ func TestPressureConsumesZeroIndicesWithNoLegend(t *testing.T) {
 
 	if got := r.Consumed(PurposePressureD6); got != 0 {
 		t.Errorf("PurposePressureD6 consumed = %d, want 0", got)
+	}
+}
+
+// TestPressureConsumesZeroIndicesUnderSuppressInfamyTiers is D11's
+// consequence for Suppress.InfamyTiers: Legend is unreachable through the
+// gated tier lookup, so Pressure never fires even for a seat sitting at
+// numeric Infamy 10 — the SubsystemSuppression doc's own claim that
+// "Pressure is already fully suppressed as a consequence" (game/config.go,
+// issue #158).
+func TestPressureConsumesZeroIndicesUnderSuppressInfamyTiers(t *testing.T) {
+	s := incidentsTestState(0, 0)
+	s.Players[0].Infamy, s.Players[1].Infamy = 9, 10
+	cfg := legalTestConfig()
+	cfg.Suppress.InfamyTiers = true
+	r := NewRNG(testSeed(1), 5)
+
+	pressure(&s, cfg, r)
+
+	if got := r.Consumed(PurposePressureD6); got != 0 {
+		t.Errorf("PurposePressureD6 consumed = %d, want 0 (Legend unreachable under Suppress.InfamyTiers)", got)
 	}
 }
 

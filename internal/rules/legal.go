@@ -92,6 +92,16 @@ const (
 	// unlike a target-node conflict, this is known before the order is
 	// ever built, so it rejects rather than degrades.
 	ReasonPickupSuspended
+
+	// ReasonLeasesSuppressed is a declared Stake Post under
+	// Config.Suppress.Leases (D11) — leases are illegal outright in this
+	// scenario, not merely legal-but-free.
+	ReasonLeasesSuppressed
+
+	// ReasonItemsSuppressed is a declared Deal under Config.Suppress.Items
+	// (D11) — a Black Market is inert map furniture in this scenario, never
+	// a source or sink of items.
+	ReasonItemsSuppressed
 )
 
 // String returns the reason's short name, or "Reason(n)" for an invalid
@@ -126,6 +136,10 @@ func (r Reason) String() string {
 		return "ledger cannot be purchased in the final round"
 	case ReasonPickupSuspended:
 		return "pickup suspended by Dockers' Strike this round"
+	case ReasonLeasesSuppressed:
+		return "stake post is illegal: leases suppressed by this match's config"
+	case ReasonItemsSuppressed:
+		return "deal is illegal: items suppressed by this match's config"
 	default:
 		return fmt.Sprintf("Reason(%d)", uint8(r))
 	}
@@ -168,7 +182,7 @@ func Legal(v game.PlayerView, o game.Order, cfg game.Config) error {
 		return err
 	}
 
-	if err := legalAction(v, o); err != nil {
+	if err := legalAction(v, o, cfg); err != nil {
 		return err
 	}
 
@@ -286,15 +300,16 @@ func endingNode(v game.PlayerView, o game.Order) (game.NodeID, game.NodeType, bo
 }
 
 // legalAction checks GDD §15.0's "action illegal at the ending node's type"
-// row for the two actions with a static node-type restriction. Pickup is
-// deliberately not checked here: GDD §9.2 allows it at "any node with
-// dropped cargo you have the contract for", which has no type restriction,
-// and PlayerView carries no ground-cargo field to verify cargo presence
+// row for the two actions with a static node-type restriction, plus D11's
+// two subsystem-suppression rejections. Pickup is deliberately not checked
+// here beyond Dockers' Strike: GDD §9.2 allows it at "any node with dropped
+// cargo you have the contract for", which has no type restriction, and
+// PlayerView carries no ground-cargo field to verify cargo presence
 // against — its real legality is a Resolve-time/degradation concern.
 // Stake Post has no node-type restriction either (any node); ownership
 // conflicts are explicitly a degradation case (GDD §15.0: "the target node
 // got staked by someone else"), checked at Resolve, not here.
-func legalAction(v game.PlayerView, o game.Order) error {
+func legalAction(v game.PlayerView, o game.Order, cfg game.Config) error {
 	// Dockers' Strike (GDD §14.2, issue #72) suspends Pickup unconditionally
 	// — it has no node-type dependency, unlike Deliver/Deal below — so it
 	// must be checked before the Hidden-ending-node early return: a Pickup
@@ -304,6 +319,17 @@ func legalAction(v game.PlayerView, o game.Order) error {
 	// this check should be skipped.
 	if o.Action.Kind == game.ActionPickup && v.You.DockersStrike {
 		return illegal(ReasonPickupSuspended, "dockers' strike is active this round")
+	}
+
+	// Suppress.Leases and Suppress.Items (D11) make Stake Post and Deal
+	// illegal outright, independent of the ending node's type or fog state
+	// — known before the order is ever built, so these reject rather than
+	// degrade, the same shape Dockers' Strike above already uses.
+	if o.Action.Kind == game.ActionStakePost && cfg.Suppress.Leases {
+		return illegal(ReasonLeasesSuppressed, "leases are suppressed by this match's config")
+	}
+	if o.Action.Kind == game.ActionDeal && cfg.Suppress.Items {
+		return illegal(ReasonItemsSuppressed, "items are suppressed by this match's config")
 	}
 
 	node, nodeType, known := endingNode(v, o)

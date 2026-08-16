@@ -179,7 +179,7 @@ func incident(s *MatchState, ctx incidentContext, validated map[game.SeatID]game
 	case IncidentTorched:
 		resolveTorched(s, *ctx.sector)
 	case IncidentTurfWar:
-		resolveTurfWar(s, ctx, validated, seats, walks, r)
+		resolveTurfWar(s, ctx, validated, seats, walks, cfg, r)
 	case IncidentStreetsBlocked:
 		resolveStreetsBlocked(s, ctx, validated, seats)
 	case IncidentGasLeak, IncidentRiot:
@@ -317,9 +317,9 @@ func resolveTorched(s *MatchState, sector game.Sector) {
 // stance, Alley-aggressive, Shiv (via walk.ShivFired), Muscle, stake — but
 // omits the "underestimated" (infamy == lowest) term, since Turf War has
 // no opposing group to be relatively lowest against.
-func turfWarTotal(s *MatchState, seat game.SeatID, node game.NodeID, o game.Order, walk *seatWalk, r *RNG) int {
+func turfWarTotal(s *MatchState, seat game.SeatID, node game.NodeID, o game.Order, walk *seatWalk, cfg game.Config, r *RNG) int {
 	roll := r.Next(PurposeConfrontD6, 6) + 1
-	total := roll + infamyTierIndex(s.Players[seat].Infamy) + stanceModifier(o.Stance.Stance)
+	total := roll + infamyTierIndex(s.Players[seat].Infamy, cfg) + stanceModifier(o.Stance.Stance)
 
 	if o.Stance.Stance == game.StanceAggressive && s.Graph.Nodes[node].Type == game.NodeAlley {
 		total++
@@ -342,10 +342,10 @@ func turfWarTotal(s *MatchState, seat game.SeatID, node game.NodeID, o game.Orde
 // "strictly greater wins, a tie goes to nobody" convention
 // (confront.go's determineOutcome) applied against a fixed value instead
 // of a rival's own total.
-func resolveTurfWar(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID, walks map[game.SeatID]*seatWalk, r *RNG) {
+func resolveTurfWar(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) {
 	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
 		p := &s.Players[seat]
-		total := turfWarTotal(s, seat, p.Position, validated[seat], walks[seat], r)
+		total := turfWarTotal(s, seat, p.Position, validated[seat], walks[seat], cfg, r)
 		if total > turfWarTarget {
 			continue
 		}
@@ -548,7 +548,13 @@ func pressure(s *MatchState, cfg game.Config, r *RNG) []game.Event {
 	var events []game.Event
 	for _, seat := range bySeat(*s) {
 		p := &s.Players[seat]
-		if TierOf(p.Infamy) != game.TierLegend {
+		// Suppress.InfamyTiers (D11) makes Legend unreachable through the
+		// gated tier lookup — see SubsystemSuppression's own doc
+		// (game/config.go): "Pressure is already fully suppressed as a
+		// consequence." This is that consequence, checked directly since
+		// TierOf itself stays cfg-free (fog.go's exposure functions still
+		// call it ungated, D01/D27).
+		if cfg.Suppress.InfamyTiers || TierOf(p.Infamy) != game.TierLegend {
 			continue
 		}
 		if roll := r.Next(PurposePressureD6, 6) + 1; roll <= cfg.Pressure.Threshold {

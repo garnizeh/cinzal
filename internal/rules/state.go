@@ -328,6 +328,11 @@ type MatchState struct {
 	// Resolve, then overwrites it with the NEXT round's draw — excluding
 	// the sector just used, which is the entire mechanism behind "the
 	// same sector cannot be flagged two rounds running."
+	//
+	// Permanently nil, for the whole match, under Config.Suppress.Incidents
+	// (D11): initial() never draws round 3's value, and incident() never
+	// runs to advance it without a live incidentContext (its own ctx.live
+	// guard), so nothing ever writes a non-nil value in.
 	UnstableSector *game.Sector
 
 	// RoundAnchors is Round's own global, unconditional position-writer

@@ -236,7 +236,7 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 			route = fogAwareRoute(s.Graph, p.Fog, p.Position, target)
 		}
 
-		maxSteps := cfg.StepsByTier[infamyTierIndex(p.Infamy)]
+		maxSteps := cfg.StepsByTier[infamyTierIndex(p.Infamy, cfg)]
 		routeThisRound := route
 		if len(routeThisRound) > maxSteps {
 			routeThisRound = routeThisRound[:maxSteps]

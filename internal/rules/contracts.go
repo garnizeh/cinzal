@@ -154,7 +154,7 @@ func RoundsToNextOffer(s MatchState, seat game.SeatID, cfg game.Config) int {
 		return 0
 	}
 
-	cooldown := cfg.CooldownByTier[infamyTierIndex(p.Infamy)]
+	cooldown := cfg.CooldownByTier[infamyTierIndex(p.Infamy, cfg)]
 	remaining := int(p.LastOfferRound) + cooldown - int(s.Round)
 	return max(0, remaining)
 }

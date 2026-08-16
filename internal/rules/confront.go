@@ -42,7 +42,7 @@ func resolveOneConfrontation(s *MatchState, c confrontation, validated map[game.
 
 	totals := make(map[game.SeatID]int, len(c.Seats))
 	for _, seat := range c.Seats {
-		totals[seat] = confrontationTotal(s, seat, c.Node, validated[seat], infamy[seat], lowest, walks[seat], r)
+		totals[seat] = confrontationTotal(s, seat, c.Node, validated[seat], infamy[seat], lowest, walks[seat], cfg, r)
 	}
 
 	winner, tie := determineOutcome(c.Seats, totals)
@@ -114,10 +114,10 @@ func lowestInfamy(infamy map[game.SeatID]int, seats []game.SeatID) int {
 // this confrontation's own Infamy deltas start applying, and never the entry
 // snapshot. walk is this seat's own seatWalk (movement.go): ShivFired gates
 // Shiv's "fires on your first confrontation this round" (GDD §9.4).
-func confrontationTotal(s *MatchState, seat game.SeatID, node game.NodeID, o game.Order, infamy, lowest int, walk *seatWalk, r *RNG) int {
+func confrontationTotal(s *MatchState, seat game.SeatID, node game.NodeID, o game.Order, infamy, lowest int, walk *seatWalk, cfg game.Config, r *RNG) int {
 	roll := r.Next(PurposeConfrontD6, 6) + 1
 
-	total := roll + infamyTierIndex(infamy) + stanceModifier(o.Stance.Stance)
+	total := roll + infamyTierIndex(infamy, cfg) + stanceModifier(o.Stance.Stance)
 
 	if o.Stance.Stance == game.StanceAggressive && s.Graph.Nodes[node].Type == game.NodeAlley {
 		total++

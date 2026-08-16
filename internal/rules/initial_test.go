@@ -156,6 +156,98 @@ func TestInitialRejectsInvalidPlayerCount(t *testing.T) {
 	}
 }
 
+// TestInitialUnstableSectorSkipsDrawUnderSuppressIncidents is D11's
+// consequence for Suppress.Incidents, checked with direct RNG access: the
+// round-3 Unstable Sector draw never happens — zero PurposeIncidentSector
+// draws, not a drawn-and-discarded value — so nil is returned without
+// touching rng at all (issue #158).
+func TestInitialUnstableSectorSkipsDrawUnderSuppressIncidents(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Suppress.Incidents = true
+	rng := NewRNG(testSeed(62), 0)
+
+	got := initialUnstableSector(rng, cfg)
+
+	if got != nil {
+		t.Errorf("initialUnstableSector() = %v, want nil under Suppress.Incidents", *got)
+	}
+	if consumed := rng.Consumed(PurposeIncidentSector); consumed != 0 {
+		t.Errorf("Consumed(incident.sector) = %d, want 0 — the draw must be skipped, not drawn and discarded", consumed)
+	}
+}
+
+// TestInitialSkipsEventDeckUnderSuppressEvents is D11's consequence for
+// Suppress.Events: the event deck is never built — not drawn and
+// discarded — so it costs zero deck.event.select/order draws, not 12 and
+// 11 (issue #158). This is checked by divergence rather than a direct
+// Consumed() read (initial() does not expose its internal RNG): under
+// Suppress.Events, deck.incident.select/order and incident.sector are the
+// very next real draws on that RNG, so their values are reproduced here on
+// a reference RNG started from the same seed. If deck.event.* had
+// consumed any draws before them — drawn and discarded rather than
+// skipped — those later draws would land on different indices and the
+// reference would diverge from initial()'s actual output.
+func TestInitialSkipsEventDeckUnderSuppressEvents(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Suppress.Events = true
+	seed := testSeed(60)
+
+	rng := NewRNG(seed, 0)
+	if _, err := gen.Generate(genRand(rng), gen.Params{
+		Nodes:              cfg.MapByPlayers[4].Nodes,
+		MinEdges:           cfg.MapByPlayers[4].MinEdges,
+		MaxEdges:           cfg.MapByPlayers[4].MaxEdges,
+		Players:            4,
+		MaxAttempts:        cfg.MaxGenAttempts,
+		OpeningMinDistance: cfg.Contracts[0].MinDistance,
+		OpeningMaxDistance: cfg.Contracts[0].MaxDistance,
+	}); err != nil {
+		t.Fatalf("reference gen.Generate() = %v", err)
+	}
+	wantIncidentDeck := buildIncidentDeck(rng)
+	wantSector := initialUnstableSector(rng, cfg)
+
+	s, err := initial(seed, cfg, 4)
+	if err != nil {
+		t.Fatalf("initial() = %v", err)
+	}
+
+	if s.Graph.EventDeck != nil {
+		t.Errorf("EventDeck = %v, want nil (never built)", s.Graph.EventDeck)
+	}
+	if !slices.Equal(s.Graph.IncidentDeck, wantIncidentDeck) {
+		t.Errorf("IncidentDeck = %v, want %v (the reference sequence run on the same seed, with deck.event.* consuming zero draws)", s.Graph.IncidentDeck, wantIncidentDeck)
+	}
+	if (s.UnstableSector == nil) != (wantSector == nil) || (s.UnstableSector != nil && *s.UnstableSector != *wantSector) {
+		t.Errorf("UnstableSector = %v, want %v", s.UnstableSector, wantSector)
+	}
+}
+
+// TestInitialSkipsIncidentDeckUnderSuppressIncidents is D11's consequence
+// for Suppress.Incidents: the incident deck is never built. Round 0's RNG
+// has no further consumer once the incident subsystem is skipped (nothing
+// in initial() reads it afterward), so this checks the structural result
+// — a nil deck rather than a populated one — with the zero-draws property
+// itself covered by TestInitialUnstableSectorSkipsDrawUnderSuppressIncidents
+// and the sibling flag's divergence proof above pinning the same guard
+// shape (issue #158).
+func TestInitialSkipsIncidentDeckUnderSuppressIncidents(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Suppress.Incidents = true
+
+	s, err := initial(testSeed(61), cfg, 4)
+	if err != nil {
+		t.Fatalf("initial() = %v", err)
+	}
+
+	if s.Graph.IncidentDeck != nil {
+		t.Errorf("IncidentDeck = %v, want nil (never built)", s.Graph.IncidentDeck)
+	}
+	if s.UnstableSector != nil {
+		t.Errorf("UnstableSector = %v, want nil (never drawn)", *s.UnstableSector)
+	}
+}
+
 // TestInitialFollowsSetupPhaseOrder pins RFC §6.4's required draw order:
 // gen.layout (inside gen.Generate, D10) before deck.event before
 // deck.incident, all on the one *RNG Setup shares. It builds a reference

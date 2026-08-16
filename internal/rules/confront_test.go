@@ -227,7 +227,7 @@ func TestConfrontationTotalSumsEveryTerm(t *testing.T) {
 
 	r := NewRNG(seed, int(s.Round))
 	// infamy 9 (tier 3), lowest 9 too -> underestimated +1
-	got := confrontationTotal(&s, 0, 12, o, 9, 9, walk, r)
+	got := confrontationTotal(&s, 0, 12, o, 9, 9, walk, game.DefaultConfig(), r)
 
 	want := roll + 3 /* tier */ + 1 /* stance */ + 1 /* ambush: Aggressive+Alley */ + 3 /* Shiv */ + 1 /* Muscle */ + 2 /* stake cap */ + 1 /* underestimated */
 	if got != want {
@@ -235,6 +235,31 @@ func TestConfrontationTotalSumsEveryTerm(t *testing.T) {
 	}
 	if !walk.ShivFired {
 		t.Error("confrontationTotal() left ShivFired false after a declared Shiv fired")
+	}
+}
+
+// TestConfrontationTotalDropsTierBonusUnderSuppressInfamyTiers is D11's
+// consequence for Suppress.InfamyTiers: the combat bonus is pinned to the
+// Nobody row (0) regardless of actual Infamy — a Legend participant (9)
+// gets no tier bonus, not the usual +3 (issue #158).
+func TestConfrontationTotalDropsTierBonusUnderSuppressInfamyTiers(t *testing.T) {
+	s := confrontTestState(0)
+	o := game.Order{Stance: game.StanceOrder{Stance: game.StanceNeutral}}
+	walk := &seatWalk{}
+	seed := testSeed(9)
+
+	roll := NewRNG(seed, int(s.Round)).Next(PurposeConfrontD6, 6) + 1
+
+	cfg := game.DefaultConfig()
+	cfg.Suppress.InfamyTiers = true
+	r := NewRNG(seed, int(s.Round))
+	// infamy 9 (Legend) but suppressed -> tier bonus 0, not 3; lowest 9 too
+	// -> underestimated +1 still applies (Infamy itself is unmodified).
+	got := confrontationTotal(&s, 0, 0, o, 9, 9, walk, cfg, r)
+
+	want := roll + 1 /* underestimated */
+	if got != want {
+		t.Errorf("confrontationTotal() under Suppress.InfamyTiers = %d, want %d (roll %d + 0 tier bonus + underestimated)", got, want, roll)
 	}
 }
 
@@ -253,8 +278,8 @@ func TestConfrontationTotalShivFiresOnlyOnce(t *testing.T) {
 	roll2 := replay.Next(PurposeConfrontD6, 6) + 1
 
 	r := NewRNG(seed, int(s.Round))
-	first := confrontationTotal(&s, 0, 0, o, 0, 0, walk, r)
-	second := confrontationTotal(&s, 0, 0, o, 0, 0, walk, r)
+	first := confrontationTotal(&s, 0, 0, o, 0, 0, walk, game.DefaultConfig(), r)
+	second := confrontationTotal(&s, 0, 0, o, 0, 0, walk, game.DefaultConfig(), r)
 
 	// infamy 0 (tier bonus 0), Neutral stance, no stake, always "lowest" (+1).
 	if want := roll1 + 3 + 1; first != want {
