@@ -81,7 +81,7 @@ var ConsumptionTable = []PurposeRow{
 	{PurposePushonEdge, "1 per blind step", "", "GDD §9.1"},
 	{PurposeScavengeD6, "1 per newly explored node", "", "Zero if the node was already Known"},
 	{PurposePressureD6, "1 per Legend", "Phase 7", ""},
-	{PurposeIncidentSector, "1, 0 under Suppress.Incidents", "Phase 1", "Drawn where it is announced; skipped entirely, not drawn and discarded, under Config.Suppress.Incidents (D11) — initialUnstableSector never draws"},
+	{PurposeIncidentSector, "1, 0 under Suppress.Incidents or Rounds < 3", "Phase 1", "Drawn where it is announced; skipped entirely, not drawn and discarded, under Config.Suppress.Incidents (D11) or when the match has no round 3 to announce it for — initialUnstableSector never draws in either case"},
 	{PurposeIncidentRelocate, "1 per affected player", "Phase 7", "Snatch Job relocation"},
 	{PurposeCrateNode, "1", "", "Dead Runner, Spilled Load"},
 	{PurposeItemTornMap, "exactly min(4, hidden)", "", "Partial Fisher-Yates, mandated"},
