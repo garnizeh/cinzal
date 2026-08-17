@@ -532,6 +532,66 @@ func TestWriteTrailDecoyMatchesRealCargoTaken(t *testing.T) {
 	}
 }
 
+// TestWriteTrailDecoyInfamyAndSightMatrix is RFC §16.1's Fog-layer row for
+// Decoy, verbatim: "explicitly test planter Infamy 2 as anonymous and
+// Infamy 3 as planter-named, with sight and no-sight views." The naming
+// gate alone is already covered generically by
+// TestWriteTrailCargoTakenNamingGate, and TestWriteTrailDecoyMatchesRealCargoTaken
+// already covers one named/sighted case — this is the one test that drives
+// Decoy specifically through the real writeTrail/distributeTrail pipeline
+// across both axes at once, since Project (fog_test.go) only ever trusts a
+// pre-built archive and cannot exercise sight-gating itself.
+func TestWriteTrailDecoyInfamyAndSightMatrix(t *testing.T) {
+	tests := []struct {
+		name        string
+		infamy      int
+		watcherPos  game.NodeID // seat 1's ending position
+		wantPresent bool
+		wantNamed   bool
+	}{
+		{"infamy 2, watcher has sight: entry present, anonymous", 2, 1, true, false},
+		{"infamy 3, watcher has sight: entry present, named", 3, 1, true, true},
+		{"infamy 3, watcher lacks sight: entry absent", 3, 0, false, false},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			// Seat 0 (the planter) ends at node 1, adjacent to the declared
+			// Decoy target, node 2 — trailTestGraph's own layout.
+			s := trailTestState(5, 1, tc.watcherPos)
+			s.Players[0].Infamy = tc.infamy
+			validated := map[game.SeatID]game.Order{
+				0: {Items: []game.ItemDiscard{{Item: game.ItemDecoy, Target: 2}}},
+				1: {Action: game.ActionOrder{Kind: game.ActionNothing}},
+			}
+			walks := trailTestWalks(1, tc.watcherPos)
+
+			writeTrail(&s, validated, bySeat(s), walks, nil, nil, globalEventContext{}, incidentContext{}, NewRNG(testSeed(1), int(s.Round)))
+
+			var found []game.TrailEntry
+			for _, te := range s.Players[1].Archive.Trail {
+				if te.Node == 2 && te.Kind == game.EventCargoTaken {
+					found = append(found, te.TrailEntry)
+				}
+			}
+			if tc.wantPresent && len(found) != 1 {
+				t.Fatalf("watcher's archive has %d Decoy entries at node 2, want 1", len(found))
+			}
+			if !tc.wantPresent && len(found) != 0 {
+				t.Fatalf("watcher's archive has %d Decoy entries at node 2, want 0 — no sight of the declared node", len(found))
+			}
+			if tc.wantPresent {
+				if tc.wantNamed {
+					if found[0].Actor == nil || *found[0].Actor != 0 {
+						t.Errorf("Decoy entry Actor = %v, want the planter (seat 0)", found[0].Actor)
+					}
+				} else if found[0].Actor != nil {
+					t.Errorf("Decoy entry Actor = %v, want nil (anonymous)", found[0].Actor)
+				}
+			}
+		})
+	}
+}
+
 // countTrailAt counts trail entries recorded for node, across every kind.
 func countTrailAt(trail []game.StampedTrailEntry, node game.NodeID) int {
 	n := 0
