@@ -15,7 +15,7 @@ docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criter
 docs/decisions/                             — Decision log; D1–D14 and D23–D31 decided (D15 reclassified as a task, #40), D16–D22 open (block M5/M6)
 ```
 
-`make check` runs everything CI runs — all four gates (purity, fog boundary, debug isolation, gitleaks) are live and required on `main`. `generate-check` is not part of `check` yet: `GENERATED` is still empty until M3/M5 land real generated paths, and a gate that can only report VACUOUS stays out of the aggregate rather than passing by not running — run `make generate-check` standalone if you want to see that message. `bench-compare` is also a required check, separate from `make check` — it only runs on a pull request that touches `internal/rules/gen`, `.github/workflows/ci.yml`, `scripts/check-bench-regression.sh`, or the `Makefile`; see CONTRIBUTING.md's "The benchmark regression gate."
+`make check` runs the four aggregate gates (purity, fog boundary, debug isolation, gitleaks), which are live and required on `main`. `generate-check` is not part of `check` yet: `GENERATED` is still empty until M3/M5 land real generated paths, and a gate that can only report VACUOUS stays out of the aggregate rather than passing by not running — run `make generate-check` standalone if you want to see that message. `bench-compare` is also a required check, separate from `make check` — it only runs on a pull request that touches `internal/rules/gen`, `.github/workflows/ci.yml`, `scripts/check-bench-regression.sh`, or the `Makefile`; see CONTRIBUTING.md's "The benchmark regression gate."
 
 Package layout is fixed by [D01](docs/decisions/D01-package-layout.md):
 
