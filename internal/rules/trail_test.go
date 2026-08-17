@@ -513,6 +513,40 @@ func TestWriteTrailCargoTakenNamingGate(t *testing.T) {
 	}
 }
 
+// TestWriteTrailItemPurchasedNamingGate covers GDD §7.3 row 8's Infamy >= 6
+// name gate, both sides of the boundary. Unlike
+// TestAnchorParitySightGatedNamingThresholdsMatchTable (anchor_parity_test.go),
+// which drives addItemPurchased at the infamyNameItemPurchased constant's
+// own value and so cannot see a change to that value, this test pins GDD
+// §7.3's literal threshold (6) directly, the same way
+// TestWriteTrailCargoTakenNamingGate already pins row 1's literal 3 — an
+// edit to the constant itself (issue #83's deliberate break 2: "Move item
+// purchase from Infamy >= 6 to >= 3") fails here.
+func TestWriteTrailItemPurchasedNamingGate(t *testing.T) {
+	for _, tc := range []struct {
+		infamy int
+		named  bool
+	}{
+		{5, false},
+		{6, true},
+	} {
+		s := trailTestState(5, 0)
+		s.Players[0].Infamy = tc.infamy
+		roundEvents := []game.Event{{Kind: game.EventItemPurchased, Round: 5, Node: 0, Seat: 0, Item: game.ItemDecoy}}
+		entries := map[game.NodeID][]game.TrailEntry{}
+
+		addItemPurchased(s, roundEvents, entries, globalEventContext{}, incidentContext{}, nil)
+
+		if len(entries[0]) != 1 {
+			t.Fatalf("infamy %d: entries[0] = %+v, want exactly 1 entry", tc.infamy, entries[0])
+		}
+		gotNamed := entries[0][0].Actor != nil
+		if gotNamed != tc.named {
+			t.Errorf("infamy %d: named = %v, want %v", tc.infamy, gotNamed, tc.named)
+		}
+	}
+}
+
 // TestWriteTrailDecoyMatchesRealCargoTaken is D12's own indistinguishability
 // requirement: a Decoy discard produces the identical TrailEntry shape as a
 // real pickup, gated by the same Infamy >= 3 rule, naming only the planter.
