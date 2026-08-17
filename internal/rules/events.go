@@ -1,7 +1,6 @@
 package rules
 
 import (
-	"math"
 	"slices"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -257,18 +256,9 @@ func resolveShiftChange(s *MatchState) []game.Event {
 // 25% of their balance, rounded down — `bal - bal/4`, integer division,
 // per RFC §6.3's "rounding is specified as 'down' everywhere it appears."
 func resolveCurrencySlide(s *MatchState) []game.Event {
-	// DELIBERATE BREAK — issue #80's exit demonstration, reverted before
-	// merge. RFC §6.3's float64-intermediate hazard, injected on purpose to
-	// prove the replay CI job catches it: a floating-point 25% rounded
-	// half-to-even (math.Round) in place of the required floor above —
-	// bal/4 and int(float64(bal)*0.25) actually agree bit-for-bit for every
-	// non-negative bal (0.25 is an exact power-of-two fraction), so this
-	// uses the rounding semantics GDD §14.2 explicitly rules out instead,
-	// which is what makes the digest genuinely diverge whenever a seat's
-	// balance is not a multiple of 4.
 	for _, seat := range bySeat(*s) {
 		p := &s.Players[seat]
-		p.Balance -= int(math.Round(float64(p.Balance) * 0.25))
+		p.Balance -= p.Balance / 4
 	}
 	return nil
 }
