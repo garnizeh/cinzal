@@ -53,13 +53,18 @@ func confrontTestGraph() Graph {
 
 // confrontTestState returns a MatchState over confrontTestGraph with n
 // seats, positioned at start (seat i at node start[i]), Balance 20,
-// otherwise zero — a baseline every test overrides from.
+// otherwise zero — a baseline every test overrides from. Fog is sized to
+// confrontTestGraph's node count (21) so pushback's own Fog write (GDD
+// §7.2: a pushback destination becomes Known regardless of how it was
+// reached) has somewhere to land — its content is otherwise irrelevant to
+// every test in this file, none of which assert on it.
 func confrontTestState(start ...game.NodeID) MatchState {
+	graph := confrontTestGraph()
 	players := make([]Player, len(start))
 	for i, pos := range start {
-		players[i] = Player{Seat: game.SeatID(i), Balance: 20, Position: pos}
+		players[i] = Player{Seat: game.SeatID(i), Balance: 20, Position: pos, Fog: make([]game.FogState, len(graph.Nodes))}
 	}
-	return MatchState{Round: 5, Graph: confrontTestGraph(), Players: players}
+	return MatchState{Round: 5, Graph: graph, Players: players}
 }
 
 // confrontWalks builds walks for seats, each seeded with the given Path.

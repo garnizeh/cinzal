@@ -253,13 +253,25 @@ func scavenge(s *MatchState, seat game.SeatID, node game.NodeID, r *RNG) {
 			p.Balance += 3
 		case 6:
 			for _, adj := range s.Graph.Nodes[node].Edges {
-				if p.Fog[adj] < game.FogKnown {
-					p.Fog[adj] = game.FogKnown
-				}
+				markNodeKnown(p, adj)
 			}
 		}
 	}
 
+	markNodeKnown(p, node)
+}
+
+// markNodeKnown sets node to at least FogKnown in p's own Fog — the "a
+// visited node becomes Known permanently" half of GDD §7.2, unconditional
+// on how the node was reached (GDD §15's Displacement rule: "wherever you
+// actually end the round... however you got there"). Used by scavenge
+// above for ordinary movement, and by every involuntary relocation in the
+// package — pushback (confront.go) and the incident relocations
+// (incidents.go: Flood, Snatch Job, Turf War) — none of which trigger
+// scavenge's own bonus-roll half, since that is gated to a deliberate,
+// step-spending exploration choice (GDD §9.1), not a displacement nobody
+// chose.
+func markNodeKnown(p *Player, node game.NodeID) {
 	if p.Fog[node] < game.FogKnown {
 		p.Fog[node] = game.FogKnown
 	}

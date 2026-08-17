@@ -33,13 +33,18 @@ func eventsTestGraph() Graph {
 // eventsTestState returns a MatchState over eventsTestGraph with one seat
 // per entry in start (seat i at node start[i]), Balance 20 and Round 7 (an
 // ordinary live-card round, GDD §14.2) — a baseline every test overrides
-// from, matching actionsTestState's own shape in actions_test.go.
+// from, matching actionsTestState's own shape in actions_test.go. Fog is
+// sized to eventsTestGraph's node count (6) so any relocation that marks
+// its destination Known (GDD §7.2 — pushback, and incidents.go's Flood/
+// Snatch Job/Turf War) has somewhere to write; its content is otherwise
+// irrelevant to every test built on this fixture.
 func eventsTestState(start ...game.NodeID) MatchState {
+	graph := eventsTestGraph()
 	players := make([]Player, len(start))
 	for i, pos := range start {
-		players[i] = Player{Seat: game.SeatID(i), Balance: 20, Position: pos}
+		players[i] = Player{Seat: game.SeatID(i), Balance: 20, Position: pos, Fog: make([]game.FogState, len(graph.Nodes))}
 	}
-	return MatchState{Round: 7, Graph: eventsTestGraph(), Players: players}
+	return MatchState{Round: 7, Graph: graph, Players: players}
 }
 
 // TestResolveRaidHitsAllTiedHighestInfamy is GDD §14.2's Raid: "The
