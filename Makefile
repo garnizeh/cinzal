@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity fog debug-isolation secrets check clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity fog debug-isolation secrets check replay clean
 
 ## help      list these targets
 help:
@@ -193,6 +193,18 @@ generate-check: generate
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
 check: packages purity fog debug-isolation secrets lint test bench-regression-selftest prod dev
+
+## replay    golden-replay determinism suite, for the cross-OS/arch matrix (issue #80)
+#
+# The same tests `make test` already runs on ubuntu-latest as part of
+# `check` — this target exists to be invoked a SECOND time, from a second OS
+# and architecture, by CI's replay job (.github/workflows/ci.yml). Not
+# folded into `check`'s own aggregate line: doing so would just repeat the
+# identical run on the identical runner `test` already covers there,
+# mirroring generate-check/bench-compare's own reasons for staying out of
+# that line (see their comments above).
+replay:
+	$(GO) test -race ./internal/rules/...
 
 ## clean     remove build output
 clean:

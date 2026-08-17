@@ -190,6 +190,52 @@ jobs:
       - name: make check
         run: make -k check
 
+  # Issue #80's exit demonstration: "resolve(s, o) == resolve(s, o)
+  # byte-identical, and a golden 15-round replay reproduces on a second
+  # machine and a second OS." `check` above only ever runs on ubuntu-latest,
+  # so it can prove the determinism suite (internal/rules/determinism_test.go,
+  # issue #77) is deterministic across repeated runs in one process — never
+  # across OS or architecture. macos-latest runners are arm64, so this one
+  # matrix covers both axes RFC §6.3 names as hazards: a stray `for k := range
+  # m` and a float64 intermediate.
+  #
+  # Runs the whole internal/rules package rather than a curated -run subset:
+  # a renamed test can silently fall out of a name-based filter, which is
+  # exactly the "gate that passes when it can't run" failure this repo's own
+  # gates are held to (see this file's own header comment on that standard).
+  replay:
+    name: replay (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      # Same reasoning as `check`'s own version-pin assertion above: "which
+      # Go built it" must never be a candidate explanation for a divergence
+      # this job exists specifically to catch across machines.
+      - name: Assert the pinned Go version is the one in use
+        run: |
+          set -euo pipefail
+          expected="go$(awk '/^go /{print $2; exit}' go.mod)"
+          actual="$(go env GOVERSION)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Go version pin did not apply: expected $expected, got $actual"
+            exit 1
+          fi
+
+      - name: make replay
+        run: make replay
+
   bench:
     name: bench
     runs-on: ubuntu-latest

@@ -435,6 +435,148 @@ func TestGoldenFixturesFinalStateMatchesCommittedHash(t *testing.T) {
 	}
 }
 
+// --- per-round digest matrix (issue #80's exit demonstration) ---
+
+// goldenPerRoundDigests pins, per player count, one sha256 digest per round
+// — issue #80's own exit demonstration: unlike goldenHashes above (final
+// state only), this is what lets a divergence name the ROUND it first
+// appeared in when this suite runs on a second OS/arch in CI
+// (.github/workflows/ci.yml's replay job). Each entry hashes both the
+// state after that round's Resolve call and that round's own event stream
+// — state alone would miss an events-only regression, events alone would
+// miss a state-only one. Regenerating this table without a stated reason
+// in the pull request is the same failure mode goldenHashes's own comment
+// already warns about, here as much as there.
+var goldenPerRoundDigests = map[int][]string{
+	2: {
+		"5e8547fffdc4be318aa9776cbbb5a2fe683a9079ce91ee568af439dda3035c98",
+		"076bdc17802da07ad6af5014e6c10a52f69b2b68acaa156301fa92bd59169eea",
+		"5fbf1d3436d221451d75829c71adda256553f8de60352ce19b7dc17f96bc698b",
+		"4d0f28758bd4f473798781adca78fd1f51e4a474cee2382fbc74bbdc6a462b62",
+		"17a84cc5937a9e91a0825e070e867cb98b8a4de25033e133829b213f84de390e",
+		"ad08258addb45503267b9112c81577bfc0b80a9c7e09040fbf3e9ed251e7a6f9",
+		"1199611edf22ce734e21265a886399e60b2aa27ffa56130ae8ec91a0d9822ee3",
+		"6c84ed7f0e54d71f819636af39fdc6e88aac9143ff423bfd6634f303673f0743",
+		"0d7e667b9ef1119a1c15c8602e22fde851dcc0e8a6e0f95e74e284037f901127",
+		"5caa6871dd3ad1ca6861a35b937771a9ad3a210452b3a144d767a6994cebd34b",
+		"d589f7ad86c207e2830a8a5feb3507a59f74bb957394bcb06c4f2658711d3dd3",
+		"919bcd47bf853d88835225d1c19afc1709abecc7c4da0003be01e18f8b311175",
+		"aaf4b9fb04afd001a61f393be7473c1c0217024c185eaaf7d91bb26e12832ce4",
+		"985050a48e3e6bd4e70cb487f0c9643ae3777598f7a306ae75b8979ccdf03138",
+		"1c7c402a9b564b9da1371a683d0c7ef4101783bf00e619af0d45508e9abbd83c",
+	},
+	3: {
+		"55e2ee7a74126de6020761708d5c10e0c3b3fcb6de0f3f428a4cc46259356b99",
+		"ef17a39ded35b7bed5496631a247c8c0239d2717e9d221586ddb7b759f19330e",
+		"045b9a48a04d4d3befa68bb1ebdf554aaffae825ba21f9441f064fb1592dbd69",
+		"5512d4f4018bdb09b5799c9bdf31c9cbb437ac826713850c2d47c606074325b7",
+		"36605b88be7b5b666fa4a80a0e4e6fb76bf1b14f3e5df86d3b0f7a870dfbd25f",
+		"6827a1a3b55c96f25ab927547f418854ce934a7b385f356f827f6870b3bb12e3",
+		"04fb2c6c8bec8f6174b5c1b8030e0dacd275f47658fd4ca079d97fd2270d1209",
+		"7618dbec581c5cf232f10cd8b3ea08881ceb9ba5cbd70d1713dd8efbecaee206",
+		"359bcc8b923ccb077aa2529ea4be250baab4fcf119cfc6296f14ac65cd4f418d",
+		"4657bc936b4eab5e130dd49705f4738c77802f0c0064e2a38dc9b72457d1cf8e",
+		"0ea51d22772f91b84f3c307f9f551edddcb60485f920d7b2c98925c4864daf80",
+		"6e61bd97f794cf4180b800133cc3f47f1ead09c1ce50bb0d11e1f8f6fdec3ab2",
+		"aac66bc9af3fd61b6b1222271d7b2727b0fc69f0c3ac285f883937ed2b59564a",
+		"50d8afd94ed650e4146c074a750df947579dad4170fa89a5e67310b88a97f4e7",
+		"1f2424a6cd25b028476ac850bc3e87f1c6715e54a5d5bdd13b5788510ed3b201",
+	},
+	4: {
+		"5a9d954d01ff01e37f0f863666db23710e34e873d78cf9191da15a2d69c83b3c",
+		"1f69ccaaeb2d97383ac2f2255de60189a1ba0532be8aaf63f07427f61fa5ae2d",
+		"b74cf0055033fb0c0c5629d39d72b28060bb70f419b08882faefba8c52b8e957",
+		"637d4bab5524df4f2ef637db4fb4e33a4d31f0de7a4ca553c0e878847ede669e",
+		"b9433ad266b2da01bcba38dccbc965ade3d89b3cfa8d6fa8bc8c2b10f2890daa",
+		"4fafe94a62d657da277a72fce7e6b11478f90086795b92c3daf7aa58cab4c720",
+		"b0367724b17f570f5ed8acb7c2d8dc74d56eed2d8a269406990683c783d712f0",
+		"3479b07ab8ccb0ec49e66a67ec6eb620790dc7f95545d1a0edd934d090e8f63b",
+		"bea6c0a7cb0f07f7bcd55c503df910ff7bde7d8e8c0e2d50f14217f6fcd1a203",
+		"1ac69d2d9e4bcb899b278a47ee880339f7acf22616308293d6c244f7c0fff358",
+		"a22c44a45e6d143f9a40493a145e4d0e89432aa9cf8d0e665557595c37495bc4",
+		"4ae981b8ffb1c25d4f2d6a8f8ec85675abc4a3a27940e2b4f95b164c952bacf0",
+		"a4c60f9b7ade13faed8a2715f5f07790d3132e53a8ca41f4d425b1b81ae57079",
+		"c2c98c7aa72c0c535035e9963f214613e83df50391a669645e7fe363f650967e",
+		"10f6e36bb68240f1200405ec10015864055067eeba79902b8ca81dcaf03a0f9e",
+	},
+	5: {
+		"80d0afd4a6a56eb7cecf1d60ca8150a33553b02fc299b27ba1b0fed13cdcf403",
+		"23053ad8cdb39492441674d099403258d27a237a92e64461527eb4e8cffd03e5",
+		"9a9e0856fdca4e1828f48be5bd14b7ff00b366c5b26bf350cd3a1348a33d9c06",
+		"c5b380764f078117f8e1df6be9821826fde94c50f9687831596154556b28a4b7",
+		"d2c9d7648a15e6b6e14802e0c189d341afb3f1b1f95af0d6ed154d8091e1c84a",
+		"ed96a4fbbad5296971e2d9e28e6e61fc4d1f6ce8d753907ee86b2a2c44c271b8",
+		"9a8e4518de2019c084cf8bfd8aed1c719d56993ca5f6d2917824e20f6dd1c99a",
+		"87ef9f8c5cf5c1e19d26a379ca08b38591ce85a7073d90295897cc356cdadc9a",
+		"cdd4f5e1480d5af07ce62333e075a4b55633f248c03539616d68b919f62e7d2e",
+		"a22f7d0788fecad20c4f4f0b5d564668b31944e74da7afe16beda91df4f88bbd",
+		"b73c72de541419ff185fbc2d6d054c5b81a7780bf3c3884830b28497943c8e3d",
+		"87bad6ef105d9bcc9ebe73d5f888a38bccaba862d359bd8ce5542bc144e4cc90",
+		"ac5bb16b12e12842bb4ea59e5b0d92a28c87eec2e019720a5b92f3f3803e9b25",
+		"f83ce874383cf7194b1df0a08dc475831ef2b9a9559ebf3db8700b80050467db",
+		"96a5555b8d9083bd5ac8b2fca98ee461b5b0ecea3416ed15263d0a627cde93ce",
+	},
+}
+
+// roundDigest hashes one round's canonical state plus its own event stream
+// — canonicalState/canonicalEvents (above) already make this immune to
+// Go's randomised map iteration, the same property TestGoldenFixtures...
+// FiftyInProcessRuns relies on.
+func roundDigest(t *testing.T, s MatchState, events []game.Event) string {
+	t.Helper()
+	sum := sha256.Sum256([]byte(canonicalState(t, s) + canonicalEvents(t, events)))
+	return hex.EncodeToString(sum[:])
+}
+
+// TestGoldenFixturesPerRoundDigestMatchesCommittedFixture is issue #80's
+// acceptance criterion made literal: "a divergence names the round it first
+// appeared in." It replays each fixture from a fresh initial() — never the
+// memoized recording's own final state — round by round, comparing each
+// round's digest against the committed table and stopping at the FIRST
+// mismatch: every later round is definitionally wrong too once state has
+// diverged, so reporting only the first is signal, not information loss.
+//
+// Fails closed, per the issue's own acceptance bullet: a missing or short
+// fixture, cfg.Rounds == 0, or a match that produced zero events end to end
+// all fail the test rather than silently comparing nothing.
+func TestGoldenFixturesPerRoundDigestMatchesCommittedFixture(t *testing.T) {
+	for _, fx := range determinismFixtures {
+		t.Run(fmt.Sprintf("%dp", fx.players), func(t *testing.T) {
+			_, log, cfg := runDeterminismScript(t, fx.players)
+			if cfg.Rounds == 0 {
+				t.Fatal("cfg.Rounds == 0 — a digest computed over zero rounds is not a check")
+			}
+			want := goldenPerRoundDigests[fx.players]
+			if len(want) != cfg.Rounds {
+				t.Fatalf("%dp fixture has %d committed per-round digests, want %d (cfg.Rounds) — missing or short fixture", fx.players, len(want), cfg.Rounds)
+			}
+
+			s, err := initial(fx.seed, cfg, fx.players)
+			if err != nil {
+				t.Fatalf("initial() error = %v", err)
+			}
+
+			totalEvents := 0
+			for round := 1; round <= cfg.Rounds; round++ {
+				var events []game.Event
+				s, events, err = Resolve(s, log[round], cfg, NewRNG(fx.seed, round))
+				if err != nil {
+					t.Fatalf("round %d: Resolve() error = %v", round, err)
+				}
+				totalEvents += len(events)
+
+				got := roundDigest(t, s, events)
+				if got != want[round-1] {
+					t.Fatalf("round %d: digest = %s, want %s — first diverging round (of %d)", round, got, want[round-1], cfg.Rounds)
+				}
+			}
+			if totalEvents == 0 {
+				t.Fatalf("%dp fixture produced zero events across all %d rounds — an empty event stream must fail, not pass", fx.players, cfg.Rounds)
+			}
+		})
+	}
+}
+
 // --- per-round RNG index-count accounting (RFC §16.2, the heart of #77) ---
 
 // roundFacts is everything a per-round consumption predictor is allowed to
