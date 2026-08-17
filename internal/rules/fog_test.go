@@ -788,7 +788,7 @@ func TestProjectSerialisationOmitsHiddenNodeID(t *testing.T) {
 		{ID: 1, Type: game.NodeAlley, Edges: []game.NodeID{0, 2, 5}},
 		{ID: 2, Type: game.NodeAlley, Edges: []game.NodeID{1, 3}},
 		{ID: 3, Type: game.NodeBorder, Edges: []game.NodeID{2}},
-		{}, // ID 4: unused filler, only here so index 5 is in range
+		{ID: 4}, // unused filler, only here so index 5 is in range
 		{ID: 5, Type: game.NodeAlley, Edges: []game.NodeID{1}},
 	}}
 	s := MatchState{Round: 7, Graph: graph, Players: []Player{
