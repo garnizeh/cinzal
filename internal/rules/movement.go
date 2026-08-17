@@ -320,13 +320,10 @@ func detectCrossings(transitions map[game.SeatID]transition, seats []game.SeatID
 // and groups itself, read only by keyed lookup — never by ranging it — so
 // every caller of this helper stays inside CLAUDE.md's no-map-ranging rule.
 func confrontationsFromGroups(nodes []game.NodeID, groups map[game.NodeID][]game.SeatID) []confrontation {
-	// DELIBERATE BREAK — issue #80's exit demonstration, reverted before merge.
-	// Ranges groups directly instead of using the sorted `nodes` slice: RFC
-	// §6.3's map-iteration hazard, injected on purpose to prove the replay
-	// matrix (.github/workflows/ci.yml) actually catches it.
-	result := make([]confrontation, 0, len(groups))
-	for node, seats := range groups {
-		result = append(result, confrontation{Node: node, Seats: seats})
+	ordered := orderConfrontationsByNode(nodes)
+	result := make([]confrontation, 0, len(ordered))
+	for _, node := range ordered {
+		result = append(result, confrontation{Node: node, Seats: groups[node]})
 	}
 	return result
 }
