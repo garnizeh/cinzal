@@ -385,9 +385,19 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 // 2-and-1 between the two labels, never 3-and-0). Bound (contract) cargo
 // is routed to its contract's own fixed Destination as normal — GDD §8.1
 // gives the player no choice there — so it is not steered toward rotation
-// on purpose, though this seed's own timing happens to land two contract
-// deliveries on Border nodes without a block, which is the ordinary case
-// rotation leaves alone most rounds.
+// on purpose. This seed's own timing happens to land one contract
+// delivery on a Border rotation has closed too (round 14, resolved by the
+// identical every-round retry, not specially tracked below) alongside one
+// that lands clean — both the ordinary cases rotation leaves to chance
+// for cargo it doesn't get to aim.
+//
+// Only the loose crate's own block-and-retry is asserted below
+// (looseBlockCount, blockedLooseTarget): counting *any* seat-0
+// EventDeliveryBlocked would count that incidental contract block too,
+// which proves nothing about rotation specifically since Dragnet's own
+// seal (GDD §14.2) emits the identical event kind for an unrelated
+// reason. Tying the assertion to looseTarget's own node is what makes it
+// rotation's block, provably, not a coincidence of which event fired.
 func TestGoldenTwoPlayerMatchExercisesRotatingBorders(t *testing.T) {
 	cfg := game.DefaultConfig()
 	seed := testSeed(7)
@@ -408,7 +418,18 @@ func TestGoldenTwoPlayerMatchExercisesRotatingBorders(t *testing.T) {
 	var crateAt *game.NodeID     // announced Dead Runner / Spilled Load crate, unclaimed
 	var looseTarget *game.NodeID // this carry's fixed rotation-exercising Border, set once per loose crate
 	totalEvents := 0
-	blockedRounds := 0
+	looseBlockCount := 0 // EventDeliveryBlocked at looseTarget specifically — the rotation exercise itself, not just any blocked delivery
+	// blockedLooseTarget is non-nil from the round the loose crate's own
+	// Deliver was blocked until the matching EventDelivered confirms the
+	// retry actually landed at that same node. A CodeRabbit finding on
+	// this PR's first revision noted that counting any seat-0
+	// EventDeliveryBlocked (a bound contract delivery can produce one just
+	// as easily) plus a bare "Cargo == nil at match end" check would both
+	// still pass under a regression that dropped the blocked crate instead
+	// of preserving it for retry — neither assertion tied the block and
+	// the eventual delivery to the same target. This variable is what
+	// closes that gap.
+	var blockedLooseTarget *game.NodeID
 
 	// Same lease-sizing helper as the 4-player test — see its own doc
 	// comment for why staking is deferred rather than done as early as
@@ -521,8 +542,15 @@ func TestGoldenTwoPlayerMatchExercisesRotatingBorders(t *testing.T) {
 				node := e.Node
 				crateAt = &node
 			}
-			if e.Kind == game.EventDeliveryBlocked && e.Seat == 0 {
-				blockedRounds++
+			// Only a block of the loose crate's own chosen target counts as
+			// the rotation exercise — a bound contract delivery landing on
+			// a currently-inactive Border (this seed's timing does happen
+			// to produce one, see this test's own doc comment) fires the
+			// identical event kind and must not be mistaken for it.
+			if e.Kind == game.EventDeliveryBlocked && e.Seat == 0 && looseTarget != nil && e.Node == *looseTarget {
+				looseBlockCount++
+				node := *looseTarget
+				blockedLooseTarget = &node
 				// This must be rotation's own doing: the blocked node was,
 				// on this exact round, actually in rotation's inactive set
 				// — not merely that some event fired.
@@ -530,8 +558,17 @@ func TestGoldenTwoPlayerMatchExercisesRotatingBorders(t *testing.T) {
 					t.Errorf("round %d: EventDeliveryBlocked at node %d, but that node is not in rotation's inactive set %v for this round", round, e.Node, inactiveBordersForRound(s.Graph, round, 2))
 				}
 			}
+			if e.Kind == game.EventDelivered && e.Seat == 0 && blockedLooseTarget != nil && e.Node == *blockedLooseTarget {
+				blockedLooseTarget = nil
+			}
 		}
 		s = next
+		// A regression that drops blocked cargo instead of preserving it
+		// for retry would otherwise only show up as a silent "Cargo == nil
+		// at match end" pass — catch it the round it actually happens.
+		if blockedLooseTarget != nil && s.Players[0].Cargo == nil {
+			t.Fatalf("round %d: seat 0's cargo vanished after rotation blocked its delivery to node %d, with no EventDelivered ever confirming that same node — the retry lost the cargo instead of completing it", round, *blockedLooseTarget)
+		}
 		if s.Players[0].Cargo == nil {
 			looseTarget = nil
 		}
@@ -543,8 +580,11 @@ func TestGoldenTwoPlayerMatchExercisesRotatingBorders(t *testing.T) {
 	if totalEvents == 0 {
 		t.Fatal("0 events emitted across all 15 rounds — the match ran silent, which is not the same as a match that ran")
 	}
-	if blockedRounds == 0 {
-		t.Fatal("EventDeliveryBlocked never fired for seat 0 — the rotation exercise (this test's whole point at 2 players) never actually blocked a delivery")
+	if looseBlockCount == 0 {
+		t.Fatal("EventDeliveryBlocked never fired for seat 0's loose crate at its own chosen (rotation-inactive) target — the rotation exercise (this test's whole point at 2 players) never actually blocked a delivery")
+	}
+	if blockedLooseTarget != nil {
+		t.Fatalf("seat 0's loose-crate delivery to node %d was blocked by rotation but never confirmed delivered by a matching EventDelivered before the match ended", *blockedLooseTarget)
 	}
 	if s.Players[0].Cargo != nil {
 		t.Error("seat 0 is still carrying cargo at match end — a rotation block should always clear within one round (alternation flips every round), not leave a delivery stuck")
@@ -553,8 +593,8 @@ func TestGoldenTwoPlayerMatchExercisesRotatingBorders(t *testing.T) {
 	breakdowns := FinalScore(s)
 	winner := breakdowns[0]
 	t.Logf("winner breakdown: %+v", winner)
-	t.Logf("seat0: Balance=%d Infamy=%d ContractsDelivered=%d Posts=%v Contracts=%+v blockedRounds=%d",
-		s.Players[0].Balance, s.Players[0].Infamy, s.Players[0].ContractsDelivered, s.Players[0].Posts, s.Players[0].Contracts, blockedRounds)
+	t.Logf("seat0: Balance=%d Infamy=%d ContractsDelivered=%d Posts=%v Contracts=%+v looseBlockCount=%d",
+		s.Players[0].Balance, s.Players[0].Infamy, s.Players[0].ContractsDelivered, s.Players[0].Posts, s.Players[0].Contracts, looseBlockCount)
 
 	// See this test's own doc comment for why only the general band
 	// applies at 2 players — GDD §16's component sub-bands are calibrated
