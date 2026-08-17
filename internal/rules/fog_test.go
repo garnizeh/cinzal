@@ -736,25 +736,88 @@ func TestProjectArchiveIsolatedPerSeat(t *testing.T) {
 	}
 }
 
-// --- Byte-level: a hidden node's ID never appears in the serialised view ---
+// --- Byte-level: a hidden node's ID never appears in the serialised view
+// (#82's exit demonstration) ---
 
+// containsNodeIDToken reports whether id appears anywhere in b as a
+// standalone numeric token: a quoted map key ("4":), a quoted string value
+// ("...":"4"), or a bare number inside a JSON array ([0,2,4]) — the last of
+// which a naive `"4":`/`4"` substring check misses entirely, and is exactly
+// how a neighbour-ID leak through NodeView.Edges reaches the wire. Digit
+// boundaries on both sides mean "14" or "42" never falsely match "4".
+func containsNodeIDToken(b []byte, id game.NodeID) bool {
+	target := strconv.Itoa(int(id))
+	s := string(b)
+	for i := 0; ; {
+		idx := strings.Index(s[i:], target)
+		if idx < 0 {
+			return false
+		}
+		start := i + idx
+		end := start + len(target)
+		beforeIsDigit := start > 0 && s[start-1] >= '0' && s[start-1] <= '9'
+		afterIsDigit := end < len(s) && s[end] >= '0' && s[end] <= '9'
+		if !beforeIsDigit && !afterIsDigit {
+			return true
+		}
+		i = start + 1
+	}
+}
+
+// TestProjectSerialisationOmitsHiddenNodeID is #82's exit criterion
+// verbatim: "For a state where seat A cannot see node N, Project(s, A)
+// serialised to JSON contains no occurrence of N's ID anywhere in the
+// bytes." Node 5 stays Hidden; node 1 is Rumoured — visible, and its ID
+// must be asserted present in the same test, or a Project that filtered
+// every node out would satisfy "no occurrence of N" vacuously (#82's own
+// fail-closed criterion: "a test where ... the view serialises to an empty
+// object[] fails rather than passing vacuously").
+//
+// Deliberately not trailTestGraph/trailTestState: every enum this fixture
+// can put on the wire (NodeType, Sector, CreditBand) is one of internal/
+// game's "leading blank iota" families and so tops out at 4 — trailTestGraph
+// itself makes node 1 an Alley, NodeType value 4, which would collide with
+// a Hidden node 4 the moment the absence check also covers bare numbers
+// inside a JSON array (containsNodeIDToken below), not just quoted ones.
+// Node 5 is the lowest ID no field in this payload can produce by
+// coincidence, which is what makes the check below trustworthy rather than
+// merely "unlikely to collide."
 func TestProjectSerialisationOmitsHiddenNodeID(t *testing.T) {
-	s := trailTestState(5, 0, 3)
+	graph := Graph{Nodes: []Node{
+		{ID: 0, Type: game.NodeWarehouse, Edges: []game.NodeID{1}},
+		{ID: 1, Type: game.NodeAlley, Edges: []game.NodeID{0, 2, 5}},
+		{ID: 2, Type: game.NodeAlley, Edges: []game.NodeID{1, 3}},
+		{ID: 3, Type: game.NodeBorder, Edges: []game.NodeID{2}},
+		{ID: 4}, // unused filler, only here so index 5 is in range
+		{ID: 5, Type: game.NodeAlley, Edges: []game.NodeID{1}},
+	}}
+	s := MatchState{Round: 7, Graph: graph, Players: []Player{
+		{Seat: 0, Position: 0, LastEndNode: 0, Fog: make([]game.FogState, 6)},
+		{Seat: 1, Position: 3, LastEndNode: 3, Fog: make([]game.FogState, 6)},
+	}}
 	fogTestSight(&s, 0, game.FogRumoured, 1)
-	// Node 4 (deliberately distinctive, unlikely to collide with any other
-	// small integer already present elsewhere in the payload) stays Hidden.
+	// Node 5 (node 1's neighbour, so Break 2 below has somewhere to leak
+	// its ID from) stays Hidden — the zero-value FogHidden every other
+	// index in Fog already carries.
 
 	v := Project(s, 0)
+	if _, ok := v.Nodes[5]; ok {
+		t.Fatalf("test setup error: node 5 should be Hidden")
+	}
+	if _, ok := v.Nodes[1]; !ok {
+		t.Fatalf("test setup error: node 1 should be visible (Rumoured)")
+	}
+
 	b, err := json.Marshal(v)
 	if err != nil {
 		t.Fatalf("Marshal failed: %v", err)
 	}
 
-	if strings.Contains(string(b), `"4":`) || strings.Contains(string(b), strconv.Itoa(4)+`"`) {
-		t.Errorf("serialised view contains node 4's ID, want it absent: %s", b)
+	if containsNodeIDToken(b, 5) {
+		t.Errorf("serialised view contains node 5's ID, want it absent: %s", b)
 	}
-	if _, ok := v.Nodes[4]; ok {
-		t.Fatalf("test setup error: node 4 should be Hidden")
+	if !strings.Contains(string(b), `"1":`) {
+		t.Errorf("serialised view is missing node 1's ID, want it present — an empty or vacuous projection would satisfy the absence check above without ever testing anything: %s", b)
 	}
 }
 
