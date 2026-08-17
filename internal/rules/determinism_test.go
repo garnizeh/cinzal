@@ -406,7 +406,7 @@ var goldenHashes = map[int]string{
 	2: "8261d780866835c1adc90a7dd4984a6515e02db99fe0ae316b2aac25992f0f8e",
 	3: "790bee67c5ed42be3509d7e1abbf3496af00159e1e6507187ab2a403d2e91e7d",
 	4: "749bf75a40b358f26d187e2dc5c3cd235b1990122c59a7a4e974bfe8561f17de",
-	5: "300c64efa48c2ad5f4ba445dc335d2fc5c27a83f80b9c7662516191e87bf4004",
+	5: "c1887bd3edf6c847ee0fff961cc0d060aacf9a035bf972ba18093d5f4dd1a9f8",
 }
 
 // TestGoldenFixturesFinalStateMatchesCommittedHash is the "fixtures exist

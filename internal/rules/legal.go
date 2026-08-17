@@ -102,6 +102,20 @@ const (
 	// (D11) — a Black Market is inert map furniture in this scenario, never
 	// a source or sink of items.
 	ReasonItemsSuppressed
+
+	// ReasonNegativeStake is a declared Stance.Stake below 0. game.Order's
+	// own doc comment documents the field as "Cr$ 0-6", but nothing
+	// enforced the floor: a negative stake reaches resolveLoser
+	// (confront.go), where the stake deduction clamped against the
+	// loser's balance goes negative too, which then increases their
+	// balance on a loss instead of reducing it — a malformed payload with
+	// a real exploit, not just an untested one (issue #79).
+	ReasonNegativeStake
+
+	// ReasonBlindStepCountExceeded is a declared Pushing On blind step
+	// count outside GDD §9.1's legal range of 0-2 (issue #79's "blind step
+	// count of 3" malformed shape).
+	ReasonBlindStepCountExceeded
 )
 
 // String returns the reason's short name, or "Reason(n)" for an invalid
@@ -140,6 +154,10 @@ func (r Reason) String() string {
 		return "stake post is illegal: leases suppressed by this match's config"
 	case ReasonItemsSuppressed:
 		return "deal is illegal: items suppressed by this match's config"
+	case ReasonNegativeStake:
+		return "declared stake is negative"
+	case ReasonBlindStepCountExceeded:
+		return "pushing on blind step count outside the legal range of 0-2"
 	default:
 		return fmt.Sprintf("Reason(%d)", uint8(r))
 	}
@@ -184,6 +202,11 @@ func Legal(v game.PlayerView, o game.Order, cfg game.Config) error {
 
 	if err := legalAction(v, o, cfg); err != nil {
 		return err
+	}
+
+	if o.Stance.Stake < 0 {
+		return illegal(ReasonNegativeStake,
+			fmt.Sprintf("declared stake %d is negative", o.Stance.Stake))
 	}
 
 	if err := legalBalance(v, o, cfg); err != nil {
@@ -268,6 +291,11 @@ func routeEndsHidden(v game.PlayerView, o game.Order) bool {
 func legalPushingOn(v game.PlayerView, o game.Order) error {
 	if !pushingOnDeclared(o) {
 		return nil
+	}
+
+	if o.PushingOn.Steps < 0 || o.PushingOn.Steps > 2 {
+		return illegal(ReasonBlindStepCountExceeded,
+			fmt.Sprintf("pushing on declares %d blind steps, outside the legal range of 0-2", o.PushingOn.Steps))
 	}
 
 	if !routeEndsHidden(v, o) {

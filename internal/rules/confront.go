@@ -259,15 +259,16 @@ func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerC
 	}
 
 	var eligible []game.SeatID
-	stakeCollected := 0
+	stakeCollected, shakedownCollected := 0, 0
 	for _, seat := range losers {
-		share, forfeit := resolveLoser(s, c, seat, validated, walks, cfg, r)
+		share, shaken, forfeit := resolveLoser(s, c, seat, validated, walks, cfg, r)
 		stakeCollected += share
+		shakedownCollected += shaken
 		if forfeit {
 			eligible = append(eligible, seat)
 		}
 	}
-	s.Players[winner].Balance += stakeCollected
+	s.Players[winner].Balance += stakeCollected + shakedownCollected
 
 	taken, tookCargo := game.SeatID(0), false
 	if s.Players[winner].Cargo == nil {
@@ -296,22 +297,33 @@ func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerC
 // forfeited, rounded down — never half of the declared stake: legalBalance
 // (legal.go) deliberately excludes Aggressive stake from the submission-time
 // affordability check, so a stake can legally outgrow balance by the time it
-// resolves) and whether this seat's cargo is forfeit and still theirs to
-// give — the caller decides whether the winner takes it or it drops at the
-// node.
-func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) (stakeShare int, forfeitCargo bool) {
+// resolves), the Cr$ shakedown this loser paid — GDD §15: "pay the Cr$4
+// shakedown to the winner", so the caller must credit it there too, exactly
+// like the stake share — and whether this seat's cargo is forfeit and still
+// theirs to give — the caller decides whether the winner takes it or it
+// drops at the node.
+func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) (stakeShare, shakedownPaid int, forfeitCargo bool) {
 	p := &s.Players[seat]
 	o := validated[seat]
 
 	staked := min(o.Stance.Stake, p.Balance)
 	p.Balance -= staked
 
+	// GDD §15: "If Evasive: −1 step next round" — unconditional on the
+	// stance, not on whether the shakedown below succeeds or cargo was
+	// even carried. Consumed from the entry snapshot by steps.go, cleared
+	// at the top of the following Resolve call (resetRoundFlags), exactly
+	// like Flagged (RFC §6.6).
+	if o.Stance.Stance == game.StanceEvasive {
+		p.EvasiveStepPenalty = true
+	}
+
 	if p.Cargo != nil {
 		protected := false
 		if o.Stance.Stance == game.StanceEvasive {
-			paid := Shakedown(p.Balance, cfg.ShakedownCost)
-			p.Balance -= paid
-			protected = paid == cfg.ShakedownCost
+			shakedownPaid = Shakedown(p.Balance, cfg.ShakedownCost)
+			p.Balance -= shakedownPaid
+			protected = shakedownPaid == cfg.ShakedownCost
 		}
 
 		if p.Cargo.Bound {
@@ -326,7 +338,7 @@ func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated ma
 	pushback(s, c, seat, o.Stance.Stance == game.StanceEvasive, walks, r)
 	haltMovement(validated, seat)
 
-	return staked / 2, forfeitCargo
+	return staked / 2, shakedownPaid, forfeitCargo
 }
 
 // applyDeadlinePause finds p's contract matching its carried cargo and
@@ -377,7 +389,14 @@ func dropForfeitCargo(s *MatchState, seat game.SeatID, node game.NodeID) {
 // reset) to match the new Position, so a later confrontation this round —
 // reachable per RFC §6.5's Bounty worked case, where a pushed loser is
 // caught again by someone else's later movement step — starts its own
-// pushback from the right history.
+// pushback from the right history. dest becomes Known in seat's own Fog
+// regardless of how it was reached — GDD §7.2's "a visited node becomes
+// Known permanently" is unconditional, and the Displacement rule (GDD §15)
+// states sight follows "wherever you actually end the round... however you
+// got there." No Scavenging roll fires here even when dest was genuinely
+// Hidden: Scavenging (movement.go's scavenge) is tied to a deliberate,
+// step-spending exploration choice (GDD §9.1), which an involuntary
+// displacement is not.
 func pushback(s *MatchState, c confrontation, seat game.SeatID, evasive bool, walks map[game.SeatID]*seatWalk, r *RNG) {
 	hops := 1
 	if evasive {
@@ -420,7 +439,9 @@ func pushback(s *MatchState, c confrontation, seat game.SeatID, evasive bool, wa
 		walk.Path = []game.NodeID{dest}
 	}
 
-	s.Players[seat].Position = dest
+	p := &s.Players[seat]
+	p.Position = dest
+	markNodeKnown(p, dest)
 }
 
 // neighborsExcluding returns node's neighbors on the navigable graph

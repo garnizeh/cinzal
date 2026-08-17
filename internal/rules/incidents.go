@@ -236,6 +236,7 @@ func resolveFlood(s *MatchState, ctx incidentContext, validated map[game.SeatID]
 		}
 		if dest, ok := retreatTowardSectorEdge(s.Graph, p.Position, *ctx.sector); ok {
 			p.Position = dest
+			markNodeKnown(p, dest) // GDD §7.2 / §15: Known however you got there.
 		}
 	}
 }
@@ -271,6 +272,7 @@ func resolveSnatchJob(s *MatchState, ctx incidentContext, validated map[game.Sea
 		}
 		p.Cargo = nil
 		p.Position = PartialFisherYates(r, PurposeIncidentRelocate, candidates, 1)[0]
+		markNodeKnown(p, p.Position) // GDD §7.2 / §15: Known however you got there.
 	}
 	return events
 }
@@ -354,6 +356,7 @@ func resolveTurfWar(s *MatchState, ctx incidentContext, validated map[game.SeatI
 		}
 		if dest, ok := retreatTowardSectorEdge(s.Graph, p.Position, *ctx.sector); ok {
 			p.Position = dest
+			markNodeKnown(p, dest) // GDD §7.2 / §15: Known however you got there.
 		}
 	}
 }
