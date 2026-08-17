@@ -882,6 +882,20 @@ func TestConsumptionPredictorsAccountForEveryNonSetupRow(t *testing.T) {
 // TestPerRoundRNGConsumptionMatchesPredictions is #77's own heart: RFC
 // §16.2's invariant, "rng.seq consumed == predicted, per the §6.4 table,
 // asserted per round," run across every round of every golden fixture.
+//
+// Fails closed per issue #81's own acceptance criterion: a fixture whose
+// recorded consumption is empty must fail rather than trivially matching an
+// empty prediction. The per-round `got != want` check above already catches
+// the case where the tracker is broken (returns 0) while a real draw was
+// predicted, in whichever round that first happens — but a fixture that
+// happens to never exercise a single predicted purpose across all 15 rounds
+// would sail through that check with every comparison at 0 == 0, having
+// tested nothing. totalPredicted/totalActual, summed across every round and
+// every predicted purpose, guards against exactly that: predicted == 0 means
+// the fixture itself is too quiet to be a check; actual == 0 while predicted
+// > 0 means every per-round comparison above should already have failed, so
+// reaching this line means the summation disagrees with itself — either way,
+// fail rather than pass on an empty summary.
 func TestPerRoundRNGConsumptionMatchesPredictions(t *testing.T) {
 	for _, fx := range determinismFixtures {
 		t.Run(fmt.Sprintf("%dp", fx.players), func(t *testing.T) {
@@ -891,6 +905,7 @@ func TestPerRoundRNGConsumptionMatchesPredictions(t *testing.T) {
 			if err != nil {
 				t.Fatalf("initial() error = %v", err)
 			}
+			totalPredicted, totalActual := 0, 0
 			for round := 1; round <= cfg.Rounds; round++ {
 				pre := s
 				rng := NewRNG(fx.seed, round)
@@ -903,12 +918,20 @@ func TestPerRoundRNGConsumptionMatchesPredictions(t *testing.T) {
 				for purpose, predict := range consumptionPredictors {
 					want := predict(f)
 					got := rng.Consumed(purpose)
+					totalPredicted += want
+					totalActual += got
 					if got != want {
 						t.Errorf("round %d: Consumed(%q) = %d, want %d (predicted from this round's own observable facts)", round, purpose, got, want)
 					}
 				}
 
 				s = next
+			}
+			if totalPredicted == 0 {
+				t.Fatalf("%dp fixture predicted zero total draws across every round and every predicted purpose — the script never exercises a single predicted consumer, which would make this test vacuous", fx.players)
+			}
+			if totalActual == 0 {
+				t.Fatalf("%dp fixture recorded zero total draws across every round and every predicted purpose, despite predicting %d — failing closed rather than trivially matching an empty prediction", fx.players, totalPredicted)
 			}
 		})
 	}
