@@ -108,7 +108,10 @@ func checkPropertyInvariants(s MatchState, cfg game.Config) error {
 			return fmt.Errorf("seat %d: position = %d, out of range [0,%d) — not a valid node", p.Seat, p.Position, len(s.Graph.Nodes))
 		}
 
-		if int(p.Position) < len(p.Fog) && p.Fog[p.Position] < game.FogKnown {
+		if int(p.Position) >= len(p.Fog) {
+			return fmt.Errorf("seat %d: Fog has %d entries, want at least %d to cover its own live Position %d — a Fog too short to even name the seat's own node is itself a malformed state, not a pass", p.Seat, len(p.Fog), int(p.Position)+1, p.Position)
+		}
+		if p.Fog[p.Position] < game.FogKnown {
 			return fmt.Errorf("seat %d: standing on node %d at fog tier %s, want >= Known — GDD §7.2: \"a visited node becomes Known permanently\", so no seat can ever end a round on a node it could not reach", p.Seat, p.Position, p.Fog[p.Position])
 		}
 
@@ -238,7 +241,7 @@ func TestPropertyCreditConservationSourcesAreExhaustive(t *testing.T) {
 		t.Fatalf("ReadDir(.): %v", err)
 	}
 
-	balanceMutation := regexp.MustCompile(`\.Balance\s*[+\-]?=[^=]`)
+	balanceMutation := regexp.MustCompile(`\.Balance\s*(?:\+\+|--|[+\-]?=[^=])`)
 
 	scanned := 0
 	for _, e := range entries {
