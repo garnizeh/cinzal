@@ -163,6 +163,12 @@ If one of these blocks you, the answer is almost never to weaken the gate.
 
 The secret scan reads history as well as the tree, because a credential added in one commit and deleted in the next is absent from the tree and present in the history forever. It is scoped to the commits your branch adds: a credential somewhere else in the repository is not your pull request's problem, and making it one was a real defect ([#37](https://github.com/garnizeh/cinzal/issues/37)). Locally, `make secrets` scopes itself the same way, to `origin/main..HEAD` — falling back to the whole history of `HEAD` when `origin/main` is unknown or your branch adds nothing to it, as on `main` itself. It over-scans rather than under-scans: no path through the gate inspects zero commits, because a scan of nothing reports "no leaks found" exactly like a clean one.
 
+### The benchmark regression gate
+
+**`bench-compare` is also required**, but shaped differently from the four above: it only runs on a pull request that touches `internal/rules/gen`, this workflow, `check-bench-regression.sh`, or the `Makefile` — most pull requests skip it rather than pass it. When it runs, it benchmarks the base commit and this pull request's merge commit back to back on the same runner and fails for real past a 20%-per-case or 10%-geomean threshold (`scripts/check-bench-regression.sh`).
+
+It started advisory (issue #113) because two data points could not characterise real CI-runner noise against those thresholds, and was promoted to required in [#127](https://github.com/garnizeh/cinzal/issues/127) once seven real same-runner comparisons had landed with zero false positives — worst single-case drift +6.27%, worst geomean 0.93%, both comfortably inside the thresholds.
+
 ### What is deliberately not a gate
 
 **Style linters do not join the required set.** Specifically, `markdownlint` does not run in CI — decided in [#23](https://github.com/garnizeh/cinzal/issues/23), recorded here because that is where the next person to feel strongly will look.

@@ -304,20 +304,19 @@ jobs:
     # measured code. The bench job above still records main's history as an
     # artifact (#112) — that is its own purpose, and nothing here reads it.
     #
-    # ADVISORY, NOT A GATE — deliberate, and recorded here rather than left
-    # implicit in a `continue-on-error: true` on the comparison step. This
-    # job is allowed to fail for real (see the last step): a red X here is
-    # an honest, useful signal, not noise dressed up as green. What makes it
-    # non-blocking is that "bench-compare" is not, and must not become,
-    # a required status check in this repository's branch protection — only
-    # `check` is. See scripts/check-bench-regression.sh's own header for the
-    # full reasoning: two data points (before/after #61) is not enough yet
-    # to characterise real CI-runner noise, and CONTRIBUTING.md's "What is
-    # deliberately not a gate" is explicit that a required check which can
-    # go red on noise teaches contributors a red check might be nothing —
-    # the same failure this project already spent real effort undoing for
-    # CodeRabbit's own green-on-skip behaviour. Promote this once the
-    # false-positive rate is actually known, not before.
+    # A REQUIRED STATUS CHECK — issue #127. This job ran advisory for a
+    # while: allowed to fail for real (no `continue-on-error`), but not in
+    # branch protection's required contexts, because two data points
+    # (before/after #61) could not characterise real CI-runner noise against
+    # THRESHOLD/GEOMEAN_THRESHOLD. #124's own +6.27% same-runner drift on an
+    # untouched benchmark was the first real measurement and, on its own,
+    # was reason for caution rather than confidence. Six more real
+    # comparisons landed since (PRs #149, #151, #179) with zero false
+    # positives — worst single-case drift +6.27%, worst geomean 0.93%,
+    # both comfortably inside the 20%/10% thresholds — and #127 promoted it
+    # on that evidence. See scripts/check-bench-regression.sh's own header
+    # for the threshold reasoning and CONTRIBUTING.md's gate table for where
+    # this is now recorded.
     #
     # The steps below are gated on the first one having found a reason to run
     # at all (the measured code, or this gate itself, actually changed) — a

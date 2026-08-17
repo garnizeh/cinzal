@@ -3,16 +3,14 @@
 # Flags a benchmark regression between two `go test -bench` result files —
 # issue #113, the comparison step deliberately deferred by #112.
 #
-# THIS IS ADVISORY, NOT A CI GATE. A non-zero exit here means "annotate the
-# pull request", never "block the merge" — this script does not decide that;
-# the bench-compare job in .github/workflows/ci.yml does, by never being
-# added to main's required status check contexts (see CONTRIBUTING.md "What
-# is deliberately not a gate": a required check that can go red on noise
-# teaches contributors a red check might be nothing, the same failure this
-# project already spent real effort undoing for CodeRabbit's own
-# green-on-skip behaviour). Two data points (before/after #61) is not enough
-# to characterise real CI-runner noise, so this starts advisory; promoting
-# it later is a one-line change to the workflow, not to this script.
+# THIS IS A CI GATE. A non-zero exit here blocks the merge — the bench-compare
+# job in .github/workflows/ci.yml is a required status check on `main`
+# (issue #127). It started advisory (two data points, before/after #61, was
+# not enough to characterise real CI-runner noise) and was promoted once
+# seven real same-runner comparisons had landed with zero false positives:
+# worst single-case drift +6.27% (issue #124) and worst geomean drift 0.93%,
+# both well inside THRESHOLD and GEOMEAN_THRESHOLD below. See issue #127 for
+# the full data and CONTRIBUTING.md's gate table for where this is recorded.
 #
 # WHY BOTH A P-VALUE AND A MAGNITUDE THRESHOLD.
 #
