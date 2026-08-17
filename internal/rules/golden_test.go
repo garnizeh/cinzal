@@ -143,6 +143,7 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 	postsStaked := 0
 	const maxPosts = 2
 	var crateAt *game.NodeID // announced Dead Runner / Spilled Load crate, unclaimed
+	totalEvents := 0         // issue #84's fails-closed guard, below
 
 	// blocksNeeded is the fewest lease blocks (GDD §10.4, capped at 4)
 	// whose rounds survive from round through cfg.Rounds's own Upkeep
@@ -279,6 +280,7 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 		if err != nil {
 			t.Fatalf("round %d: Resolve() error = %v", round, err)
 		}
+		totalEvents += len(events)
 		for _, e := range events {
 			if e.Kind == game.EventDeadRunnerCrate || e.Kind == game.EventSpilledLoadCrate {
 				node := e.Node
@@ -290,6 +292,14 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 
 	if s.Round != game.RoundNumber(cfg.Rounds) {
 		t.Fatalf("s.Round = %d after the loop, want %d", s.Round, cfg.Rounds)
+	}
+	// Issue #84's own fails-closed acceptance criterion: a script that
+	// silently resolved zero rounds (or a Resolve stub that never emits
+	// anything) would still pass the s.Round check above and every RP
+	// assertion below, scoring an untouched initial state. Guard the class
+	// of bug, not just the symptom.
+	if totalEvents == 0 {
+		t.Fatal("0 events emitted across all 15 rounds — the match ran silent, which is not the same as a match that ran")
 	}
 
 	breakdowns := FinalScore(s)
@@ -319,6 +329,236 @@ func TestGoldenMatchFinalScoreLandsInGDDBands(t *testing.T) {
 			t.Errorf("%s = %d, want [%d, %d]", c.name, c.got, c.min, c.max)
 		}
 	}
+	if winner.Total < 14 || winner.Total > 34 {
+		t.Errorf("winner Total = %d, want [14, 34] (GDD §16's general band)", winner.Total)
+	}
+}
+
+// TestGoldenTwoPlayerMatchExercisesRotatingBorders is issue #84's second
+// acceptance criterion: the same shape as
+// TestGoldenMatchFinalScoreLandsInGDDBands above — real initial() +
+// fifteen real Resolve() calls to final scoring, at 4 players there — but
+// at 2, where GDD §6.3's two-player-only rule set switches on: a 15-node
+// map (vs. 25 at 4p) and rotating Borders, half the map's Border set
+// accepting deliveries on any given round, alternating (D03,
+// activeBordersForRound in borders.go). GDD §16's own reference simulation
+// and component RP bands are stated for 4 players only ("Reference
+// simulation, 4 players, 15 rounds") — this test therefore checks reaching
+// round 15 with events actually recorded (the same fails-closed guard as
+// the 4-player test above) and the general [14, 34] total band, which nothing
+// in §16 ties to a specific player count, rather than the tier-calibrated
+// component sub-bands, which are.
+//
+// Seat 0 acts; seat 1 stays put the entire match (empty route, Nothing,
+// Neutral) — for the same reason the 4-player test keeps its idle seats
+// idle: confrontations would inject RNG-driven balance and cargo outcomes
+// no hand-picked seed could keep predictable, and this test's job is
+// rotation, not combat.
+//
+// The rotation exercise itself is deliberate, not incidental: whenever
+// seat 0 is carrying a loose (unbound) crate — the one case where it, not
+// a contract's fixed Destination, chooses which Border to route to — it
+// targets whichever Border rotation currently has *inactive*
+// (inactiveBordersForRound), the same unexported helper Resolve's own
+// blockedBordersThisRound composes from (borders.go), fixing that choice
+// for the rest of the delivery attempt rather than re-picking every round.
+// GDD §6.3's alternation flips every single round for every Border (odd
+// rounds vs. even — activeBordersForRound's own doc comment), so on
+// whatever round seat 0 actually arrives, one of two things is true: the
+// target is still inactive, in which case checkActionDegradation
+// (validate.go) degrades the Deliver to Nothing and emits
+// EventDeliveryBlocked (asserted below, confirmed against
+// inactiveBordersForRound's own live answer for that exact round — this
+// must be rotation's doing, not a coincidence), and this script's
+// every-round route recomputation (the same "arrived" retry the 4-player
+// test relies on) reissues the identical Deliver next round, by which time
+// alternation has flipped the target active and the delivery completes; or
+// the target had already flipped active by the time of arrival and the
+// first attempt just succeeds. Both are the rule working correctly — a
+// Border rotation closing a route is always transient by construction, one
+// round at worst, which is exactly D03/§6.3's intent and distinct from
+// D28's Dragnet-combines-with-rotation deadlock (never reachable here: no
+// EventDragnet source is in play, see blockedBordersThisRound's own note
+// that its safety valve is "provably a no-op at 3+ players" — inverted
+// here, but the 2-player, no-Dragnet case never needs the valve either,
+// since rotation alone can never close every Border: 3 Borders split
+// 2-and-1 between the two labels, never 3-and-0). Bound (contract) cargo
+// is routed to its contract's own fixed Destination as normal — GDD §8.1
+// gives the player no choice there — so it is not steered toward rotation
+// on purpose, though this seed's own timing happens to land two contract
+// deliveries on Border nodes without a block, which is the ordinary case
+// rotation leaves alone most rounds.
+func TestGoldenTwoPlayerMatchExercisesRotatingBorders(t *testing.T) {
+	cfg := game.DefaultConfig()
+	seed := testSeed(7)
+
+	s, err := initial(seed, cfg, 2)
+	if err != nil {
+		t.Fatalf("initial() error = %v", err)
+	}
+	homeSector := s.Graph.Nodes[s.Players[0].Position].Sector
+
+	idleOrder := game.Order{
+		Action: game.ActionOrder{Kind: game.ActionNothing},
+		Stance: game.StanceOrder{Stance: game.StanceNeutral},
+	}
+
+	postsStaked := 0
+	const maxPosts = 2
+	var crateAt *game.NodeID     // announced Dead Runner / Spilled Load crate, unclaimed
+	var looseTarget *game.NodeID // this carry's fixed rotation-exercising Border, set once per loose crate
+	totalEvents := 0
+	blockedRounds := 0
+
+	// Same lease-sizing helper as the 4-player test — see its own doc
+	// comment for why staking is deferred rather than done as early as
+	// balance allows.
+	blocksNeeded := func(round game.RoundNumber) int {
+		remaining := cfg.Rounds - int(round) + 1
+		for blocks := 1; blocks <= 4; blocks++ {
+			if blocks*cfg.LeaseBlockRounds > remaining {
+				return blocks
+			}
+		}
+		return 4
+	}
+
+	for round := game.RoundNumber(1); round <= game.RoundNumber(cfg.Rounds); round++ {
+		var contractChoice *int
+		if round <= 13 && len(s.Players[0].Contracts) < 2 {
+			for i, o := range s.Players[0].PendingOffer {
+				if o.Tier == 0 {
+					idx := i
+					contractChoice = &idx
+					break
+				}
+			}
+		}
+
+		p := s.Players[0]
+
+		var target game.NodeID
+		var action game.ActionKind
+		hasTarget := false
+		stakeHere := false
+
+		readyToStake := round >= 10 && postsStaked < maxPosts
+		if p.Cargo == nil && readyToStake && s.Graph.Nodes[p.Position].Post == nil && s.Graph.Nodes[p.Position].Sector == homeSector {
+			stakeHere = true
+		} else if p.Cargo == nil && readyToStake {
+			for _, n := range s.Graph.Nodes[p.Position].Edges {
+				if s.Graph.Nodes[n].Post == nil && s.Graph.Nodes[n].Sector == homeSector {
+					target, action, hasTarget = n, game.ActionStakePost, true
+					break
+				}
+			}
+		}
+		if !stakeHere && !hasTarget {
+			switch {
+			case p.Cargo != nil && p.Cargo.Bound:
+				if idx := slices.IndexFunc(p.Contracts, func(c Contract) bool { return c.ID == p.Cargo.Contract }); idx >= 0 {
+					target, action, hasTarget = p.Contracts[idx].Destination, game.ActionDeliver, true
+				}
+			case p.Cargo != nil:
+				// The rotation exercise (see this test's own doc comment):
+				// fixed once per carry, to whichever Border rotation has
+				// closed as of the round the crate started this delivery.
+				if looseTarget == nil {
+					var b game.NodeID
+					if inactive := inactiveBordersForRound(s.Graph, round, 2); len(inactive) > 0 {
+						b = inactive[0]
+					} else {
+						b = activeBordersForRound(s.Graph, round, 2)[0]
+					}
+					looseTarget = &b
+				}
+				target, action, hasTarget = *looseTarget, game.ActionDeliver, true
+			case crateAt != nil:
+				target, action, hasTarget = *crateAt, game.ActionPickup, true
+				crateAt = nil
+			case len(p.Contracts) > 0:
+				target, action, hasTarget = p.Contracts[0].Origin, game.ActionPickup, true
+			}
+		}
+
+		var route []game.NodeID
+		if hasTarget {
+			route = fogAwareRoute(s.Graph, p.Fog, p.Position, target)
+		}
+
+		maxSteps := cfg.StepsByTier[infamyTierIndex(p.Infamy, cfg)]
+		routeThisRound := route
+		if len(routeThisRound) > maxSteps {
+			routeThisRound = routeThisRound[:maxSteps]
+		}
+		arrived := hasTarget && len(routeThisRound) == len(route)
+
+		order := game.Order{Route: routeThisRound, Stance: game.StanceOrder{Stance: game.StanceNeutral}, ContractChoice: contractChoice}
+		switch {
+		case stakeHere:
+			order.Action = game.ActionOrder{Kind: game.ActionStakePost}
+			order.AddOns.RenewBlocks = blocksNeeded(round)
+			postsStaked++
+		case arrived:
+			order.Action = game.ActionOrder{Kind: action}
+			if action == game.ActionStakePost {
+				order.AddOns.RenewBlocks = blocksNeeded(round)
+				postsStaked++
+			}
+		default:
+			order.Action = game.ActionOrder{Kind: game.ActionNothing}
+		}
+
+		orders := map[game.SeatID]game.Order{0: order, 1: idleOrder}
+
+		next, events, err := Resolve(s, orders, cfg, NewRNG(seed, int(round)))
+		if err != nil {
+			t.Fatalf("round %d: Resolve() error = %v", round, err)
+		}
+		totalEvents += len(events)
+		for _, e := range events {
+			if e.Kind == game.EventDeadRunnerCrate || e.Kind == game.EventSpilledLoadCrate {
+				node := e.Node
+				crateAt = &node
+			}
+			if e.Kind == game.EventDeliveryBlocked && e.Seat == 0 {
+				blockedRounds++
+				// This must be rotation's own doing: the blocked node was,
+				// on this exact round, actually in rotation's inactive set
+				// — not merely that some event fired.
+				if !slices.Contains(inactiveBordersForRound(s.Graph, round, 2), e.Node) {
+					t.Errorf("round %d: EventDeliveryBlocked at node %d, but that node is not in rotation's inactive set %v for this round", round, e.Node, inactiveBordersForRound(s.Graph, round, 2))
+				}
+			}
+		}
+		s = next
+		if s.Players[0].Cargo == nil {
+			looseTarget = nil
+		}
+	}
+
+	if s.Round != game.RoundNumber(cfg.Rounds) {
+		t.Fatalf("s.Round = %d after the loop, want %d", s.Round, cfg.Rounds)
+	}
+	if totalEvents == 0 {
+		t.Fatal("0 events emitted across all 15 rounds — the match ran silent, which is not the same as a match that ran")
+	}
+	if blockedRounds == 0 {
+		t.Fatal("EventDeliveryBlocked never fired for seat 0 — the rotation exercise (this test's whole point at 2 players) never actually blocked a delivery")
+	}
+	if s.Players[0].Cargo != nil {
+		t.Error("seat 0 is still carrying cargo at match end — a rotation block should always clear within one round (alternation flips every round), not leave a delivery stuck")
+	}
+
+	breakdowns := FinalScore(s)
+	winner := breakdowns[0]
+	t.Logf("winner breakdown: %+v", winner)
+	t.Logf("seat0: Balance=%d Infamy=%d ContractsDelivered=%d Posts=%v Contracts=%+v blockedRounds=%d",
+		s.Players[0].Balance, s.Players[0].Infamy, s.Players[0].ContractsDelivered, s.Players[0].Posts, s.Players[0].Contracts, blockedRounds)
+
+	// See this test's own doc comment for why only the general band
+	// applies at 2 players — GDD §16's component sub-bands are calibrated
+	// to a 4-player reference simulation.
 	if winner.Total < 14 || winner.Total > 34 {
 		t.Errorf("winner Total = %d, want [14, 34] (GDD §16's general band)", winner.Total)
 	}
