@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"encoding/binary"
 	"fmt"
+
+	"github.com/garnizeh/cinzal/internal/game"
 )
 
 // RNG is the engine's single source of randomness (RFC-001 §6.4). Every draw
@@ -84,3 +86,31 @@ func (r *RNG) Next(purpose Purpose, n int) int {
 // invariant, "rng.seq consumed == predicted, per the §6.4 table, asserted
 // per round", reads this every round of every golden replay (issue #77).
 func (r *RNG) Consumed(purpose Purpose) int { return r.consumed[purpose] }
+
+// BotRNG is the stream Bot.Decide draws from — never Resolve's own *RNG
+// (docs/decisions/D32-bot-rng-stream.md). A distinct type, not a mode flag
+// on RNG: BotRNG has no Next method and RNG has no NextBot method, so a call
+// site cannot pass the wrong one to Decide and have it compile.
+type BotRNG struct{ r *RNG }
+
+// NewBotRNG constructs the stream a bot's Decide call draws from for one
+// (seat, round) pair, discarded after that one call. Deterministic in
+// (matchSeed, seat), independent of whether seat was bot- or human-
+// controlled in any other round — a returning player reclaiming a seat in
+// round 8 changes nothing about what round 9's bot RNG would produce if the
+// seat reverts to Autopilot later. round is not folded into this derivation
+// itself: NewRNG's own HMAC message already includes round on every draw, so
+// per-round independence for a fixed seat falls out of reusing it unchanged;
+// the only new derivation here is per-seat, which two bot seats must never
+// share (RFC-001 §14.5, D32).
+func NewBotRNG(matchSeed [32]byte, seat game.SeatID, round int) *BotRNG {
+	msg := binary.BigEndian.AppendUint32([]byte("cinzal.bot.rng"), uint32(seat))
+
+	mac := hmac.New(sha256.New, matchSeed[:])
+	mac.Write(msg)
+	digest := mac.Sum(nil)
+
+	var botSeed [32]byte
+	copy(botSeed[:], digest)
+	return &BotRNG{r: NewRNG(botSeed, round)}
+}
