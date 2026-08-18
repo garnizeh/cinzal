@@ -102,10 +102,16 @@ func equalRoute(a, b []game.NodeID) bool {
 // TestBotHasNoCrossRoundState is the executable form of the no-memory rule:
 // one Bot driven through fifteen rounds must produce the identical order
 // sequence a freshly constructed Bot produces when driven through the same
-// fifteen views. Since For returns a stateless value (package doc comment),
-// "freshly constructed" is just another call to For — which is itself part
-// of what this test pins: nothing here relies on, or would notice the
-// absence of, per-instance construction.
+// fifteen views.
+//
+// The first sequence is taken from a Bot that has already been driven
+// through this exact fifteen-view run once before, rather than from an
+// instance used for the first time: if an implementation ever accumulated
+// state across Decide calls, two never-yet-used instances driven through
+// the same view sequence would still evolve identically call-for-call and
+// this test would not notice — the state would be a pure function of call
+// count, not of history. Reusing an already-driven instance for the first
+// comparison arm is what would expose that history-dependence.
 //
 // Fails closed: a bot that returned fifteen zero-valued orders would pass
 // the equality assertion below trivially, so this test separately asserts
@@ -118,7 +124,9 @@ func TestBotHasNoCrossRoundState(t *testing.T) {
 
 	for _, tier := range []Tier{Drifter, Runner, Operator} {
 		t.Run(tier.String(), func(t *testing.T) {
-			first := driveRounds(t, For(tier), cfg, seed, game.SeatID(1), rounds)
+			used := For(tier)
+			_ = driveRounds(t, used, cfg, seed, game.SeatID(1), rounds)
+			first := driveRounds(t, used, cfg, seed, game.SeatID(1), rounds)
 			second := driveRounds(t, For(tier), cfg, seed, game.SeatID(1), rounds)
 
 			if len(first) != rounds || len(second) != rounds {

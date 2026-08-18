@@ -103,8 +103,14 @@ type BotRNG struct{ r *RNG }
 // per-round independence for a fixed seat falls out of reusing it unchanged;
 // the only new derivation here is per-seat, which two bot seats must never
 // share (RFC-001 §14.5, D32).
+//
+// seat is encoded as a full uint64, not truncated to 32 bits: game.SeatID is
+// a plain int (platform width), and Config.Validate places no upper bound on
+// it for a custom player count, so a narrower encoding could in principle
+// collide two distinct seats onto the same stream — exactly the non-
+// collusion property this derivation exists to guarantee.
 func NewBotRNG(matchSeed [32]byte, seat game.SeatID, round int) *BotRNG {
-	msg := binary.BigEndian.AppendUint32([]byte("cinzal.bot.rng"), uint32(seat))
+	msg := binary.BigEndian.AppendUint64([]byte("cinzal.bot.rng"), uint64(seat))
 
 	mac := hmac.New(sha256.New, matchSeed[:])
 	mac.Write(msg)
