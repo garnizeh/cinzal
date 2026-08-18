@@ -186,6 +186,16 @@ func knownDistances(v game.PlayerView, from game.NodeID) map[game.NodeID]int {
 			if _, seen := dist[next]; seen {
 				continue
 			}
+			// A Known node's own Edges can legitimately name a neighbour
+			// still Rumoured or entirely Hidden to this seat (that is
+			// exactly what a scouting step onto a Hidden node is) — gated
+			// out here so dist only ever describes a walkable known
+			// subgraph, never a hop count through a node no legal route
+			// can enter (legalRoute, internal/rules/legal.go).
+			nv, nextKnown := v.Nodes[next]
+			if !nextKnown || nv.Fog < game.FogKnown {
+				continue
+			}
 			dist[next] = dist[cur] + 1
 			queue = append(queue, next)
 		}
