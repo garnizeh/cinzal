@@ -77,6 +77,15 @@ The row stays, struck through, because the numbering is cited elsewhere and a si
 | [D30](D30-contended-action-loss-notification.md) | Four action categories in `internal/rules` — Deal, Pickup, Stake Post's cap, the Ledger — fail with no event at all when they can no longer complete by Step N+1/N+3, and Open Doors fails the same way; all five cite D14's Open Doors ruling as precedent, but D14's reasoning was about a pre-declared boon that may never fire, not a declared action that loses a fair race or finds its own state no longer sufficient — surfaced while scoping [#153](https://github.com/garnizeh/cinzal/issues/153) | **decided** — GDD §15.0's "never silently fail" isn't Step-0-scoped; it applies at every resolution step. Six new private, actor-scoped `EventKind` values (one per distinct cause across the four categories) close the gap, exempt from RFC §9.1's writer table for the same reason the existing Step 0 kinds are; Open Doors is unaffected, D14 §4 still governs it |
 | [D31](D31-node-display-name.md) | `Node.Name` and `NodeView.Name` both exist and are both disclosed from Rumoured onward (GDD §7.1), but nothing ever assigns either one — surfaced while scoping [#154](https://github.com/garnizeh/cinzal/issues/154) | **decided** — deterministic, RNG-free: sector + type + 1-based rank among same-type nodes in that sector (e.g. "Old Docks Warehouse 2"), assigned once at map generation; no new `Purpose`, no drawn name pool |
 
+### Blocks M2 — Bots and simulation
+
+| # | Question | Status |
+|---|---|---|
+| [D32](D32-bot-rng-stream.md) | `Decide(v, cfg, r *rules.RNG)` takes the seeded RNG, but RFC §6.4's consumption table has no row for it, and Autopilot handover means a shared stream would make `Resolve`'s own per-round index count depend on when a human stopped submitting — surfaced while scoping [#186](https://github.com/garnizeh/cinzal/issues/186) | **decided** — bot draws never touch `Resolve`'s `*RNG`; a new `NewBotRNG(matchSeed, seat, round)` gives each bot seat its own stream per round, deterministic in `(seed, seat)` and independent of any other round's human/bot history; a new open `BotPurpose`/`RNG.NextBot` sits beside the closed `Purpose`/`Next`, since a bot's draw count is not a §6.4-auditable constant; bot orders are still logged and a refold never calls `Decide`, so `cmd/simulate`'s reproducibility and #81's index-count guarantee both hold unconditionally |
+| D33 | Which GDD §22 metrics are computable from the Event stream, and what does the rest need? | open |
+| D34 | Where does the telemetry computation live, and what is its input type? | open |
+| D35 | How many matches per configuration, and what makes a threshold verdict actionable? | open |
+
 ### Blocks M5 — Playable web, and M6 — Async
 
 | # | Question | Status |
