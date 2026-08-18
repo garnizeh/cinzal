@@ -6,13 +6,13 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-**M0 and M1 are closed. M2 — Bots and simulation is next.** `internal/game` and `internal/rules` are fully implemented: the whole game, deterministic and headless, with the complete RFC §16.1 suite (golden replays, RNG index accounting, fog negatives, anchor parity, property/adversarial tests). Every other `internal/` package (`match`, `render`, `web`, `store`, `bots`, `auth`, `mail`, `debug`) is still `doc.go` only.
+**M0 and M1 are closed. M2 — Bots and simulation is next.** `internal/game` and `internal/rules` are fully implemented: the whole game, deterministic and headless, with the complete RFC §16.1 suite (golden replays, RNG index accounting, fog negatives, anchor parity, property/adversarial tests). Every other `internal/` package (`match`, `render`, `web`, `store`, `bots`, `auth`, `mail`, `debug`) is still `doc.go` only, as are the three `cmd/` binaries. `internal/telemetry` ([D34](docs/decisions/D34-telemetry-package-placement.md)) has no directory at all yet — M2 creates it, alongside `internal/bots` and `cmd/simulate`.
 
 ```text
-docs/project/cinzal-gdd.md                  — Game Design Document (v2.22)
-docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r28)
+docs/project/cinzal-gdd.md                  — Game Design Document (v2.24)
+docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r30)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
-docs/decisions/                             — Decision log; D1–D14 and D23–D31 decided (D15 reclassified as a task, #40), D16–D22 open (block M5/M6)
+docs/decisions/                             — Decision log; D1–D14, D23–D31 (M1) and D32–D35 (M2) decided (D15 reclassified as a task, #40), D16–D22 open (block M5/M6)
 ```
 
 `make check` runs the four aggregate gates (purity, fog boundary, debug isolation, gitleaks), which are live and required on `main`. `generate-check` is not part of `check` yet: `GENERATED` is still empty until M3/M5 land real generated paths, and a gate that can only report VACUOUS stays out of the aggregate rather than passing by not running — run `make generate-check` standalone if you want to see that message. `bench-compare` is also a required check, separate from `make check` — it only runs on a pull request that touches `internal/rules/gen`, `.github/workflows/ci.yml`, `scripts/check-bench-regression.sh`, or the `Makefile`; see CONTRIBUTING.md's "The benchmark regression gate."

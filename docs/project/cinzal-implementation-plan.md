@@ -1,6 +1,6 @@
 # CINZAL — Implementation Roadmap
 
-**Status:** draft for review · **Revision:** p2 · **Companion docs:** `cinzal-gdd.md` **v2.16**, `cinzal-architecture-rfc.md` **RFC-001 r19**
+**Status:** draft for review · **Revision:** p3 · **Companion docs:** `cinzal-gdd.md` **v2.24**, `cinzal-architecture-rfc.md` **RFC-001 r30**
 
 *This document sequences the work. It does not re-decide anything the GDD or the RFC already decided — where it appears to, that is a spec gap and it is logged in §3 rather than resolved silently.*
 
@@ -16,7 +16,9 @@ Three conventions:
 - **Blocking decisions are listed before the milestone they block**, in §3. A milestone does not start with open blockers.
 - **No time estimates.** Ordering, dependencies and gates only — per the RFC's own posture that the risky unknowns are measurement problems, not scheduling problems.
 
-*Written when there were no commits in this repository. **M0 is now closed** — the package skeleton, the Makefile and all four CI gates are in, and the gates are required status checks on `main`. **M1 is open**, with D3–D14 as its blocking decisions.*
+*Written when there were no commits in this repository. **M0 and M1 are now closed.** M0 put in the package skeleton, the Makefile and all four CI gates, which are required status checks on `main`. M1 put in the whole game — `internal/game` and `internal/rules` are complete, deterministic and headless, with RFC §16.1's suite behind them. **M2 is open**, with D32–D35 as its blocking decisions, all four decided.*
+
+*Section 3 is kept as the record of what was found and when, not rewritten each time a decision closes. The authoritative, current catalogue of every decision and its status is [`docs/decisions/README.md`](../decisions/README.md).*
 
 ---
 
@@ -38,7 +40,7 @@ v1 ships when GDD §17's v1 list is playable end to end, by real players, in bot
 | 10 | Two-player rule set (§6.3) | M1 |
 | 11 | Credit bands and the Ledger | M1 |
 | 12 | Scoring and ranking | M1 |
-| 13 | **Telemetry per §22** | M2 (computation) + M4 (persistence) |
+| 13 | **Telemetry per §22** | M2 (computation, 17 of 20 rows) + M4 (persistence); rows 15 and 18 are M5.5 and row 16 is M5, per [D33](../decisions/D33-telemetry-event-stream-coverage.md) |
 | 14 | Synchronous mode | M5 |
 | 15 | Private tables, invite links, no mandatory signup to join | M5 |
 | 16 | **The Board** (§7.5) — log, attribution, heat map, pins | M5 |
@@ -160,7 +162,37 @@ Both are wrong sentences rather than open questions: there is nothing to weigh a
 
 **Resolved by [D27](../decisions/D27-project-config-parameter.md): `Project`'s signature stands unamended.** `Config` feeds formulas, not visibility, so it was never `Project`'s to take — `rules.Legal` and `rules.Steps` already establish the shape, taking a fog-safe view and a `Config` as two separate arguments from two separate callers' scopes. `SelfState.StepAllowance` and `SelfState.RoundsToNextOffer` stay zero out of `Project` by design; `internal/match`, which already must have `Config` in scope to call `Legal` for order validation, fills both in immediately after `Project` returns and before handing the view to `web`. `view.go`'s two field comments are corrected accordingly; D01 and RFC §3/§9 are untouched.
 
-### 3.3 Product surface — blocks **M5**/**M6**
+**Five more surfaced the same way and are recorded in full in the decision log rather than restated here**, since by the time they were found this section had stopped being where decisions are read:
+
+| # | Surfaced while | Decided |
+|---|---|---|
+| [D26](../decisions/D26-sector-incident-fog-writer-rows.md) | `internal/rules/anchors.go` provisionally folded `EventInformantRing` and `EventSpilledLoadCrate` into existing §9.1 rows | Two new rows, 15 and 16, citing GDD §14.3 directly. **RFC §9.1's table is sixteen writers, not fourteen** — the count this roadmap's M1 section had used since p1. |
+| [D28](../decisions/D28-dragnet-rotating-borders-fallback.md) | scoping [#76](https://github.com/garnizeh/cinzal/issues/76) — at 2 players, Dragnet plus rotating borders can seal every Border at once | A downstream safety valve reopens the lowest-`NodeID` Border; neither mechanic changes, and the check is structurally inert at 3+ players |
+| [D29](../decisions/D29-phase-2-3-fold-attachment.md) | scoping [#152](https://github.com/garnizeh/cinzal/issues/152) — GDD §15's Phases 2 and 3 had no caller and the contract choice had no field to travel through the fold | Both phases draw a round ahead at the tail of `Resolve`; the choice becomes `Order.ContractChoice` |
+| [D30](../decisions/D30-contended-action-loss-notification.md) | scoping [#153](https://github.com/garnizeh/cinzal/issues/153) — four action categories failed with no event at all | GDD §15.0's "never silently fail" is not Step-0-scoped; six new private, actor-scoped `EventKind` values |
+| [D31](../decisions/D31-node-display-name.md) | scoping [#154](https://github.com/garnizeh/cinzal/issues/154) — `Node.Name` was disclosed from Rumoured onward and never assigned | Deterministic and RNG-free: sector + type + rank among same-type nodes in that sector |
+
+### 3.3 Bots, telemetry and the numbers — blocks **M2**
+
+Four, all decided before M2 opened. Unlike §3.2's, none of these were found by reading the two specs against each other — they were found by asking what `cmd/simulate` would actually print.
+
+**D32 · Do bot draws consume the match RNG stream?** `Decide`'s third parameter was `*rules.RNG` and RFC §6.4's consumption table had no row for it. If bots draw from the match stream, a round's index count becomes a function of how many seats were bot-filled — which changes mid-match the moment Autopilot hands a seat back to a returning player, and is therefore not a function of `{seed, order log}` at all. See [D32](../decisions/D32-bot-rng-stream.md) and [issue #186](https://github.com/garnizeh/cinzal/issues/186).
+
+**Resolved by [D32](../decisions/D32-bot-rng-stream.md): a distinct `BotRNG` type, not a row in the table.** `NewBotRNG(matchSeed, seat, round)` gives each bot seat its own stream per round, deterministic in `(seed, seat)` and independent of every other seat's human/bot history. `BotRNG` has no `Next` and `RNG` has no `NextBot`, so a call site cannot mix the two streams and still compile — §14.5's non-collusion rule and §16.2's per-round index determinism both become compile-time properties. `ConsumptionTable` is unchanged, and bot draws are invisible to `consumed map[Purpose]int` unconditionally, whatever the bot population.
+
+**D33 · Which GDD §22 metrics are actually computable from the `Event` stream?** RFC §17 said the metric set is *"computed from the event stream"* and never checked the claim row by row. See [D33](../decisions/D33-telemetry-event-stream-coverage.md) and [issue #187](https://github.com/garnizeh/cinzal/issues/187).
+
+**Resolved by [D33](../decisions/D33-telemetry-event-stream-coverage.md): the sentence was wrong for eleven of twenty rows.** Five need nothing new; six need a read of the final `MatchState`, two of those against fog-private per-seat archives no `Project()` call ever aggregates; four need small, targeted additions to `internal/rules` (three new events and one new `Stance` field on `Event`), and row 1's denominator needs order-log access regardless, since `haltMovement` clears a route from memory without recording that it was submitted. Rows 13/14 are scoped down rather than answered exactly; **rows 15 and 18 defer to M5.5 and row 16 to M5** — they are not headless facts at all, which is why §1's v1 table now says so.
+
+**D34 · Where does the telemetry computation live, and what is its input type?** D01 named no package for it, and the input signature fixes its position relative to the fog boundary permanently. See [D34](../decisions/D34-telemetry-package-placement.md) and [issue #188](https://github.com/garnizeh/cinzal/issues/188).
+
+**Resolved by [D34](../decisions/D34-telemetry-package-placement.md): `internal/telemetry`, beside `bots` in RFC §5.** `Match(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game.Config) (MatchSummary, error)`. It imports `internal/rules` deliberately and is never imported by `render`/`web` — `scripts/check-fog-boundary.sh`'s `FORBIDDEN` set gains `internal/telemetry` alongside `internal/rules`, landing in [#197](https://github.com/garnizeh/cinzal/issues/197)'s PR. The new `OrderLog` type goes in `internal/rules`, not `internal/game`, on D01's own reasoning: a full-match order log names every seat's history, not one seat's, and is at least as fog-sensitive as `MatchState`.
+
+**D35 · How many matches per configuration, and what makes a threshold verdict actionable?** The seven exit criteria below are point estimates with actions attached and no stated precision. A sweep returning 12.3 against R9's *"> 12"* is either a rule change or nothing. See [D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md) and [issue #189](https://github.com/garnizeh/cinzal/issues/189).
+
+**Resolved by [D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md): 10,000 matches, one interval formula, and action only when the interval clears the line.** Not GDD §20's 3,000-match R2 precedent — RFC §16.4's own worked invocation already ran `--matches 10000` and two exit demonstrations were already written against it. Every metric reduces to one number per match first, making the match the sampling unit unconditionally, then `mean ± 1.96 · s / √n` over that vector. A straddling baseline check is *watch, not act*: one re-run under a second root seed, pooled into a 20,000-match interval, then parked for M5.5 if it still straddles. No cross-metric correction. Both tiers always reported; each threshold's verdict read against one, per the table in M2's exit criteria below.
+
+### 3.4 Product surface — blocks **M5**/**M6**
 
 **D16 · The Recap has no cursor.** GDD §18 requires "every round since your last visit", and the RFC schema has no per-seat last-seen-round. `sessions.last_seen_at` is per session, not per match. Needs a column (`match_players.last_seen_round`) and a defined update point.
 
@@ -180,7 +212,7 @@ Both are wrong sentences rather than open questions: there is nothing to weigh a
 
 ## 4. Milestones
 
-### M0 · Foundations
+### M0 · Foundations — **closed**
 
 **Goal:** a repository where the fog boundary and the purity of `rules` are enforced by machinery, before there is any code to violate them.
 
@@ -206,7 +238,7 @@ Blocked by: **D1, D2**.
 
 ---
 
-### M1 · Rules core
+### M1 · Rules core — **closed**
 
 **Goal:** the entire game, deterministic and headless. No database, no network, no browser.
 
@@ -219,7 +251,7 @@ Blocked by: **D3–D14**. Blocks: everything.
 - `MatchState`, `Player`, `Node`, `Graph`, `Contract` (per-player instances with their own Deadline Pause flag), the four fog states, and the eight cross-round counters from RFC §6.6.
 - `Order` + `Legal()` covering every row of GDD §15.0, and the affordance metadata RFC §10.2 requires the server to render.
 - `Resolve()` as the fixed pipeline of RFC §6.7 — validate → per-step movement with crossing and collision → actions → deliveries → add-ons → trail → event/incident/pressure/upkeep — with the entry snapshot (§6.6) and both orderings (§6.5) implemented as the only two comparators in the codebase.
-- `Project()` and `PlayerView`, including the `SeatArchive` sight/trail/obscured history (§9.2, `Obscured` excluding only rounds a real entry was actually erased by Rain or Blackout per [D13](../decisions/D13-observation-denominator.md)), `NodeStats`, and all **fourteen** authorised position writers (§9.1), including Decoy's self-named row per [D12](../decisions/D12-decoy-fog-writer.md) and Dead Runner's/Fence's Windfall's own rows from issue #72.
+- `Project()` and `PlayerView`, including the `SeatArchive` sight/trail/obscured history (§9.2, `Obscured` excluding only rounds a real entry was actually erased by Rain or Blackout per [D13](../decisions/D13-observation-denominator.md)), `NodeStats`, and all **sixteen** authorised position writers (§9.1), including Decoy's self-named row per [D12](../decisions/D12-decoy-fog-writer.md), Dead Runner's/Fence's Windfall's own rows from issue #72, and Informant Ring's/Spilled Load's per [D26](../decisions/D26-sector-incident-fog-writer-rows.md).
 - Final scoring (GDD §16) and the two-player rule set (§6.3).
 - Full test suite from RFC §16.1's matrix that does not need a database: unit, property, golden replays, **fog negative tests**, cross-round counters, lazy RNG, Torn Map, tie-breaks, entry snapshot, anchor parity, headline coherence, adversarial payloads.
 
@@ -227,37 +259,47 @@ Blocked by: **D3–D14**. Blocks: everything.
 - `resolve(s, o) == resolve(s, o)` byte-identical, and a golden 15-round replay reproduces on a second machine and a second OS.
 - The RNG index count for each round matches the §6.4 table prediction **including truncation cases**.
 - Fog suite: for a state where seat A cannot see node N, `Project(s, A)` serialised to JSON contains **no occurrence of N's ID anywhere in the bytes**.
-- Anchor parity test passes: every GDD §7.3 row with a name attached maps to its correct row of RFC §9.1's fourteen-writer table (or correctly to no row, for Fresh tracks); every writer row without a §7.3 counterpart cites its source section instead (RFC §16.1).
+- Anchor parity test passes: every GDD §7.3 row with a name attached maps to its correct row of RFC §9.1's sixteen-writer table (or correctly to no row, for Fresh tracks); every writer row without a §7.3 counterpart cites its source section instead (RFC §16.1).
 - A full match can be driven to final scoring from a Go test with no I/O of any kind.
 
 ---
 
-### M2 · Bots and simulation — **the measurement gate**
+### M2 · Bots and simulation — **the measurement gate** · **open**
 
 **Goal:** answer the balance questions the GDD deferred, by measurement, before any of them can be rationalised away.
 
-Blocked by: M1. **Blocks nothing technically — and that is exactly why it is at risk of being skipped.** See §2.
+Blocked by: M1 (closed) and **D32–D35** (§3.3, all decided). **Blocks nothing technically — and that is exactly why it is at risk of being skipped.** See §2.
 
 **Deliverables**
-- `Bot` interface (`Decide(PlayerView, Config, RNG) Order`) and the three tiers: Drifter, Runner, Operator.
-- `cmd/simulate` with parameter sweeps and CSV output.
-- **The full GDD §22 metric set**, computed from the `Event` stream — one computation, later shared with the server's analytics path (RFC §17).
+- `internal/bots`: the `Bot` interface — `Decide(v game.PlayerView, cfg game.Config, r *rules.BotRNG) game.Order` per [D32](../decisions/D32-bot-rng-stream.md) and [D01](../decisions/D01-package-layout.md) — the tier registry, the no-memory rule, and the legal-order enumeration built **from `PlayerView` alone**.
+- The three tiers: **Drifter** (uniform random legal order, the statistical baseline), **Runner** (greedy, and the tier a returning player inherits), **Operator** (plans across rounds, from the view and no memory).
+- `rules.BotRNG` and `NewBotRNG(matchSeed, seat, round)` — a distinct type from `Resolve`'s `*RNG`, with disjoint methods, so a miswired call site is a compile error ([D32](../decisions/D32-bot-rng-stream.md)).
+- **A type-level CI gate**: `internal/bots` may not name `MatchState`, the graph, or the seed. Not an import check — `bots` legitimately imports `rules` for `BotRNG`, so §5's `go list` shape cannot express this one.
+- The `internal/rules` additions GDD §22 needs and the `Event` stream does not carry: three new events and one new `Stance` field ([D33](../decisions/D33-telemetry-event-stream-coverage.md)).
+- `internal/telemetry.Match(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game.Config) (MatchSummary, error)` ([D34](../decisions/D34-telemetry-package-placement.md)) — **one computation, three sinks**, later shared with the server's analytics path and the debug panel (RFC §17). `scripts/check-fog-boundary.sh` gains `internal/telemetry` in its `FORBIDDEN` set in the same PR.
+- The **17 of 20** per-match §22 rows that are headless facts, plus the per-round and per-action sets. Rows 15 and 18 belong to M5.5 and row 16 to M5; row 13 ships without a precise answer and says so.
+- `cmd/simulate`: the headless match driver, parameter sweeps, and the CSV — with D35's interval per row, computed in the harness across many `MatchSummary` values, never on `MatchSummary` itself.
+- Golden replays and per-round index accounting for **bot-populated** matches, including the Autopilot handover case, where a seat switches from human to bot mid-match and the match stream's index count must not move.
 
 **Exit criteria — expressed as answers, not as code**
 
-The milestone is done when the following have numbers attached, from sweeps at 2/3/4/5 players:
+The milestone is done when the following have numbers attached, from sweeps at 2/3/4/5 players — **10,000 matches per configuration, each number reported with its interval, each verdict read against the tier named** ([D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md), §3.3):
 
-| Question | GDD ref | Threshold that forces action |
-|---|---|---|
-| Confrontations per match | R9 / §22 | > 12 → raise node count before touching anything else |
-| Routes cancelled mid-route | R1 | > 15% → soften the confrontation rule |
-| Lease rate — the most sensitive dial in the game | §10.4 | live leases at scoring outside 2–4 per player |
-| Incidents actually hitting a player | R6 | < 20% or > 70% |
-| Matches reaching Infamy 9 | R7 | < 10% → step gradient too steep |
-| Endgame camping | R11 | confrontations in the final 3 rounds > 45% |
-| Two-player encounter rate under rotating borders | §6.3 | < 4 per match |
+| Question | GDD ref | Threshold that forces action | Read against |
+|---|---|---|---|
+| Confrontations per match | R9 / §22 | > 12 → raise node count before touching anything else | **Drifter** — a map-shape question |
+| Two-player encounter rate under rotating borders | §6.3 | < 4 per match | **Drifter** — whether the mechanic geometrically forces encounters |
+| Routes cancelled mid-route | R1 | > 15% → soften the confrontation rule | **Operator** — about a player who is trying |
+| Incidents actually hitting a player | R6 | < 20% or > 70% | **Operator** — the question is whether they land against active avoidance |
+| Matches reaching Infamy 9 | R7 | < 10% → step gradient too steep | **Operator** — a managed climb only Runner/Operator model |
+| Endgame camping | R11 | confrontations in the final 3 rounds > 45% | **Operator** — a rational-incentive question |
+| Lease rate — the most sensitive dial in the game | §10.4 | live leases at scoring outside 2–4 per player | **Operator** — Runner never buys, Drifter has no plan |
 
-Plus: a bot could be written **competently against `PlayerView` alone** (RFC §14.1). If Operator needed information the view does not carry, that is a projection defect and it goes back to M1.
+**A threshold is tripped only when the whole 95% interval sits on the failing side of it.** A point estimate of 12.3 with the interval spanning 12 is *watch, not act*: re-run that configuration under a second root seed, pool both vectors into one 20,000-match interval, and if it still straddles, record "watch, unresolved at n = 20,000" and hand it to M5.5. Both tiers are reported for every row regardless — a metric where Drifter and Operator disagree sharply is a metric that rewards skill, which is its own finding. A zero-width interval is a degenerate sample, not a result.
+
+The lease rate's verdict is a **range, not an accept/reject**: sweep `LeaseCostPerBlock` in dial order and report the breakpoint as the region between the last point whose interval sits fully inside the band and the first whose interval sits fully outside it. More than one crossing is reported as every transition found; a sweep that never leaves the band has not found the shape and must be extended.
+
+Plus: a bot could be written **competently against `PlayerView` alone** (RFC §14.1). If Operator needed information the view does not carry, that is a projection defect and it goes back to M1 as an issue, not around it as a workaround. The type-level gate on `internal/bots` is what keeps that criterion honest — one `MatchState` parameter added on a hard afternoon and Operator gets better, the criterion reads as met, and the projection defect ships to M5.
 
 **Caveat to carry forward:** bot play is not human play. A sweep tells you the *shape* of the parameter space — where a dial flips a strategy from dominant to dead — not the exact value. It narrows the range that M5.5 then confirms.
 
@@ -420,9 +462,9 @@ These are not milestones; they run throughout and each has an owner-of-record fr
 | Workstream | Starts | Standing obligation |
 |---|---|---|
 | **Fog enforcement** | M0 | Every new field on `PlayerView` gets a negative test. Every new position writer gets a row in RFC §9.1's table and a parity test. |
-| **Determinism** | M1 | Every new random consumer gets a row in RFC §6.4's table and an index-count assertion, including its truncation cases. |
+| **Determinism** | M1 | Every new random consumer gets a row in RFC §6.4's table and an index-count assertion, including its truncation cases. The one standing exception is `BotRNG` ([D32](../decisions/D32-bot-rng-stream.md)) — a separate stream the table was never scoped to cover, whose draws must stay invisible to `consumed map[Purpose]int`. |
 | **Doc synchronisation** | M1 | GDD §21 and RFC §6.4 must not drift; GDD §7.3 and RFC §9.1 must not drift. Both pairs have parity tests — keep them failing loudly. |
-| **Telemetry** | M2 | One computation, three sinks: `cmd/simulate` CSV, the analytics table, the debug panel. Never three implementations. |
+| **Telemetry** | M2 | One computation — `internal/telemetry.Match` ([D34](../decisions/D34-telemetry-package-placement.md)) — three sinks: `cmd/simulate` CSV, the analytics table, the debug panel. Never three implementations. `internal/telemetry` sits behind the fog gate beside `internal/rules`, and never becomes importable by `render`/`web`. |
 | **Debug tooling** | M1 | Grows with each milestone behind `//go:build debug`; the fog inspector (§15.2) is the highest-value item and should exist as soon as `Project` does. |
 | **Config as data** | M1 | Every number the GDD calls tunable is a `Config` field, never a constant. The lease rate especially (§10.4). |
 
