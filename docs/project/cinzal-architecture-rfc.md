@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r28 · **Companion doc:** `cinzal-gdd.md` **v2.22**
+**Status:** draft for review · **Revision:** r29 · **Companion doc:** `cinzal-gdd.md` **v2.23**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -149,6 +149,13 @@
 > - **The deck-shuffle code sample and prose now match `ShuffleConstrained`'s real six-argument signature** (`rng, selectPurpose, orderPurpose, pool, categoryOf, quota`, per `internal/rules/cards.go`) — not the single-purpose, three-argument sketch r2 originally wrote before D03 split the draw and gave the pool its own category function and quota map.
 > - No behaviour change anywhere in this entry: `ConsumptionTable` was already correct: this brings the document to match it, not the reverse. Companion doc moves to GDD v2.22, which runs the same correction against §21's randomness inventory.
 >
+> **Changelog r28 → r29** — D32, D33 and D34 catch up: bots get their own RNG stream, telemetry gets a home and an input type (issue #202)
+> - **§6.4 gains a paragraph, not a row.** Bot draws ([D32](../decisions/D32-bot-rng-stream.md)) go through a dedicated `*rules.BotRNG`, constructed fresh per `(seat, round)` via `NewBotRNG(matchSeed, seat, round)`, never through `Resolve`'s own `*RNG` — structurally outside this table, the same "deliberately absent" treatment already given to rotating borders, but for a different reason: not priced at zero, but priced on a stream this table was never scoped to cover, because a bot's draw count is a fact about the bot's own implementation, not one the rules determine. `ConsumptionTable` needs no change; `BotRNG.NextBot` draws are invisible to `consumed map[Purpose]int` and the §16.2 invariant it backs, unconditionally, regardless of bot population.
+> - **§14's `Bot` interface signature is corrected.** `Decide(v rules.PlayerView, cfg rules.Config, r *rules.RNG) rules.Order` becomes `Decide(v rules.PlayerView, cfg rules.Config, r *rules.BotRNG) rules.Order` — the RFC's own literal text was wrong; D32 fixes the third parameter's type. §14.1 gains the RNG-threading rule the interface always implied and never stated, and §14.5's "what bots must never do" list gains the gate that now enforces it: a call site cannot pass `Resolve`'s own live `*RNG` to `Decide` and have it compile, because `BotRNG` and `RNG` are distinct types with disjoint methods.
+> - **§17 names the telemetry computation.** `internal/telemetry.Match(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game.Config) (MatchSummary, error)` ([D34](../decisions/D34-telemetry-package-placement.md)), so "one computation, three sinks" can now name the computation. §17's "computed from the event stream" is corrected to "computed from the event stream, the match's final state, and its order log" — [D33](../decisions/D33-telemetry-event-stream-coverage.md)'s row-by-row audit found six of GDD §22's twenty rows need a final `MatchState` read and one needs order-log access, neither of which the old sentence admitted.
+> - **§5's package list gains an `internal/telemetry/` line**, beside `bots/` — imports `internal/rules` and `internal/game`, never imported by `render`/`web` (D34), and `bots/`'s own line is corrected to the signature above.
+> - No behaviour change: `internal/rules`, `internal/telemetry` and `cmd/simulate` are still `doc.go` only, pending [#190](https://github.com/garnizeh/cinzal/issues/190)/[#196](https://github.com/garnizeh/cinzal/issues/196)/[#197](https://github.com/garnizeh/cinzal/issues/197). D32/D33/D34 remain the decisions of record for `BotRNG`'s shape, `OrderLog`'s placement and `telemetry.Match`'s signature if this entry and the eventual code ever disagree. Companion doc moves to GDD v2.23, which runs the matching correction against §21 and §22.
+>
 > **Changelog r27 → r28** — issue #79's property-test sweep found four rules bugs the spec already stated correctly; the code was what was wrong
 > - **`EvasiveStepPenalty` was never set.** GDD §15's Loser table says "If Evasive: −1 step next round," unconditionally — `resolveLoser` (confront.go) applied every other Evasive consequence (the shakedown, Deadline Pause, the two-hop pushback) but never wrote the flag. `Steps` (steps.go) had been reading it correctly since #67/D5; there was simply nothing on the writing end. Fixed by setting it in `resolveLoser` itself, gated on `Stance == StanceEvasive`, matching the GDD text's "unconditional on cargo/shakedown outcome" reading.
 > - **The Evasive shakedown never reached the winner.** GDD §15: "pay the Cr$4 shakedown **to the winner**." `resolveLoser` computed and deducted the fee from the loser but returned only the stake share; `resolveDecisive`'s `stakeCollected` never included it, so the money simply vanished instead of transferring. `resolveLoser` now returns the shakedown paid alongside the stake share, and `resolveDecisive` credits both to the winner.
@@ -251,7 +258,8 @@ internal/
 
   store/          — sqlc output + repositories + migrations (embedded)
   match/          — lifecycle: create, join, tick, deadline sweeper
-  bots/           — Decide(PlayerView) Order, three difficulty tiers
+  bots/           — Decide(PlayerView, Config, *BotRNG) Order, three difficulty tiers (§14)
+  telemetry/      — GDD §22 metric computation: MatchState + OrderLog + events → MatchSummary (§17)
   mail/           — outbox, templates, provider adapter
   auth/           — OTP issue/verify, sessions, guest accounts
   web/            — handlers, routing, SSE hub
@@ -391,6 +399,8 @@ Every consumer must be enumerated, because an unaccounted draw is a replay diver
 | **Node layout — coordinate assignment** | `gen.layout` | **exactly `n` per sector — total node count over the whole map** | `rules/gen`, Setup only, after node-type assignment (D9) and starting-position selection, before the event/incident deck shuffles. Method mandated by [D10](../decisions/D10-map-layout.md) below §6.4's Torn Map passage. |
 
 **Rotating borders (D03) is deliberately absent from this table.** §6.3's active-half rotation is a pure function of round number over the sorted Border list — zero draws, no purpose string — so it is not an RNG consumer at all, not an omission. It is the one row D03 considered and priced at zero rather than never considered.
+
+**Bot draws ([D32](../decisions/D32-bot-rng-stream.md)) are deliberately absent from this table too, for a different reason than rotating borders above.** Rotating borders costs zero draws; a bot's `Decide` call costs a real, variable number — but on a dedicated `*rules.BotRNG`, never on `Resolve`'s own `*RNG` this table enumerates. `BotRNG` is constructed fresh per `(seat, round)` via `NewBotRNG(matchSeed, seat, round)`, discarded after the one `Decide` call, and draws through its own `NextBot(purpose BotPurpose, n int)` method under a `bot.<tier>.<mechanic>` purpose convention — never `RNG.Next`, never reachable from a `*RNG`, and invisible to `consumed map[Purpose]int` and the §16.2 invariant it backs. A row in this table presupposes a rules-derivable ground truth a predictor or an exemption can be checked against; a bot's draw count has none — it is a fact about the bot's own algorithm, free to change with no GDD or RFC edit at all. §14 has the full interface and RNG-threading rule; D32 is this paragraph's source.
 
 **Map generation's nine `gen.*` rows (issues #59, #60) reuse the identical partial- and full-Fisher-Yates shapes already mandated above and below for Torn Map and Node layout: sort deterministically, shuffle, done.** Nothing here is a new selection method — it is the same §6.3 no-map-iteration discipline, applied nine more times to the graph itself rather than to a card or a hidden-node reveal. `internal/rules/gen/purpose.go` carries the per-consumer candidate-set definitions [D8](../decisions/D08-sector-size-constraint.md), [D9](../decisions/D09-node-type-rounding.md) and [D24](../decisions/D24-opening-offer-guarantee.md) pin down; this table's job is only to make each one a named, indexed row rather than an implementation detail invisible to a replay trace.
 
@@ -1294,7 +1304,7 @@ Bots serve four roles from one implementation.
 
 ```go
 type Bot interface {
-    Decide(v rules.PlayerView, cfg rules.Config, r *rules.RNG) rules.Order
+    Decide(v rules.PlayerView, cfg rules.Config, r *rules.BotRNG) rules.Order
 }
 ```
 
@@ -1304,7 +1314,9 @@ type Bot interface {
 
 If a bot cannot be written competently against the view, the view is missing something a human also needs. That failure mode is otherwise very hard to notice: a human player will assume they are bad at the game rather than that the UI is starving them. The bot surfaces it as a coding problem.
 
-`Decide` is pure and takes the seeded RNG, so a bot-populated match replays exactly like any other.
+`Decide` is pure and takes a seeded, per-`(seat, round)` `*rules.BotRNG` — never `Resolve`'s own `*RNG` — so a bot-populated match replays exactly like any other, and `cmd/simulate`'s seed-only sweeps reproduce identically with no order log to fall back on.
+
+**The RNG threading rule.** `Decide`'s third parameter is `*rules.BotRNG`, a distinct type from `Resolve`'s own `*rules.RNG` — not a mode flag on the same type, not a second draw method reachable from it. A call site cannot pass `Resolve`'s live `*RNG` to `Decide` and have it compile: `RNG` exposes no `NextBot` method, and `BotRNG` exposes no `Next` method. This is what makes non-collusion (§14.5) and §16.2's per-round index determinism a compile-time property rather than a review item — the same class of bug §6.4 warns about, invisible until a replay disagrees months later, closed by construction instead of by discipline. Full derivation and the `NewBotRNG(matchSeed, seat, round)` constructor: [D32](../decisions/D32-bot-rng-stream.md).
 
 ### 14.2 Four roles
 
@@ -1355,6 +1367,7 @@ Scenario reset costs nothing: truncate the order log and refold (§7.1). Retryin
 - Read `MatchState`, the graph, or the seed.
 - Coordinate with each other. Each `Decide` sees only its own view. Two bots in the same match colluding would be undetectable and unfair, and the type signature prevents it.
 - Submit outside the tick.
+- Draw from `Resolve`'s own `*RNG`. Structurally impossible, not merely forbidden: `Decide`'s third parameter is `*rules.BotRNG`, a distinct type with no path to `Resolve`'s stream — a miswired call site is a compile error, not a review item ([D32](../decisions/D32-bot-rng-stream.md)).
 
 ---
 
@@ -1490,7 +1503,7 @@ Caveat worth writing down: bot play is not human play, and a sweep tells you abo
 
 The two fold metrics exist to make §7.3's no-cache decision falsifiable rather than permanent — they are the trigger, and without them the question would be reopened on vibes every few months.
 
-**Metrics that matter for design** are the GDD §22 set, computed from the event stream and written to an analytics table on match completion. The same computation runs in `cmd/simulate`, so bot data and human data are directly comparable — which is the entire point of having both.
+**Metrics that matter for design** are the GDD §22 set, computed by `internal/telemetry.Match(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game.Config) (MatchSummary, error)` and written to an analytics table on match completion. Computed from the event stream, the match's final state (including every seat's private `SeatArchive`), and its order log — not the event stream alone: [D33](../decisions/D33-telemetry-event-stream-coverage.md)'s row-by-row audit found six of §22's twenty rows need a final-state read and one needs order-log access, since `haltMovement` clears a route from memory without ever having recorded that it was submitted. The same computation runs in `cmd/simulate` and the debug panel, so bot data and human data are directly comparable — "one computation, three sinks," now named. `internal/telemetry` imports `internal/rules` deliberately, and is never imported by `render`/`web` — the fog gate treats it exactly like `internal/rules` itself ([D34](../decisions/D34-telemetry-package-placement.md)).
 
 The one alert worth waking someone for is a **determinism-check mismatch**. Everything else can wait for morning; that one means replays are lying.
 

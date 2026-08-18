@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.22 (scope-locked for prototype)
+## Game Design Document — v2.23 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -171,6 +171,11 @@
 >
 > **Changelog v2.20 → v2.21** — "Orders never silently fail" read as scoped to Step 0 only, leaving four resolution-time action categories (six failure causes) silently doing nothing (D30)
 > - **§15.0's Step 0 paragraph gains a clause: the "never silently fail" promise applies at every resolution step, not only Step 0.** A Deal that loses the market race or whose balance no longer covers it, a Pickup that loses a dropped crate or finds its own cargo slot full, a Stake Post that's already at cap, and a Ledger purchase the balance no longer covers all now name the specific reason to the acting player — the same "legal order can no longer complete" category Step 0 already covers, just discovered one or more steps later. Open Doors is named as the one exception, out of scope rather than silently fixed, and stays exactly as [D14](../decisions/D14-five-resolution-gaps.md) §4 already decided it: a pre-declared, conditionally-triggered boon that may never fire at all isn't a failed action. Full reasoning in [D30](../decisions/D30-contended-action-loss-notification.md).
+>
+> **Changelog v2.22 → v2.23** — §21 and §22 catch up to D32, D33 and D34 (issue #202)
+> - **§21 gains entry 24: bot decision-making.** A bot's own `Decide` draws (Drifter's route pick, Operator's search) are a real source of randomness in the game, but they resolve **neither** before nor after the player's decision — they're a separate actor's own decision process, not a random event happening to a human's choice, and they draw on a dedicated stream (`BotRNG`) RFC §6.4 deliberately keeps outside the match's own consumption table ([D32](../decisions/D32-bot-rng-stream.md)). The closing P2-audit count is unaffected: entry 24 sits outside the six-before/seventeen-after split it was already scoped to.
+> - **§22's framing is corrected.** "Every match — paper or digital — records the following" is true for seventeen of the twenty rows. Three are not headless facts at all: row 16 (Heat Map opened) needs UI instrumentation that doesn't exist until M5; rows 15 (Attribution queries) and 18 (Loitering flags from legitimate play) are human questions, deferred to M5.5 — the second because no operational definition exists yet to compute it against ([D33](../decisions/D33-telemetry-event-stream-coverage.md)). Every row now carries the milestone that produces it.
+> - No rule change: every metric counted here was already the correct target, band and failure condition. This closes a documentation gap between what §22 implied was available today and what D33's row-by-row audit against the actual event stream, final state and order log found. Companion RFC moves to r29, which names `internal/telemetry.Match` (D34) and corrects "computed from the event stream" to name the final state and order log D33 found some rows need.
 >
 > **Changelog v2.21 → v2.22** — §21's randomness inventory never gained D03's card-target draws (issue #159)
 > - **§21 gains entries 16–23**: Dragnet's two sealed Borders, Festival's node, Scaffolding's sector, Shipping Boom's Warehouse, Fence's Windfall's Black Market, Sinkhole's node, Riot's permutation, and Torn Map's four revealed nodes — each a genuine, separate randomness source [D03](../decisions/D03-rng-consumption-table.md) (and, for Riot, [D04](../decisions/D04-riot-trail-randomization.md)) priced into RFC §6.4's table but never counted here. Entry 4's cadence is corrected from the stale "every 2 rounds" to the odd-round schedule §12 already states (D25).
@@ -1520,8 +1525,9 @@ Watch for Tier IV contracts being accepted and then abandoned. If nobody volunta
 | 21 | **Sinkhole's** node | Phase 7 | After | Sector was known; route around it, or accept the risk |
 | 22 | **Riot's** permutation of this round's trail entries | Phase 7 | After | Sector was known; route around it to keep your own traces out of reach |
 | 23 | **Torn Map's** four revealed nodes | Phase 5, immediately before movement | After | Opt-in entirely — buying and using the item is the player's own choice |
+| 24 | **Bot decision-making** (`Decide`'s own draws, via `BotRNG`) | Whichever phase produces the bot's order | **Neither** — a separate actor's own decision process, not a random event happening to a player's choice | Nothing directly; bot seats are disclosed in the lobby and HUD (RFC §14.2), and every draw is legible in the RNG trace under a `bot.<tier>.<mechanic>` purpose (D32) |
 
-**Six of twenty-three sources resolve before the player commits.** Of the seventeen that don't: six are opt-in (9, 10, 11, 13, 14, 23); four are avoidable by routing around the flagged sector (8, 12, 21, 22); four are boons the Boon Rule (§14.0) already keeps fair — earned by a decision already made, or won as an open contest, never a surprise punishment (17, 18, 19, 20) — leaving the global event card draw, Dragnet's Border seal, and the fourth-level tie-break as the only randomness that can reach a player who did nothing to invite it and stands to gain nothing from it (7, 15, 16). That's the P2 audit, and it should be re-run against this table any time a new random element is proposed.
+**Six of twenty-four sources resolve before the player commits, and one — entry 24, bot decision-making — resolves neither before nor after, because it isn't a random event that happens to a player at all: it's a separate actor's own authoring process, on a stream ([D32](../decisions/D32-bot-rng-stream.md)'s `BotRNG`) deliberately outside RFC §6.4's match-consumption table.** Of the seventeen that remain: six are opt-in (9, 10, 11, 13, 14, 23); four are avoidable by routing around the flagged sector (8, 12, 21, 22); four are boons the Boon Rule (§14.0) already keeps fair — earned by a decision already made, or won as an open contest, never a surprise punishment (17, 18, 19, 20) — leaving the global event card draw, Dragnet's Border seal, and the fourth-level tie-break as the only randomness that can reach a player who did nothing to invite it and stands to gain nothing from it (7, 15, 16). That's the P2 audit, and it should be re-run against this table any time a new random element is proposed.
 
 ### Dice, specifically
 
@@ -1554,31 +1560,31 @@ All rolls are server-side and derived from `hash(match_seed, round, sequence_ind
 
 ## 22. Telemetry
 
-R1 and R9 are answered by measurement, not opinion — R2 already was, and turned out to be backwards (§20). Every match — paper or digital — records the following. The digital build should emit these as structured events from day one, because retrofitting instrumentation always costs more than building it in.
+R1 and R9 are answered by measurement, not opinion — R2 already was, and turned out to be backwards (§20). Every match — paper or digital — records the following, with one caveat [D33](../decisions/D33-telemetry-event-stream-coverage.md)'s row-by-row audit made explicit: seventeen of the twenty rows are headless facts, computable from a running match's event stream, final state, or order log alone; three are not, and are marked below with the milestone that produces them instead. The digital build should emit the M2 rows as structured events from day one, because retrofitting instrumentation always costs more than building it in.
 
 ### Per match
 | Metric | Target band | Fails if |
 |---|---|---|
-| Routes cancelled mid-route | < 15% of submitted routes | **> 15%** → confrontation too punishing (R1) |
-| Deliveries per player | 4–6 | < 3 → cooldown too long or map too large |
-| Winner's RP lead over last place | < 40% | > 40% → comeback mechanisms insufficient |
-| Matches where a player reached Infamy 9 | > 20% | **< 10%** → step gradient too steep (R7) |
-| Matches where a player stayed at Infamy ≤ 2 to the end | < 25% | > 40% → anonymity still dominant (R3) |
-| Sector incidents actually hitting a player | 30–60% of incidents | < 20% → players route around trivially; > 70% → unavoidable, feels unfair (R6) |
-| Live leases at final scoring, per player | 2–4 | < 1 → lease rate too high (§10.4) |
-| Share of map under sight in the final third | 30–55% | **> 65%** → post sight still too generous (§7.2) |
-| Confrontations won against an Evasive loser | 20–40% of all confrontations | > 55% → Evasive is still the default insurance (§9.3) |
-| Confrontations per match, 4–5 players | 4–12 | **> 12** → map too small (R9); Board goes unused as leading indicator |
-| Confrontations per match, 2 players | 4–12 | < 4 → rotating borders (§6.3) not converging hard enough |
-| Players ending a route in a flagged unstable sector | 25–50% of player-rounds | **< 15%** → boon share too low, the flag is still just "stay out" (§14.3) |
-| Share of RP swing traceable to [O] cards | < 15% | > 25% → boons are paying in cash where they should pay in tempo (§14.0) |
-| Convergence [C] cards that produced a confrontation | > 40% | < 20% → the convergence tag is decorative |
-| Attribution queries that ruled out at least one player | > 50% | **< 30%** → the one-round horizon is still too generous; the tool is theatre (§7.5) |
-| Heat Map opened per player per match | > 5 | < 2 → pattern-reading isn't landing; check whether corridors actually exist on generated maps |
-| Rounds flagged as Loitering | < 8% of player-rounds | > 15% → camping is outcompeting contracts, revisit R11 |
-| Loitering flags triggered by legitimate short-haul play | < 10% of flags | > 20% → the 1-step radius is too wide, or the action exemption too narrow |
-| Heat Map entries at low confidence (< 3 observations) | < 40% | > 60% → observation coverage too thin for the tool to be usable |
-| Confrontations occurring in the final 3 rounds | < 30% of all confrontations | > 45% → endgame farming is real (R11) |
+| Routes cancelled mid-route *(M2)* | < 15% of submitted routes | **> 15%** → confrontation too punishing (R1) |
+| Deliveries per player *(M2)* | 4–6 | < 3 → cooldown too long or map too large |
+| Winner's RP lead over last place *(M2)* | < 40% | > 40% → comeback mechanisms insufficient |
+| Matches where a player reached Infamy 9 *(M2)* | > 20% | **< 10%** → step gradient too steep (R7) |
+| Matches where a player stayed at Infamy ≤ 2 to the end *(M2)* | < 25% | > 40% → anonymity still dominant (R3) |
+| Sector incidents actually hitting a player *(M2)* | 30–60% of incidents | < 20% → players route around trivially; > 70% → unavoidable, feels unfair (R6) |
+| Live leases at final scoring, per player *(M2)* | 2–4 | < 1 → lease rate too high (§10.4) |
+| Share of map under sight in the final third *(M2)* | 30–55% | **> 65%** → post sight still too generous (§7.2) |
+| Confrontations won against an Evasive loser *(M2)* | 20–40% of all confrontations | > 55% → Evasive is still the default insurance (§9.3) |
+| Confrontations per match, 4–5 players *(M2)* | 4–12 | **> 12** → map too small (R9); Board goes unused as leading indicator |
+| Confrontations per match, 2 players *(M2)* | 4–12 | < 4 → rotating borders (§6.3) not converging hard enough |
+| Players ending a route in a flagged unstable sector *(M2)* | 25–50% of player-rounds | **< 15%** → boon share too low, the flag is still just "stay out" (§14.3) |
+| Share of RP swing traceable to [O] cards *(M2, open — no precise answer in the first pass, see D33)* | < 15% | > 25% → boons are paying in cash where they should pay in tempo (§14.0) |
+| Convergence [C] cards that produced a confrontation *(M2, loose reading — "a confrontation occurred in a [C]-card round," see D33)* | > 40% | < 20% → the convergence tag is decorative |
+| Attribution queries that ruled out at least one player *(M5.5 — human question over a UI that doesn't exist yet)* | > 50% | **< 30%** → the one-round horizon is still too generous; the tool is theatre (§7.5) |
+| Heat Map opened per player per match *(M5 — UI instrumentation, not a headless fact)* | > 5 | < 2 → pattern-reading isn't landing; check whether corridors actually exist on generated maps |
+| Rounds flagged as Loitering *(M2)* | < 8% of player-rounds | > 15% → camping is outcompeting contracts, revisit R11 |
+| Loitering flags triggered by legitimate short-haul play *(M5.5 — no operational definition exists to compute against)* | < 10% of flags | > 20% → the 1-step radius is too wide, or the action exemption too narrow |
+| Heat Map entries at low confidence (< 3 observations) *(M2)* | < 40% | > 60% → observation coverage too thin for the tool to be usable |
+| Confrontations occurring in the final 3 rounds *(M2)* | < 30% of all confrontations | > 45% → endgame farming is real (R11) |
 
 ### Per round
 - Median and 90th-percentile time to submit an order, by round number. **Target: median under the timer by round 3.** If players are still timing out at round 6, the order form is too complex.
