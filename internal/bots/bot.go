@@ -31,10 +31,10 @@ type Tier uint8
 
 // The three doc comments below state each tier's RFC-001 §14.3 target
 // behaviour. Drifter's Decide is now that behaviour: Sample (legalspace.go),
-// wired in by drifter.go. Runner and Operator's Decide is still, for now,
-// the same provisional decideStayOrMove (decide.go) — their real greedy
-// pathing and cross-round planning land in #193 and #194 respectively, each
-// replacing only its own tier's file.
+// wired in by drifter.go. Runner's Decide is now its own real greedy
+// pathing (runner.go, issue #193). Operator's Decide is still, for now, the
+// same provisional decideStayOrMove (decide.go) — its cross-round planning
+// lands in #194, replacing only operator.go.
 const (
 	_ Tier = iota // zero is reserved invalid, matching internal/game's enum convention
 
@@ -46,9 +46,11 @@ const (
 	// (RFC-001 §14.3).
 	Drifter
 
-	// Runner will be greedy — shortest path to the current contract
-	// objective, Evasive while carrying, keeps a shakedown reserve, never
-	// buys. It is the Autopilot default (RFC-001 §8.2, §14.2, §14.3).
+	// Runner is greedy — shortest path to the current contract objective,
+	// Evasive while carrying, keeps a Cr$ 4 (cfg.ShakedownCost) reserve for
+	// the shakedown, never buys, Vanishes once Infamy climbs past its own
+	// tunable comfort band (runner.go's RunnerOptions). It is the Autopilot
+	// default (RFC-001 §8.2, §14.2, §14.3).
 	Runner
 
 	// Operator will plan across rounds — reading the heat map for
@@ -88,7 +90,7 @@ func For(t Tier) Bot {
 	case Drifter:
 		return drifterBot{}
 	case Runner:
-		return runnerBot{}
+		return NewRunner(DefaultRunnerOptions())
 	case Operator:
 		return operatorBot{}
 	default:
