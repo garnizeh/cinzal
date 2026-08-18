@@ -1560,9 +1560,10 @@ All rolls are server-side and derived from `hash(match_seed, round, sequence_ind
 
 ## 22. Telemetry
 
-R1 and R9 are answered by measurement, not opinion — R2 already was, and turned out to be backwards (§20). Every match — paper or digital — records the following, with one caveat [D33](../decisions/D33-telemetry-event-stream-coverage.md)'s row-by-row audit made explicit: seventeen of the twenty rows are headless facts, computable from a running match's event stream, final state, or order log alone; three are not, and are marked below with the milestone that produces them instead. The digital build should emit the M2 rows as structured events from day one, because retrofitting instrumentation always costs more than building it in.
+R1 and R9 are answered by measurement, not opinion — R2 already was, and turned out to be backwards (§20). Every match — paper or digital — records the following, with one caveat [D33](../decisions/D33-telemetry-event-stream-coverage.md)'s row-by-row audit made explicit: seventeen of the twenty rows are headless facts, computable from a running match's event stream, final state, or order log alone; three are not, and are marked below with the milestone that produces them instead. The digital build computes each row from its own declared source, not one uniform mechanism: event-backed rows are emitted as structured events from day one, because retrofitting instrumentation always costs more than building it in; final-state and order-log rows are computed once, at scoring, through `telemetry.Match` (RFC §17). Row 13 ships without a precise answer in M2's first pass regardless of source — marked open below, not silently approximate.
 
 ### Per match
+
 | Metric | Target band | Fails if |
 |---|---|---|
 | Routes cancelled mid-route *(M2)* | < 15% of submitted routes | **> 15%** → confrontation too punishing (R1) |

@@ -259,7 +259,7 @@ internal/
   store/          — sqlc output + repositories + migrations (embedded)
   match/          — lifecycle: create, join, tick, deadline sweeper
   bots/           — Decide(PlayerView, Config, *BotRNG) Order, three difficulty tiers (§14)
-  telemetry/      — GDD §22 metric computation: MatchState + OrderLog + events → MatchSummary (§17)
+  telemetry/      — GDD §22 metric computation: MatchState + OrderLog + events + Config → MatchSummary (§17)
   mail/           — outbox, templates, provider adapter
   auth/           — OTP issue/verify, sessions, guest accounts
   web/            — handlers, routing, SSE hub
