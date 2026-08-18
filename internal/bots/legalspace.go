@@ -486,12 +486,18 @@ func legalActionsOrRelax(v game.PlayerView, cfg game.Config, draft game.Order) (
 	return []game.ActionOrder{{Kind: game.ActionNothing}}, draft
 }
 
-// This is the generator issue #191 asks for, not yet the exact statistical
-// claim issue #192 wires into Drifter: "uniform within each stage" is not
-// the same distribution as "uniform over the whole order space" — a route
-// with many legal actions is not over- or under-weighted against one with
-// few by this composition, which #192's own acceptance criteria states
-// outright ("definition, not an algorithm").
+// This is the generator issue #191 built. A route with many legal actions
+// is not over- or under-weighted against one with few by this composition
+// — Sample always draws Route uniformly among the whole route set first,
+// regardless of how many actions, stances or add-ons that specific route
+// later turns out to license. What that does not buy, and what issue #192
+// documents at the package level rather than here: Sample's per-field
+// uniformity does not compose into uniformity over the joint legal-order
+// space — a route ending where only two actions are legal hands each of
+// those two a bigger share of the whole space than a route ending where ten
+// are legal hands any one of its ten. drifter.go (#192) wires Sample in as
+// Drifter's Decide, unmodified, on the strength of that stated and
+// disclaimed scheme.
 func Sample(v game.PlayerView, cfg game.Config, r *rules.BotRNG) game.Order {
 	routes := Routes(v, cfg)
 	route := routes[r.NextBot("bot.sample.route", len(routes))].Nodes
