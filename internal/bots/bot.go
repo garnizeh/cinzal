@@ -30,17 +30,20 @@ type Bot interface {
 type Tier uint8
 
 // The three doc comments below state each tier's RFC-001 §14.3 target
-// behaviour — not what For(tier).Decide currently does. Every tier's
-// Decide is, for now, the same provisional decideStayOrMove (decide.go):
-// the real uniform-order-space sampler, greedy pathing, and cross-round
-// planning land in #191/#192, #193, and #194 respectively, each replacing
-// only its own tier's file.
+// behaviour. Drifter's Decide is now that behaviour: Sample (legalspace.go),
+// wired in by drifter.go. Runner and Operator's Decide is still, for now,
+// the same provisional decideStayOrMove (decide.go) — their real greedy
+// pathing and cross-round planning land in #193 and #194 respectively, each
+// replacing only its own tier's file.
 const (
 	_ Tier = iota // zero is reserved invalid, matching internal/game's enum convention
 
-	// Drifter will draw uniformly from the legal order space: the
-	// statistical baseline for the property tests and for the sweep
-	// numbers everything else is read against (RFC-001 §14.3).
+	// Drifter draws each field of an order uniformly over its own legal
+	// candidate set, conditioned on the fields drawn before it (legalspace.go's
+	// Sample; see the package doc comment for the uniformity this stage-wise
+	// scheme does not extend to): the statistical baseline for the property
+	// tests and for the sweep numbers everything else is read against
+	// (RFC-001 §14.3).
 	Drifter
 
 	// Runner will be greedy — shortest path to the current contract

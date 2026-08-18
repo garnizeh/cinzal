@@ -5,15 +5,16 @@ import (
 	"github.com/garnizeh/cinzal/internal/rules"
 )
 
-// decideStayOrMove is the one decision every tier in this package currently
-// makes: draw uniformly among the current position's Known-or-better
-// neighbours and step to one, or stay put if none exist or this round's step
-// allowance is zero. It exists so Bot, Tier and For have a real, legal,
-// stateless, RNG-driven Decide to be tested against before RFC-001 §14.3's
-// actual tier behaviours land — Drifter's full uniform-order-space sampler
-// (#191/#192), Runner's greedy pathing (#193), and Operator's cross-round
-// planning (#194) each replace their own tier's use of this helper without
-// touching Bot, Tier or For.
+// decideStayOrMove is Runner and Operator's shared placeholder decision:
+// draw uniformly among the current position's Known-or-better neighbours
+// and step to one, or stay put if none exist or this round's step allowance
+// is zero. Drifter no longer uses it — drifter.go wires Sample
+// (legalspace.go) in directly — but Runner and Operator still do, so Bot,
+// Tier and For have a real, legal, stateless, RNG-driven Decide to be
+// tested against before RFC-001 §14.3's actual tier behaviours land:
+// Runner's greedy pathing (#193) and Operator's cross-round planning (#194)
+// each replace their own tier's use of this helper without touching Bot,
+// Tier or For.
 //
 // The route step never reaches into a node this seat does not have Known
 // fog on — mirroring rules.Legal's own legalRoute check (internal/rules/
