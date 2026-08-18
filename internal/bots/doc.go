@@ -25,7 +25,7 @@
 // # Drifter's sampling scheme (RFC-001 §14.3, issue #192)
 //
 // Drifter's Decide is Sample (legalspace.go), unmodified. Sample draws every
-// field of an order independently, uniformly over that field's own legal
+// field of an order sequentially, uniformly over that field's own legal
 // candidate set conditioned on the fields already drawn: a route uniformly
 // among Routes(v, cfg); a Pushing On declaration uniformly among PushingOns
 // for that route; a stance uniformly among Neutral, Evasive, and Aggressive

@@ -38,10 +38,12 @@ type Tier uint8
 const (
 	_ Tier = iota // zero is reserved invalid, matching internal/game's enum convention
 
-	// Drifter draws uniformly from the legal order space, one field at a
-	// time (legalspace.go's Sample, package doc comment): the statistical
-	// baseline for the property tests and for the sweep numbers everything
-	// else is read against (RFC-001 §14.3).
+	// Drifter draws each field of an order uniformly over its own legal
+	// candidate set, conditioned on the fields drawn before it (legalspace.go's
+	// Sample; see the package doc comment for the uniformity this stage-wise
+	// scheme does not extend to): the statistical baseline for the property
+	// tests and for the sweep numbers everything else is read against
+	// (RFC-001 §14.3).
 	Drifter
 
 	// Runner will be greedy — shortest path to the current contract
