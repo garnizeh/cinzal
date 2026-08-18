@@ -7,7 +7,7 @@
 
 ## The question
 
-`Project`'s signature is stated identically, and decided, in three places — RFC §3 (`docs/project/cinzal-architecture-rfc.md:163`), RFC §9 (`:243`), and [D01](D01-package-layout.md:70):
+`Project`'s signature is stated identically, and decided, in three places — RFC §3 (`docs/project/cinzal-architecture-rfc.md:163`), RFC §9 (`:243`), and [D01](D01-package-layout.md) (§Decision):
 
 ```go
 func Project(s State, seat SeatID) PlayerView

@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r29 · **Companion doc:** `cinzal-gdd.md` **v2.23**
+**Status:** draft for review · **Revision:** r30 · **Companion doc:** `cinzal-gdd.md` **v2.24**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -163,7 +163,17 @@
 > - **§14's `Bot` interface signature is corrected.** `Decide(v rules.PlayerView, cfg rules.Config, r *rules.RNG) rules.Order` becomes `Decide(v rules.PlayerView, cfg rules.Config, r *rules.BotRNG) rules.Order` — the RFC's own literal text was wrong; D32 fixes the third parameter's type. §14.1 gains the RNG-threading rule the interface always implied and never stated, and §14.5's "what bots must never do" list gains the gate that now enforces it: a call site cannot pass `Resolve`'s own live `*RNG` to `Decide` and have it compile, because `BotRNG` and `RNG` are distinct types with disjoint methods.
 > - **§17 names the telemetry computation.** `internal/telemetry.Match(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game.Config) (MatchSummary, error)` ([D34](../decisions/D34-telemetry-package-placement.md)), so "one computation, three sinks" can now name the computation. §17's "computed from the event stream" is corrected to "computed from the event stream, the match's final state, and its order log" — [D33](../decisions/D33-telemetry-event-stream-coverage.md)'s row-by-row audit found six of GDD §22's twenty rows need a final `MatchState` read and one needs order-log access, neither of which the old sentence admitted.
 > - **§5's package list gains an `internal/telemetry/` line**, beside `bots/` — imports `internal/rules` and `internal/game`, never imported by `render`/`web` (D34), and `bots/`'s own line is corrected to the signature above.
-> - No behaviour change: `internal/rules`, `internal/telemetry` and `cmd/simulate` are still `doc.go` only, pending [#190](https://github.com/garnizeh/cinzal/issues/190)/[#196](https://github.com/garnizeh/cinzal/issues/196)/[#197](https://github.com/garnizeh/cinzal/issues/197). D32/D33/D34 remain the decisions of record for `BotRNG`'s shape, `OrderLog`'s placement and `telemetry.Match`'s signature if this entry and the eventual code ever disagree. Companion doc moves to GDD v2.23, which runs the matching correction against §21 and §22.
+> - No behaviour change: `internal/bots`, `internal/telemetry` and `cmd/simulate` are still `doc.go` only, pending [#190](https://github.com/garnizeh/cinzal/issues/190)/[#196](https://github.com/garnizeh/cinzal/issues/196)/[#197](https://github.com/garnizeh/cinzal/issues/197). D32/D33/D34 remain the decisions of record for `BotRNG`'s shape, `OrderLog`'s placement and `telemetry.Match`'s signature if this entry and the eventual code ever disagree. Companion doc moves to GDD v2.23, which runs the matching correction against §21 and §22.
+>
+> **Changelog r29 → r30** — D35 never landed, and §3/§5/§6.1/§14 still described the pre-D01 package split (issue #213)
+> - **§16.4 gains D35's sample size and verdict rule.** [D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md)'s own Consequences section assigned this edit to [#202](https://github.com/garnizeh/cinzal/issues/202), which closed covering D32–D34 only — leaving [#200](https://github.com/garnizeh/cinzal/issues/200), [#203](https://github.com/garnizeh/cinzal/issues/203), [#204](https://github.com/garnizeh/cinzal/issues/204) and [#205](https://github.com/garnizeh/cinzal/issues/205) citing *"per D35"* against spec text that did not exist. §16.4's `--matches 10000` is now stated as the decided count rather than an illustration, with the per-match reduction, the interval formula, the interval-clears-the-threshold verdict rule and the per-threshold tier baseline beside it. GDD §22 carries the full rule where the bands are read; companion doc moves to v2.24.
+> - **§3, §5, §6.1 and four pseudocode blocks still described the layout [D01](../decisions/D01-package-layout.md) replaced.** §3's projection signature named a type called `State`; §5's tree had no `internal/game/` at all, put `PlayerView` in `rules/fog.go`, and described `render` as importing `rules/fog` — the exact edge D01 forbids and `scripts/check-fog-boundary.sh` has been failing PRs over since M0. §6.1's contract block named `State` and dropped every `game.` qualifier. All three now match D01 and the code: `Project(s MatchState, seat game.SeatID) game.PlayerView`, a leaf `game/` in the tree, `render` importing `game` and never `rules`, and the forbidden edge named as an import rather than a set of type names. `OrderLog`'s placement in `rules` (D34) is stated where the state types are listed, with its reasoning. The same correction runs through §6.5's three ordering functions, §6.6's `Resolve` snapshot sketch and §9.1's `writeAnchors` — and, worst of the four, **§11.2's `Map(v rules.PlayerView, draft OrderDraft)`, which showed `internal/render` importing `internal/rules` in a document whose §3 exists to forbid exactly that.**
+> - **§14's `Bot` interface named three types that do not exist.** r29 corrected the third parameter to `*rules.BotRNG` and left `rules.PlayerView`, `rules.Config` and `rules.Order` standing — all three live in `internal/game` per D01, and [#190](https://github.com/garnizeh/cinzal/issues/190) implements this interface literally. Corrected to `Decide(v game.PlayerView, cfg game.Config, r *rules.BotRNG) game.Order`, with §14.1 stating why only the RNG comes from `rules` at all.
+> - **§14.1's headline excluded `Config`, three lines above an interface that takes one.** *"A bot receives `PlayerView` and nothing else"* has been literally false since the interface was first written — `rules.Legal` and `rules.Steps` both require a `Config` alongside the view, so an enumerator denied one cannot evaluate its own candidates, and [D11](../decisions/D11-config-suppression-flags.md)'s suppression flags decide which orders exist at all in an M7 scenario. The boundary is restated as view + `Config`, excluding `MatchState`, the graph, the seed and opponent positions — the excluded list being what a *player* cannot have, which is the property that makes §14.1 an executable test of the projection. `Config` is the tuning data GDD §19.2's reference panel already shows every human. Found by review on [#214](https://github.com/garnizeh/cinzal/pull/214); it would have mis-scoped [#191](https://github.com/garnizeh/cinzal/issues/191).
+> - **§16.4 states the `n < 2` case.** D35's interval is undefined at n = 1 (`s` needs two values) and empty at n = 0, and D35 never said so — its zero-width-interval rule is the same failure one step short of the limit. A vector left with fewer than two values after exclusions reports **no measurement and no verdict**, and the CSV carries each row's effective `n` and excluded-match count beside its interval so a configuration cannot read as complete after silent data loss. GDD §22 carries the matching sentence. This applies D35's own fail-closed posture to a case it did not enumerate; it does not change the interval, the sample size, the verdict rule or any band.
+> - **§16.1 gains M2's two test layers**: bot-populated determinism and index accounting including the Autopilot handover ([#201](https://github.com/garnizeh/cinzal/issues/201)), and the type-level `internal/bots` gate ([#195](https://github.com/garnizeh/cinzal/issues/195)) — which §5's import-graph check structurally cannot express, since `bots` legitimately imports `rules` for `BotRNG`. §21's milestone-2 row is updated to name `internal/telemetry` and `BotRNG` alongside the tiers.
+> - **r29's own closing bullet said `internal/rules` where it meant `internal/bots`** — `internal/rules` has been fully implemented since M1 closed. Corrected in place rather than left standing, since the sentence's whole job is to say which packages are still empty.
+> - No behaviour change: `internal/bots` is still `doc.go` only, `cmd/simulate` is a `doc.go` plus an empty `main`, and `internal/telemetry` has no directory at all yet. Every correction here is the document catching up to D01, D34 and D35, not the reverse.
 
 ---
 
@@ -204,14 +214,15 @@ Fog is private (GDD §7.1). Therefore **the client must never hold the full matc
 Everything the player sees passes through exactly one function:
 
 ```go
-func Project(s State, seat SeatID) PlayerView
+// package rules
+func Project(s MatchState, seat game.SeatID) game.PlayerView
 ```
 
 Three consequences shape the rest of this document.
 
 **One projection, no exceptions.** There is no second path to the client. No "just this once" endpoint, no debug JSON in production, no template that reaches around it.
 
-**Type separation enforced by the compiler.** The `render` and `web` packages do not import `state`. They cannot: `PlayerView` lives in its own package and `MatchState` is not in scope there. A template physically cannot leak what it cannot name. This is the single strongest reason to use a statically typed language here, and it is worth arranging the package graph specifically to get it.
+**Type separation enforced by the compiler.** The `render` and `web` packages do not import `internal/rules`. They cannot: `PlayerView` lives in the leaf package `internal/game` ([D01](../decisions/D01-package-layout.md)) and `MatchState` is not in scope there. A template physically cannot leak what it cannot name. This is the single strongest reason to use a statically typed language here, and it is worth arranging the package graph specifically to get it.
 
 **HTML as the wire format is a security property, not just a style.** A SPA needs an endpoint that returns data, and that endpoint needs the same filtering. It is far easier to over-return in JSON — one extra struct field, one embedded association — than in HTML you had to write by hand. HTMX removes an entire class of leak by removing the surface.
 
@@ -246,14 +257,21 @@ cmd/
   replay/         — CLI: replay a match log, dump state at round N
 
 internal/
-  rules/          — PURE. no I/O, no clock, no rand, no db.
-    state.go        MatchState, Player, Node, Graph
-    order.go        Order, validation, legality (§15.0 of the GDD)
+  game/           — LEAF. the shared vocabulary, imports nothing outside stdlib (D01)
+    view.go         PlayerView, NodeView, TrailEntry, Anchor, SelfState
+    archive.go      SeatArchive, NodeStats
+    order.go        Order, OrderDraft
+    config.go       every tunable dial from the GDD
+    event.go        Event, EventKind
+    ids.go          SeatID, NodeID, RoundNumber
+
+  rules/          — PURE. no I/O, no clock, no rand, no db. imports game only.
+    state.go        MatchState, Player, Node, Graph, OrderLog (D34)
+    legal.go        validation and legality (§15.0 of the GDD)
     resolve.go      Resolve(): the whole round pipeline
     confront.go     confrontation, pushback, displacement
-    fog.go          Project() and PlayerView
-    config.go       every tunable dial from the GDD
-    rng.go          seeded, deterministic selection
+    fog.go          Project(): MatchState → game.PlayerView
+    rng.go          seeded, deterministic selection; RNG and BotRNG (§6.4, D32)
     gen/            map generation with the §6 constraints
 
   store/          — sqlc output + repositories + migrations (embedded)
@@ -263,13 +281,13 @@ internal/
   mail/           — outbox, templates, provider adapter
   auth/           — OTP issue/verify, sessions, guest accounts
   web/            — handlers, routing, SSE hub
-  render/         — templ components. imports rules/fog, NOT rules/state
+  render/         — templ components. imports game, NEVER rules (D01)
   debug/          — build-tagged tooling (§17)
 
 wasm/             — GOOS=js entrypoint, wraps internal/rules
 ```
 
-**The import rule that matters:** `render` may import the fog package for `PlayerView`, and may not import anything that exposes `MatchState`. Enforce it in CI with a one-line `go list` check rather than trusting discipline — this is exactly the kind of rule that erodes at 2am.
+**The import rule that matters:** `render` and `web` may import `internal/game` for `PlayerView`, and may not import anything that exposes `MatchState` — which, per [D01](../decisions/D01-package-layout.md), makes the forbidden thing a single import edge (`internal/rules`, and now `internal/telemetry` alongside it — [D34](../decisions/D34-telemetry-package-placement.md)) rather than a set of type names. Enforce it in CI with a one-line `go list` check rather than trusting discipline — this is exactly the kind of rule that erodes at 2am.
 
 ---
 
@@ -282,15 +300,17 @@ package rules
 
 // Resolve is the entire round pipeline. It is a pure function:
 // same inputs, same outputs, on any machine, forever.
-func Resolve(s State, orders map[SeatID]Order, cfg Config, r *RNG) (State, []Event, error)
+func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r *RNG) (MatchState, []game.Event, error)
 
 // Project is the fog boundary.
-func Project(s State, seat SeatID) PlayerView
+func Project(s MatchState, seat game.SeatID) game.PlayerView
 
 // Legal answers "would the server accept this order right now?"
 // Shared with the client via WASM (§10).
-func Legal(v PlayerView, o Order, cfg Config) error
+func Legal(v game.PlayerView, o game.Order, cfg game.Config) error
 ```
+
+*(The state type is named `MatchState`, not `State` — [D01](../decisions/D01-package-layout.md) fixed the name along with the package split, and `game.State` does not exist and must never be created. The order log `fold()` replays is `rules.OrderLog`, deliberately in `rules` rather than `game`: a full-match log names every seat's history, not one seat's, and is at least as fog-sensitive as `MatchState` itself ([D34](../decisions/D34-telemetry-package-placement.md)).)*
 
 `rules` imports the standard library and **`internal/game`**, and nothing else. From the standard library it does not import `time`, `math/rand`, `os`, or anything touching the network. This is enforced by a CI check, not by convention.
 
@@ -497,9 +517,9 @@ Using the fairness key for these would be worse, not merely redundant. It couple
 
 ```go
 // The only three orderings in the codebase. Everything sorts by one of them.
-func byFairness(s State) []SeatID      // contended actions
-func bySeat(s State) []SeatID          // RNG batches
-func byFinalStanding(s State) []SeatID // end-of-match ranking only (GDD §16)
+func byFairness(s MatchState) []game.SeatID      // contended actions
+func bySeat(s MatchState) []game.SeatID          // RNG batches
+func byFinalStanding(s MatchState) []game.SeatID // end-of-match ranking only (GDD §16)
 ```
 
 **Every "the one with the least/most X" needs a documented tie-break too.** Lease surrender is the visible case, but it is one of five, and all five share a failure mode: the natural implementation ranges over a map, takes the first match, and answers differently on a different machine.
@@ -540,7 +560,7 @@ The row that will bite is Raid. It looks like it needs a tie-break and it does n
 The fix is not stored state. **"End of the previous round" is exactly the state entering `Resolve`**, so a snapshot taken at the top of the call is sufficient, and it is a local variable rather than another field to keep synchronised:
 
 ```go
-func Resolve(s State, orders map[SeatID]Order, cfg Config, r *RNG) (State, []Event, error) {
+func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r *RNG) (MatchState, []game.Event, error) {
     entry := s.Snapshot()   // frozen: end-of-previous-round truth
     …
 }
@@ -939,7 +959,7 @@ Two distinctions the implementation must not blur:
 
 ```go
 // The single place any of this may be written.
-func writeAnchors(v *PlayerView, s State, seat SeatID) {
+func writeAnchors(v *game.PlayerView, s MatchState, seat game.SeatID) {
     // rows 2-6, 9-11, 13-16: unconditional
     // rows 1, 7, 8, 12: gated by hadSight(seat, node)
 }
@@ -1138,7 +1158,8 @@ The sub-100ms requirement is real for **hover preview and dragging**. It is not 
 
 ```go
 // internal/render — takes the projection, returns markup. ~250 lines.
-func Map(v rules.PlayerView, draft OrderDraft) templ.Component
+// game, never rules: render may not import the package that owns MatchState (D01).
+func Map(v game.PlayerView, draft game.OrderDraft) templ.Component
 ```
 
 **The `viewBox` is the literal constant `"0 0 1000 1000"`, always** ([D10](../decisions/D10-map-layout.md)) — never computed from the rendered node set, which would leak the map's extent through geometry the same way an over-eager JSON field would leak it through data. `Map()` places each node at the `X, Y` coordinates `rules/gen` already assigned; there is no client-side or render-time layout step at all.
@@ -1304,17 +1325,17 @@ Bots serve four roles from one implementation.
 
 ```go
 type Bot interface {
-    Decide(v rules.PlayerView, cfg rules.Config, r *rules.BotRNG) rules.Order
+    Decide(v game.PlayerView, cfg game.Config, r *rules.BotRNG) game.Order
 }
 ```
 
 ### 14.1 The fog boundary, enforced by construction
 
-**A bot receives `PlayerView` and nothing else.** Not `MatchState`, not the graph, not opponent positions. This is not only fairness — it is an executable test of the projection.
+**A bot receives `PlayerView` and the match's `Config`, and nothing else.** Not `MatchState`, not the graph, not the seed, not opponent positions. `Config` is in that list deliberately and is not a loosening: it is the tuning data every human player is shown too (GDD §19.2's reference panel), `rules.Legal` and `rules.Steps` both require one alongside the view, and [D11](../decisions/D11-config-suppression-flags.md)'s suppression flags decide which orders exist at all in an M7 scenario. It says nothing about a rival. Everything on the *excluded* list is a fact about the match that a player cannot have — which is what makes this not only fairness, but an executable test of the projection.
 
 If a bot cannot be written competently against the view, the view is missing something a human also needs. That failure mode is otherwise very hard to notice: a human player will assume they are bad at the game rather than that the UI is starving them. The bot surfaces it as a coding problem.
 
-`Decide` is pure and takes a seeded, per-`(seat, round)` `*rules.BotRNG` — never `Resolve`'s own `*RNG` — so a bot-populated match replays exactly like any other, and `cmd/simulate`'s seed-only sweeps reproduce identically with no order log to fall back on.
+`Decide`'s first three parameters are the fog boundary in type form: `game.PlayerView`, `game.Config` and `game.Order` all live in the leaf package ([D01](../decisions/D01-package-layout.md)), so only the RNG comes from `rules` at all. `Decide` is pure and takes a seeded, per-`(seat, round)` `*rules.BotRNG` — never `Resolve`'s own `*RNG` — so a bot-populated match replays exactly like any other, and `cmd/simulate`'s seed-only sweeps reproduce identically with no order log to fall back on.
 
 **The RNG threading rule.** `Decide`'s third parameter is `*rules.BotRNG`, a distinct type from `Resolve`'s own `*rules.RNG` — not a mode flag on the same type, not a second draw method reachable from it. A call site cannot pass `Resolve`'s live `*RNG` to `Decide` and have it compile: `RNG` exposes no `NextBot` method, and `BotRNG` exposes no `Next` method. This is what makes non-collusion (§14.5) and §16.2's per-round index determinism a compile-time property rather than a review item — the same class of bug §6.4 warns about, invisible until a replay disagrees months later, closed by construction instead of by discipline. Full derivation and the `NewBotRNG(matchSeed, seat, round)` constructor: [D32](../decisions/D32-bot-rng-stream.md).
 
@@ -1445,6 +1466,8 @@ Two things survive into the production build because they are diagnostics, not g
 | Headline coherence | For every round, assert the category printed at Phase 1 matches the card popped at Phase 6, and the sector matches the incident at Phase 7 (§6.4). |
 | Batch ordering | Two Legends with identical Infamy and balance; assert Pressure draws consume indices in seat order and that swapping their balances mid-phase does not reorder them (§6.5). |
 | Adversarial | Hand-crafted illegal payloads with the client bypassed, one per row of GDD §15.0. |
+| Bot determinism | A bot-populated match replays byte-identically from `{seed, order log}` on a second machine, and its per-round `consumed map[Purpose]int` matches the §6.4 table prediction **unchanged by bot population** — including the Autopilot handover case, where a seat switches from human to bot mid-match and the match stream's index count must not move (§6.4, [D32](../decisions/D32-bot-rng-stream.md)). |
+| Bots see only the view | `internal/bots` may not name `MatchState`, `Graph`, `Node` or the seed, at the type level rather than the import level — `bots` legitimately imports `rules` for `BotRNG`, so an import-graph check like §5's cannot express this one (§14.5). |
 
 ### 16.2 Invariants for property tests
 
@@ -1460,6 +1483,7 @@ no player is on a Hidden node they could not reach
 sum(credits in play) changes only via defined sources
 resolve(s, o) == resolve(s, o)          same seed, twice, byte-identical
 rng.seq consumed == predicted            per the §6.4 table, asserted per round
+                                        (BotRNG draws never appear here — D32)
 fold(log) == fold(log)                  refold stability
 ```
 
@@ -1490,6 +1514,8 @@ simulate --matches 10000 --players 4 --bots operator \
 **This answers the open questions the GDD could not.** R1 (cancelled routes), R9 (encounters per match), R11 (endgame camping), and above all the lease rate — the dial §10.4 calls the most sensitive number in the game.
 
 **Build this before the UI.** It needs only `rules` and `bots`, both of which are prerequisites for everything else, and it can be running parameter sweeps while the web layer is still being written. A weekend of sweeps is worth more than a month of arguing about the lease rate.
+
+**How many matches, and what makes a number a verdict.** 10,000 per configuration — the invocation above is the decided sample size, not an illustration ([D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md)); GDD §20's R2 precedent of 3,000 is explicitly not carried forward. Every metric reduces to **one number per match** first (the match is the sampling unit, because players and routes inside one match are not independent draws), and the CSV reports `mean ± 1.96 · s / √n` over that vector — one interval routine in the harness, not one per metric shape. A vector left with fewer than two values after exclusions is **not a measurement**: `s` is undefined at n = 1, so the row reports the failure and no verdict rather than a bare mean, and the CSV carries each row's effective `n` and excluded-match count beside its interval so a configuration cannot read as complete after silent data loss. **Action only when the whole interval sits on the failing side of the threshold**; a straddling baseline check earns one re-run under a second root seed, pooled with the first into a single 20,000-match interval, and is parked as "watch, unresolved" if it still straddles. Both tiers are always reported and each threshold's verdict is read against one of them — Drifter for the map-geometry questions, Operator for the strategy ones. The interval is `cmd/simulate`'s own computation, not `telemetry.Match`'s: `Match` returns one `MatchSummary` per match, and the reduction happens once per configuration across many of them. GDD §22 carries the full rule beside the bands it governs.
 
 Caveat worth writing down: bot play is not human play, and a sweep tells you about the *shape* of the parameter space — where a dial flips a strategy from dominant to dead — not the exact right value. It narrows the range that paper testing then confirms.
 
@@ -1566,7 +1592,7 @@ Each milestone is independently demonstrable, and the sequence is chosen so the 
 | # | Milestone | Contents | Proves |
 |---|---|---|---|
 | **1** | `rules` core | State, Order, Resolve, Project, Config, RNG, map gen. Unit and property tests. | The game is implementable and deterministic |
-| **2** | Bots + simulation | Three tiers, `cmd/simulate`, GDD §22 metrics as CSV | **Answers R1, R9, R11 and the lease rate before any UI exists** |
+| **2** | Bots + simulation | Three tiers on `BotRNG` (§14, D32), `internal/telemetry.Match` (§17, D34), `cmd/simulate`, GDD §22 metrics as CSV with D35's intervals | **Answers R1, R9, R11 and the lease rate before any UI exists** |
 | **3** | Persistence | Schema, sqlc, goose, fold, `cmd/replay` | Matches survive restarts and reproduce exactly |
 | **4** | Round lifecycle | Tick, deadline sweeper, bot filling (§14.2), absence defaults, autopilot | A full match runs end to end with no browser |
 | **5** | **Playable web — this is what ships** | templ, HTMX, auth, lobby, order form, server-rendered SVG map, narrated resolution, Board as tables, one overlay | People can play the game |

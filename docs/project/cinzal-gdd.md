@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.23 (scope-locked for prototype)
+## Game Design Document — v2.24 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -181,6 +181,11 @@
 > - **§21 gains entry 24: bot decision-making.** A bot's own `Decide` draws (Drifter's route pick, Operator's search) are a real source of randomness in the game, but they resolve **neither** before nor after the player's decision — they're a separate actor's own decision process, not a random event happening to a human's choice, and they draw on a dedicated stream (`BotRNG`) RFC §6.4 deliberately keeps outside the match's own consumption table ([D32](../decisions/D32-bot-rng-stream.md)). The closing P2-audit count is unaffected: entry 24 sits outside the six-before/seventeen-after split it was already scoped to.
 > - **§22's framing is corrected.** "Every match — paper or digital — records the following" is true for seventeen of the twenty rows. Three are not headless facts at all: row 16 (Heat Map opened) needs UI instrumentation that doesn't exist until M5; rows 15 (Attribution queries) and 18 (Loitering flags from legitimate play) are human questions, deferred to M5.5 — the second because no operational definition exists yet to compute it against ([D33](../decisions/D33-telemetry-event-stream-coverage.md)). Every row now carries the milestone that produces it.
 > - No rule change: every metric counted here was already the correct target, band and failure condition. This closes a documentation gap between what §22 implied was available today and what D33's row-by-row audit against the actual event stream, final state and order log found. Companion RFC moves to r29, which names `internal/telemetry.Match` (D34) and corrects "computed from the event stream" to name the final state and order log D33 found some rows need.
+> 
+> **Changelog v2.23 → v2.24** — §22 never gained D35's sample size, interval or verdict rule (issue #213)
+> - **§22 gains a "Reading these bands" subsection.** Every band in §22 is a point estimate with an action attached and no stated precision — a sweep returning 12.3 against R9's *"> 12"* was either a rule change or nothing, and nothing in either document said which. [D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md)'s four parts now sit where the bands are read: 10,000 matches per configuration, the match as the sampling unit with one interval formula for every row shape, action only when the interval clears the band, and a per-band tier baseline (Drifter for the two map-geometry questions, Operator for the five that depend on a player who is trying).
+> - **§20's R2 entry gains a pointer to that rule**, so its 3,000-match precedent is not read as the standing sample size — D35 explicitly declines to carry it forward.
+> - No rule change and no band moves. D35's own Consequences section assigned this edit to [#202](https://github.com/garnizeh/cinzal/issues/202), which closed covering D32–D34 only; this closes the gap it left. Companion RFC moves to r30.
 
 ---
 
@@ -1465,7 +1470,7 @@ Still open, and deliberately deferred to instrumentation rather than argument:
 
 **R1 — Cancelled routes may frustrate.** You plan four steps, take a confrontation on step one, and lose everything after it. If that's common, the game reads as a lottery. v1 ships the simple rule; §22 measures it. **Threshold: if more than 15% of submitted routes are cancelled mid-route, the confrontation rule gets softened** — most likely by letting the loser continue their route from the fallback node with remaining steps intact.
 
-**R2 — RESOLVED, and it was wrong.** v1.0 and v1.1 both worried that confrontations would be too rare. Simulated under random movement across 3,000 matches per configuration, against the target band of 4–8:
+**R2 — RESOLVED, and it was wrong.** v1.0 and v1.1 both worried that confrontations would be too rare. Simulated under random movement across 3,000 matches per configuration, against the target band of 4–8 (M2 re-runs this and every other threshold at 10,000 per configuration, with an interval and a verdict rule — §22 and [D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md)):
 
 | Setup | Encounters per match | Matches under 3 |
 |---|---|---|
@@ -1561,6 +1566,19 @@ All rolls are server-side and derived from `hash(match_seed, round, sequence_ind
 ## 22. Telemetry
 
 R1 and R9 are answered by measurement, not opinion — R2 already was, and turned out to be backwards (§20). Every match — paper or digital — records the following, with one caveat [D33](../decisions/D33-telemetry-event-stream-coverage.md)'s row-by-row audit made explicit: seventeen of the twenty rows are headless facts, computable from a running match's event stream, final state, or order log alone; three are not, and are marked below with the milestone that produces them instead. The digital build computes each row from its own declared source, not one uniform mechanism: event-backed rows are emitted as structured events from day one, because retrofitting instrumentation always costs more than building it in; final-state and order-log rows are computed once, at scoring, through `telemetry.Match` (RFC §17). Row 13 ships without a precise answer in M2's first pass regardless of source — marked open below, not silently approximate.
+
+### Reading these bands: sample size, interval, verdict
+
+A band is not a verdict on its own. M2's simulation harness (RFC §16.4) reads the seven bands the roadmap's exit criteria name, and [D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md) fixes how:
+
+- **10,000 matches per configuration** — not §20's R2 precedent of 3,000, which measured a different and less sensitive question; RFC §16.4's own worked invocation already runs `--matches 10000`.
+- **The match is the sampling unit, always.** Reduce each match to one number first — a per-match count or 0/1 indicator as it stands, a per-player metric to that match's mean across its own players, a ratio over in-match events to that match's own pooled ratio — then report `mean ± 1.96 · s / √n` over the resulting vector. One formula for counts, rates and indicators alike. A match with an empty denominator is excluded from that row's vector, and the exclusion count is reported beside it rather than papered over.
+- **Action only when the whole interval sits on the failing side of the band.** A point estimate over the line with the interval still straddling it is *watch, not act*: re-run that configuration under a second, independently drawn root seed, pool both vectors into one 20,000-match interval, and if it still straddles, record "watch, unresolved at n = 20,000" and hand it to M5.5 rather than inflating n to manufacture precision.
+- **A zero-width interval is a degenerate sample, not a finding.** Flag it and re-examine, never read it as a confident verdict. Fewer than two values left in a vector is the same failure at its limit — `s` is undefined at n = 1 and there is nothing to average at n = 0 — so the row reports **no measurement and no verdict**, never a bare mean dressed as one.
+- **Both bot tiers are always reported, but each band's verdict is read against one** (RFC §14.3): **Drifter** for the two map-geometry questions — confrontations per match at 4–5 players, and the two-player floor under rotating borders — and **Operator** for every band that depends on a player who is trying: routes cancelled, incident exposure, the Infamy climb, the endgame share, and the lease rate.
+- **No cross-metric multiplicity correction.** These are separate design questions governing independent levers, not one hypothesis family.
+
+Rows marked *(M5)* or *(M5.5)* below have no headless statistic to reduce and sit outside this rule entirely.
 
 ### Per match
 
