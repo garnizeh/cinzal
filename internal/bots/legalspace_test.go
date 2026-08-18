@@ -112,11 +112,20 @@ func TestActionsAlwaysIncludesNothing(t *testing.T) {
 // than trialling (and rejecting) every other candidate one by one.
 func TestActionsForcesNothingUnderPushingOn(t *testing.T) {
 	cfg := game.DefaultConfig()
-	v := fixtureView(4, 2)
+	v := game.PlayerView{
+		Round: 4,
+		You:   game.SelfState{Position: 1},
+		Nodes: map[game.NodeID]game.NodeView{
+			1: {Fog: game.FogKnown, Type: game.NodeAlley, Edges: []game.NodeID{2}},
+			2: {Fog: game.FogKnown, Type: game.NodeAlley, Edges: []game.NodeID{99}},
+			// 99 is absent from Nodes — a real, adjacency-reachable Hidden
+			// ending, unlike an arbitrary NodeID with no edge leading to it.
+		},
+	}
 	bias := game.SectorOldDocks
 	draft := game.Order{
 		Round:     v.Round,
-		Route:     []game.NodeID{99}, // absent from v — a Hidden ending node
+		Route:     []game.NodeID{2, 99},
 		PushingOn: game.PushingOn{Steps: 1, Bias: &bias},
 		Stance:    game.StanceOrder{Stance: game.StanceNeutral},
 	}
@@ -180,6 +189,58 @@ func TestSampleImmobilisedPlayerYieldsLegalOrder(t *testing.T) {
 		}
 		if err := rules.Legal(v, o, cfg); err != nil {
 			t.Fatalf("seed %d: illegal order %+v: %v", seed, o, err)
+		}
+	}
+}
+
+// TestSampleWithHeldItemsAndSuppressedDealAlwaysLegal exercises the item-
+// discard path CodeRabbit's review flagged as undertested on this PR: a
+// view holding every discardable item (all eight minus Muscle, which
+// Sample must never declare regardless), with a Rumoured, a Known and a
+// Hidden neighbour so Decoy, Police Band and Bolt Hole each have a real
+// target to draw, and Suppress.Items set so a discard that only makes Deal
+// affordable is never the point of discarding here. This is also the
+// scenario most likely to drive legalActionsOrRelax's fallback path (a
+// sampled discard set making the whole draft illegal for a reason
+// unrelated to Action) if one still exists.
+func TestSampleWithHeldItemsAndSuppressedDealAlwaysLegal(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Suppress.Items = true
+
+	v := game.PlayerView{
+		Round: 4,
+		You: game.SelfState{
+			Position: 1,
+			Items: []game.ItemID{
+				game.ItemShiv,
+				game.ItemMuscle,
+				game.ItemPoliceBand,
+				game.ItemCirculationPermit,
+				game.ItemTornMap,
+				game.ItemDecoy,
+				game.ItemBoltHole,
+				game.ItemGuardContact,
+			},
+		},
+		Nodes: map[game.NodeID]game.NodeView{
+			1: {Fog: game.FogKnown, Type: game.NodeAlley, Edges: []game.NodeID{2, 3}},
+			2: {Fog: game.FogRumoured, Type: game.NodeWarehouse}, // Police Band's own target case — no Edges
+			3: {Fog: game.FogKnown, Type: game.NodeAlley, Edges: []game.NodeID{4}},
+			4: {Fog: game.FogKnown, Type: game.NodeAlley}, // Bolt Hole's own distance-2 target
+		},
+	}
+
+	for seed := range byte(60) {
+		r := rules.NewBotRNG(testSeed(seed), game.SeatID(0), 4)
+		o := Sample(v, cfg, r)
+
+		if err := rules.Legal(v, o, cfg); err != nil {
+			t.Fatalf("seed %d: illegal order %+v: %v", seed, o, err)
+		}
+		for _, d := range o.Items {
+			if d.Item == game.ItemMuscle {
+				t.Fatalf("seed %d: Muscle declared as a discard: %+v", seed, o.Items)
+			}
 		}
 	}
 }
@@ -388,13 +449,33 @@ func TestGeneratorOnlyUsesEnumeratorRulesSymbols(t *testing.T) {
 		}
 		filesScanned++
 
+		// The local name this file's own import binds internal/rules to —
+		// scanning for the literal identifier "rules" would silently miss
+		// an aliased or dot-import of the same package.
+		local := ""
+		for _, imp := range file.Imports {
+			if imp.Path.Value != `"github.com/garnizeh/cinzal/internal/rules"` {
+				continue
+			}
+			local = "rules"
+			if imp.Name != nil {
+				if imp.Name.Name == "." {
+					t.Fatalf("%s: dot-imports internal/rules, which this check cannot see through", name)
+				}
+				local = imp.Name.Name
+			}
+		}
+		if local == "" {
+			continue // this file does not import internal/rules at all
+		}
+
 		ast.Inspect(file, func(n ast.Node) bool {
 			sel, ok := n.(*ast.SelectorExpr)
 			if !ok {
 				return true
 			}
 			pkgIdent, ok := sel.X.(*ast.Ident)
-			if !ok || pkgIdent.Name != "rules" {
+			if !ok || pkgIdent.Name != local {
 				return true
 			}
 			if !allowed[sel.Sel.Name] {

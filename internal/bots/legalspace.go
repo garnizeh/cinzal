@@ -146,17 +146,30 @@ func PushingOns(v game.PlayerView, route []game.NodeID) []game.PushingOn {
 // order jointly, so a Deal that only becomes affordable after draft.Items'
 // own discards, or a Stake Post at the post cap, are correctly included or
 // excluded by trialling the real order rather than a hand-rolled copy of
-// legalAction's rules. Always includes ActionNothing.
+// legalAction's rules. Includes ActionNothing whenever draft's other fields
+// (Route, PushingOn, Stance, Items) are themselves jointly legal on their
+// own — the common case — but Actions trials the whole order, so it can
+// return empty for a draft an earlier stage already made illegal some
+// other way. Sample handles that by relaxing its own draft rather than
+// this function papering over it with a value Legal would not actually
+// accept.
 //
 // When draft.PushingOn declares a continuation, GDD §9.1/§15.0 forbid
 // combining it with any action ("you have no idea where you'll be"), so
-// Actions returns only {ActionNothing} without trialling anything else.
+// Actions returns only {ActionNothing} without trialling anything else —
+// which can itself be the empty-yielding case above, if Route/Stance/Items
+// were not jointly legal to begin with.
 //
 // ActionDeal is offered once per item on the ending node's disclosed
 // Market — only populated when that node is InSight and a Black Market
 // (GDD §7.1, §12) — never a blind guess at an undisclosed stock.
 func Actions(v game.PlayerView, cfg game.Config, draft game.Order) []game.ActionOrder {
 	if pushingDeclared(draft.PushingOn) {
+		trial := draft
+		trial.Action = game.ActionOrder{Kind: game.ActionNothing}
+		if rules.Legal(v, trial, cfg) != nil {
+			return nil
+		}
 		return []game.ActionOrder{{Kind: game.ActionNothing}}
 	}
 
@@ -378,9 +391,24 @@ func sampleAddOns(v game.PlayerView, cfg game.Config, draft game.Order, r *rules
 
 	if a.MaxLeaseBlocks > 0 {
 		if targets := renewTargets(v, draft); len(targets) > 0 {
-			if blocks := r.NextBot("bot.sample.addons.blocks", a.MaxLeaseBlocks+1); blocks > 0 {
+			target := targets[r.NextBot("bot.sample.addons.renewtarget", len(targets))]
+
+			// RenewalBlockCap only clamps against the target post's own
+			// remaining rounds once the draft actually names a target and
+			// a nonzero RenewBlocks (internal/rules/affordance.go) — the
+			// withLedger probe above named neither, so a.MaxLeaseBlocks
+			// there is only the balance clamp. Re-ask with target
+			// declared before drawing the block count, or a post already
+			// close to GDD §10.4's 12-round ceiling could be offered more
+			// blocks than it has headroom for.
+			probe := withLedger
+			probe.AddOns.RenewPost = target
+			probe.AddOns.RenewBlocks = 1
+			capped := rules.Affordances(v, cfg, probe).MaxLeaseBlocks
+
+			if blocks := r.NextBot("bot.sample.addons.blocks", capped+1); blocks > 0 {
 				addOns.RenewBlocks = blocks
-				addOns.RenewPost = targets[r.NextBot("bot.sample.addons.renewtarget", len(targets))]
+				addOns.RenewPost = target
 			}
 		}
 	}
@@ -422,6 +450,42 @@ func sampleContractChoice(v game.PlayerView, r *rules.BotRNG) *int {
 // the action they can unlock a Deal's hand-limit room for; the action
 // before a Stake Post's node becomes a renewal target).
 //
+// legalActionsOrRelax returns Actions(v, cfg, draft) together with the
+// draft it was computed against, relaxing draft when that comes back empty
+// — Actions trials the whole order, so a draft an earlier stage made
+// illegal for a reason having nothing to do with Action yields no
+// candidates at all, and Sample must never index that.
+//
+// The relaxation is structural, not a guess: dropping Items first can only
+// remove legalDiscards/legalItemTargets rejections (an empty Items always
+// satisfies both), and dropping PushingOn next can only remove
+// legalPushingOn's rejection (its zero value always satisfies "not
+// declared"). Once both are cleared, the ActionNothing trial's legality
+// depends on nothing but Route (always legal — built by Routes) and Stance
+// (always one of the three declared values, stake >= 0 — built by
+// sampleStance), which Legal places no further restriction on. So this
+// loop is a closed, always-terminating fallback, not an open-ended retry;
+// the final iteration cannot come back empty.
+func legalActionsOrRelax(v game.PlayerView, cfg game.Config, draft game.Order) ([]game.ActionOrder, game.Order) {
+	if actions := Actions(v, cfg, draft); len(actions) > 0 {
+		return actions, draft
+	}
+
+	draft.Items = nil
+	if actions := Actions(v, cfg, draft); len(actions) > 0 {
+		return actions, draft
+	}
+
+	draft.PushingOn = game.PushingOn{}
+	if actions := Actions(v, cfg, draft); len(actions) > 0 {
+		return actions, draft
+	}
+
+	// Unreachable per the reasoning above, kept only so a future change to
+	// Legal's own rules degrades to a safe order instead of a panic here.
+	return []game.ActionOrder{{Kind: game.ActionNothing}}, draft
+}
+
 // This is the generator issue #191 asks for, not yet the exact statistical
 // claim issue #192 wires into Drifter: "uniform within each stage" is not
 // the same distribution as "uniform over the whole order space" — a route
@@ -445,7 +509,7 @@ func Sample(v game.PlayerView, cfg game.Config, r *rules.BotRNG) game.Order {
 	draft.Stance = sampleStance(v, cfg, draft, r)
 	draft.Items = sampleItems(v, r)
 
-	actions := Actions(v, cfg, draft)
+	actions, draft := legalActionsOrRelax(v, cfg, draft)
 	draft.Action = actions[r.NextBot("bot.sample.action", len(actions))]
 
 	draft.AddOns = sampleAddOns(v, cfg, draft, r)
