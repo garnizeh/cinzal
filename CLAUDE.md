@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository state
 
-**M0 and M1 are closed. M2 — Bots and simulation is next.** `internal/game` and `internal/rules` are fully implemented: the whole game, deterministic and headless, with the complete RFC §16.1 suite (golden replays, RNG index accounting, fog negatives, anchor parity, property/adversarial tests). Every other `internal/` package (`match`, `render`, `web`, `store`, `bots`, `auth`, `mail`, `debug`) is still `doc.go` only, as are the three `cmd/` binaries. `internal/telemetry` ([D34](docs/decisions/D34-telemetry-package-placement.md)) has no directory at all yet — M2 creates it, alongside `internal/bots` and `cmd/simulate`.
+**M0 and M1 are closed. M2 — Bots and simulation is next.** `internal/game` and `internal/rules` are fully implemented: the whole game, deterministic and headless, with every RFC §16.1 layer that does not need a database or a bot behind it (golden replays, RNG index accounting, fog negatives, anchor parity, cross-round state, property/adversarial tests). §16.1's remaining rows belong to later milestones — the two bot rows to M2, integration/concurrency/effects to M3–M4, the mail rows to M6. Every other `internal/` package (`match`, `render`, `web`, `store`, `bots`, `auth`, `mail`, `debug`) is still `doc.go` only, and each of the three `cmd/` binaries is a `doc.go` plus an empty `main`. `internal/telemetry` ([D34](docs/decisions/D34-telemetry-package-placement.md)) has no directory at all yet — M2 creates it, alongside `internal/bots` and `cmd/simulate`.
 
 ```text
 docs/project/cinzal-gdd.md                  — Game Design Document (v2.24)
