@@ -241,3 +241,38 @@ func incidentHazardOf(t *testing.T, id IncidentCardID) bool {
 	t.Fatalf("incident card ID %d not found in allIncidents", id)
 	return false
 }
+
+// TestEventCardTags pins EventCardTags against allEvents directly — the
+// accessor internal/telemetry uses for GDD §22 rows 13/14's seed-derivable
+// card identity (D33), so a divergence from the catalog here would be a
+// silent wrong answer for that package, not just this one.
+func TestEventCardTags(t *testing.T) {
+	tests := []struct {
+		id   EventCardID
+		want []EventTag
+	}{
+		{EventDragnet, []EventTag{TagConvergence}},
+		{EventFestival, []EventTag{TagConvergence}},
+		{EventShiftChange, []EventTag{TagOpportunity}},
+		{EventFencesWindfall, []EventTag{TagConvergence, TagOpportunity}},
+	}
+	for _, tc := range tests {
+		got := EventCardTags(tc.id)
+		if len(got) != len(tc.want) {
+			t.Fatalf("EventCardTags(%v) = %v, want %v", tc.id, got, tc.want)
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("EventCardTags(%v) = %v, want %v", tc.id, got, tc.want)
+			}
+		}
+	}
+}
+
+// TestEventCardTagsUnknownID reports EventCardTags' documented behavior for
+// an ID naming no card in the catalog: nil, not a panic.
+func TestEventCardTagsUnknownID(t *testing.T) {
+	if got := EventCardTags(EventCardID(255)); got != nil {
+		t.Errorf("EventCardTags(255) = %v, want nil", got)
+	}
+}
