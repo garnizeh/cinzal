@@ -16,9 +16,16 @@ import (
 // history entry ("a number whose provenance is a shell history entry is a
 // number nobody can act on"), and the facts a resume must agree with
 // before it appends a single row ("checked against the file's header so a
-// resume cannot silently splice two different sweeps together").
+// resume cannot silently splice two different sweeps together"). gitSHA is
+// part of that agreement, not just a per-row column: without it here, a
+// resume only checks the *invocation* (seed, matches, players, bots,
+// sweep), not the *code* that ran it — a binary rebuilt from a different
+// commit but given the identical flags would pass every other check and
+// silently append rows computed by different simulation logic into the
+// same file.
 type provenance struct {
 	rootSeedHex string
+	gitSHA      string
 	matches     int
 	players     int
 	bots        string
@@ -26,8 +33,8 @@ type provenance struct {
 }
 
 func (p provenance) line() string {
-	return fmt.Sprintf("# cinzal-simulate v1 seed=%s matches=%d players=%d bots=%s sweep=%s",
-		p.rootSeedHex, p.matches, p.players, p.bots, p.sweepSpec)
+	return fmt.Sprintf("# cinzal-simulate v1 seed=%s git_sha=%s matches=%d players=%d bots=%s sweep=%s",
+		p.rootSeedHex, p.gitSHA, p.matches, p.players, p.bots, p.sweepSpec)
 }
 
 // buildHeader lists every column this command writes, in the order issue
@@ -166,6 +173,9 @@ func verifyAndReadExisting(f *os.File, prov provenance, header []string) (done m
 			statusIdx = i
 		}
 	}
+	// buildHeader always puts "status" first, and gotHeader was just
+	// checked equal to header above — statusIdx == -1 here would mean
+	// that equality check was wrong, not a real input to handle.
 
 	done = map[string]bool{}
 	for {
@@ -176,10 +186,24 @@ func verifyAndReadExisting(f *os.File, prov provenance, header []string) (done m
 		if err != nil {
 			return nil, false, fmt.Errorf("read data row: %w", err)
 		}
-		done[existingRowKey(row, sweepIdx)] = true
-		if statusIdx >= 0 && row[statusIdx] != "ok" {
-			hadPriorError = true
+
+		// A duplicate configuration row or a status outside {ok, error}
+		// only happens if the file was corrupted, hand-edited, or written
+		// by something other than this command — silently accepting
+		// either would let a resume skip (or worse, misclassify) a
+		// configuration this run believes is genuinely recorded.
+		key := existingRowKey(row, sweepIdx)
+		if done[key] {
+			return nil, false, fmt.Errorf("existing file has more than one row for configuration %q", key)
 		}
+		switch row[statusIdx] {
+		case "ok":
+		case "error":
+			hadPriorError = true
+		default:
+			return nil, false, fmt.Errorf("existing file has status %q for configuration %q, want \"ok\" or \"error\"", row[statusIdx], key)
+		}
+		done[key] = true
 	}
 	return done, hadPriorError, nil
 }

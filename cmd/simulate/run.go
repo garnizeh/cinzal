@@ -119,6 +119,7 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 
 	prov := provenance{
 		rootSeedHex: rootSeedHex,
+		gitSHA:      sha,
 		matches:     *matches,
 		players:     *players,
 		bots:        strings.ToLower(*botsFlag),

@@ -10,6 +10,7 @@ import (
 func testProvenance() provenance {
 	return provenance{
 		rootSeedHex: "aabbcc",
+		gitSHA:      "cafef00d",
 		matches:     10,
 		players:     2,
 		bots:        "drifter",
@@ -171,6 +172,63 @@ func TestOpenReportResumeTracksPriorErrors(t *testing.T) {
 	}
 }
 
+// TestOpenReportResumeRejectsInvalidStatus and
+// TestOpenReportResumeRejectsDuplicateKey are the CodeRabbit-flagged gap:
+// the reader used to accept any non-"ok" value as an implicit error row,
+// and silently let a later row overwrite an earlier one's entry in done.
+// Both are symptoms of the same thing — a corrupted or hand-edited file —
+// and both must now fail closed rather than let a resume misclassify or
+// silently skip a configuration.
+//
+// Both tests write their bad row through writeRow directly: writeRow
+// itself performs no content validation (nothing this package's own
+// production code ever writes needs it to), so it's the natural way to
+// construct a file only a corrupted write or manual edit could produce.
+func TestOpenReportResumeRejectsInvalidStatus(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "out.csv")
+	prov := testProvenance()
+	header := testHeader()
+
+	report, err := openReport(path, prov, header)
+	if err != nil {
+		t.Fatalf("openReport() (first) = %v", err)
+	}
+	if err := report.writeRow(map[string]string{"status": "bogus", "sweep.LeaseCostPerBlock": "1"}); err != nil {
+		t.Fatalf("writeRow() = %v", err)
+	}
+	if err := report.close(); err != nil {
+		t.Fatalf("close() = %v", err)
+	}
+
+	if _, err := openReport(path, prov, header); err == nil {
+		t.Error("openReport() over a row with an unrecognized status = nil error, want an error")
+	}
+}
+
+func TestOpenReportResumeRejectsDuplicateKey(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "out.csv")
+	prov := testProvenance()
+	header := testHeader()
+
+	report, err := openReport(path, prov, header)
+	if err != nil {
+		t.Fatalf("openReport() (first) = %v", err)
+	}
+	if err := report.writeRow(map[string]string{"status": "ok", "sweep.LeaseCostPerBlock": "1"}); err != nil {
+		t.Fatalf("writeRow() (1) = %v", err)
+	}
+	if err := report.writeRow(map[string]string{"status": "ok", "sweep.LeaseCostPerBlock": "1"}); err != nil {
+		t.Fatalf("writeRow() (2) = %v", err)
+	}
+	if err := report.close(); err != nil {
+		t.Fatalf("close() = %v", err)
+	}
+
+	if _, err := openReport(path, prov, header); err == nil {
+		t.Error("openReport() over a file with a duplicate configuration row = nil error, want an error")
+	}
+}
+
 func TestOpenReportResumeProvenanceMismatch(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "out.csv")
 	header := testHeader()
@@ -187,6 +245,30 @@ func TestOpenReportResumeProvenanceMismatch(t *testing.T) {
 	changed.matches = 999
 	if _, err := openReport(path, changed, header); err == nil {
 		t.Error("openReport() with a different provenance = nil error, want an error")
+	}
+}
+
+// TestOpenReportResumeGitSHAMismatch is the CodeRabbit-flagged gap:
+// without git SHA in provenance, a binary built from a different commit
+// but given identical flags could resume into a file and mix rows
+// computed by different simulation code. Same invocation, same flags,
+// only the git SHA differs — must still be rejected.
+func TestOpenReportResumeGitSHAMismatch(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "out.csv")
+	header := testHeader()
+
+	report, err := openReport(path, testProvenance(), header)
+	if err != nil {
+		t.Fatalf("openReport() (first) = %v", err)
+	}
+	if err := report.close(); err != nil {
+		t.Fatalf("close() = %v", err)
+	}
+
+	changed := testProvenance()
+	changed.gitSHA = "deadbeef"
+	if _, err := openReport(path, changed, header); err == nil {
+		t.Error("openReport() with a different git SHA = nil error, want an error")
 	}
 }
 
