@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity fog debug-isolation secrets check replay clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity fog debug-isolation secrets bots-isolation bots-isolation-selftest check replay clean
 
 ## help      list these targets
 help:
@@ -144,6 +144,19 @@ debug-isolation:
 secrets: require-gitleaks
 	./scripts/check-secrets.sh
 
+## bots-isolation  assert internal/bots names no MatchState, graph, or seed
+bots-isolation:
+	$(GO) run scripts/check-bots-isolation.go
+
+## bots-isolation-selftest  fixture coverage for check-bots-isolation.go (issue #195)
+#
+# Deterministic and fast — synthetic fixture packages, nothing about the
+# real internal/bots involved — so like bench-regression-selftest this
+# carries none of the noise that would keep it out of `check`. See
+# scripts/check-bots-isolation_test.sh's own comment.
+bots-isolation-selftest:
+	./scripts/check-bots-isolation_test.sh
+
 # Paths holding generated output. EMPTY UNTIL M3 AND M5 — templ output arrives
 # with the templates, sqlc output with the schema. Each milestone appends here.
 GENERATED :=
@@ -176,6 +189,11 @@ generate-check: generate
 # listed as if it had. As each lands it appends itself to this line, and its
 # All four M0 gates are now listed. Anything added later appends itself here.
 #
+# bots-isolation joined in M2 (issue #195), the same shape as the four M0
+# gates before it: it can always run once internal/bots exists, so unlike
+# generate-check it belongs on this line rather than staying out until
+# something makes it non-vacuous.
+#
 # generate-check is deliberately absent from this line for the same reason,
 # not an oversight: with GENERATED still empty (M3/M5 not landed), it can only
 # report VACUOUS, and listing it here would make `check`'s own success mean
@@ -192,7 +210,7 @@ generate-check: generate
 #
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
-check: packages purity fog debug-isolation secrets lint test bench-regression-selftest prod dev
+check: packages purity fog debug-isolation secrets bots-isolation bots-isolation-selftest lint test bench-regression-selftest prod dev
 
 ## replay    golden-replay determinism suite, for the cross-OS/arch matrix (issue #80)
 #

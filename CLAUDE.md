@@ -4,6 +4,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > **Every shell command runs as `rtk <command>`, no exceptions** — including `git`, `gh`, and anything chained with `&&`. `rtk` passes through transparently when it has no dedicated filter, so there's never a reason to drop it.
 
+> **Always write in English** — code, comments, commit messages, PR titles/descriptions, issue text, and any other artifact that lands in this repository — regardless of the language the request came in. The GDD, RFC, and every existing doc are English-only, and mixing languages in history or docs would break that consistency. Conversational replies to the user may still match the user's own language; this rule is about what gets committed or posted, not how you talk to them.
+
 ## Repository state
 
 **M0 and M1 are closed. M2 — Bots and simulation is next.** `internal/game` and `internal/rules` are fully implemented: the whole game, deterministic and headless, with every RFC §16.1 layer that does not need a database or a bot behind it (golden replays, RNG index accounting, fog negatives, anchor parity, cross-round state, property/adversarial tests). §16.1's remaining rows belong to later milestones — the two bot rows to M2, integration/concurrency/effects to M3–M4, the mail rows to M6. Every other `internal/` package (`match`, `render`, `web`, `store`, `bots`, `auth`, `mail`, `debug`) is still `doc.go` only, and each of the three `cmd/` binaries is a `doc.go` plus an empty `main`. `internal/telemetry` ([D34](docs/decisions/D34-telemetry-package-placement.md)) has no directory at all yet — M2 creates it, alongside `internal/bots` and `cmd/simulate`.
