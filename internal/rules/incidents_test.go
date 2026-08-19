@@ -238,8 +238,10 @@ func TestResolveSnatchJobReturnsDebtEventOnSurrender(t *testing.T) {
 
 	events := resolveSnatchJob(&s, ctx, validated, []game.SeatID{0}, r)
 
-	if len(events) != 3 || events[0].Kind != game.EventIncidentExposed || events[1].Kind != game.EventLeaseExpired || events[1].Node != 2 || events[2].Kind != game.EventIncidentHit {
-		t.Errorf("events = %+v, want EventIncidentExposed, EventLeaseExpired at node 2 (Debt-forced surrender), EventIncidentHit", events)
+	if len(events) != 3 || events[0].Kind != game.EventIncidentExposed || events[0].Seat != 0 ||
+		events[1].Kind != game.EventLeaseExpired || events[1].Node != 2 ||
+		events[2].Kind != game.EventIncidentHit || events[2].Seat != 0 || events[2].Round != 7 || events[2].Node != 1 {
+		t.Errorf("events = %+v, want EventIncidentExposed{Seat:0}, EventLeaseExpired at node 2 (Debt-forced surrender), EventIncidentHit{Seat:0, Round:7, Node:1 (the seat's origin, before relocation)}", events)
 	}
 }
 
@@ -283,8 +285,10 @@ func TestResolveGuardSweepReturnsDebtEventOnSurrender(t *testing.T) {
 
 	events := resolveGuardSweep(&s, ctx, validated, []game.SeatID{0})
 
-	if len(events) != 3 || events[0].Kind != game.EventIncidentExposed || events[1].Kind != game.EventLeaseExpired || events[1].Node != 2 || events[2].Kind != game.EventIncidentHit {
-		t.Errorf("events = %+v, want EventIncidentExposed, EventLeaseExpired at node 2 (Debt-forced surrender), EventIncidentHit", events)
+	if len(events) != 3 || events[0].Kind != game.EventIncidentExposed || events[0].Seat != 0 ||
+		events[1].Kind != game.EventLeaseExpired || events[1].Node != 2 ||
+		events[2].Kind != game.EventIncidentHit || events[2].Seat != 0 || events[2].Round != 7 || events[2].Node != 1 {
+		t.Errorf("events = %+v, want EventIncidentExposed{Seat:0}, EventLeaseExpired at node 2 (Debt-forced surrender), EventIncidentHit{Seat:0, Round:7, Node:1}", events)
 	}
 }
 
@@ -446,8 +450,10 @@ func TestResolveShakedownReturnsDebtEventOnSurrender(t *testing.T) {
 
 	events := resolveShakedown(&s, ctx, validated, []game.SeatID{0})
 
-	if len(events) != 3 || events[0].Kind != game.EventIncidentExposed || events[1].Kind != game.EventLeaseExpired || events[1].Node != 2 || events[2].Kind != game.EventIncidentHit {
-		t.Errorf("events = %+v, want EventIncidentExposed, EventLeaseExpired at node 2 (Debt-forced surrender), EventIncidentHit", events)
+	if len(events) != 3 || events[0].Kind != game.EventIncidentExposed || events[0].Seat != 0 ||
+		events[1].Kind != game.EventLeaseExpired || events[1].Node != 2 ||
+		events[2].Kind != game.EventIncidentHit || events[2].Seat != 0 || events[2].Round != 7 || events[2].Node != 1 {
+		t.Errorf("events = %+v, want EventIncidentExposed{Seat:0}, EventLeaseExpired at node 2 (Debt-forced surrender), EventIncidentHit{Seat:0, Round:7, Node:1}", events)
 	}
 }
 
