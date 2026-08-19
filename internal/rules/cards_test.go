@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -281,9 +282,14 @@ func TestEventCardTagsUnknownID(t *testing.T) {
 // second call to come back unchanged — EventCardTags must never hand out
 // allEvents' own backing array, or one caller's mutation would corrupt the
 // catalog for every match this process resolves afterward, not just its
-// own read.
+// own read. before is snapshotted with its own slices.Clone, independent
+// of got: if EventCardTags regressed to returning allEvents' own slice
+// directly, before and got would alias the same backing array, and
+// mutating got would silently mutate before's view of it too — the
+// comparison below would then pass on a real regression instead of
+// catching it.
 func TestEventCardTagsReturnsACopy(t *testing.T) {
-	before := EventCardTags(EventFencesWindfall)
+	before := slices.Clone(EventCardTags(EventFencesWindfall))
 
 	got := EventCardTags(EventFencesWindfall)
 	got[0] = TagDamage
