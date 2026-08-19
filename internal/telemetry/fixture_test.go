@@ -128,17 +128,60 @@ func fixtureState() rules.MatchState {
 // them declare an empty route (round 1 seat 2, round 3 seat 1, round 6
 // seat 2) — GDD §22's "submitted routes" reads as non-empty routes here
 // (RoutesCancelledMidRoute's own doc comment), so N == 15, not 18.
+//
+// Every order also carries a real Stance and Action — GDD §9.2/§9.3 make
+// both mandatory fields of a legal turn even when the route is empty — so
+// this same fixture answers round_action_test.go's hand-computed rows
+// too, RoundActionSummary.StanceDistribution's own doc comment being
+// explicit that "choices" means every order submitted, not merely
+// confrontation participants. round_action_test.go's own comment block
+// tallies every one of the 18 orders below by hand; a change here must be
+// re-tallied there.
 func fixtureOrderLog() rules.OrderLog {
 	route := func(nodes ...game.NodeID) game.Order { return game.Order{Route: nodes} }
 	empty := game.Order{}
 
+	// order attaches Action/Stance/AddOns to a route- or empty-shaped
+	// order without disturbing its Route, so match_test.go's existing
+	// Route-only expectations stay exactly as they were.
+	order := func(base game.Order, action game.ActionKind, item game.ItemID, stance game.Stance, buyLedger bool) game.Order {
+		base.Action = game.ActionOrder{Kind: action, Item: item}
+		base.Stance = game.StanceOrder{Stance: stance}
+		base.AddOns.BuyLedger = buyLedger
+		return base
+	}
+
 	return rules.OrderLog{
-		1: {0: route(1), 1: route(2), 2: empty},
-		2: {0: route(2, 3), 1: route(0), 2: route(1)},
-		3: {0: route(1), 1: empty, 2: route(3)},
-		4: {0: route(2), 1: route(1), 2: route(0)},
-		5: {0: route(0), 1: route(3), 2: route(2)},
-		6: {0: route(3), 1: route(2), 2: empty},
+		1: {
+			0: order(route(1), game.ActionPickup, 0, game.StanceAggressive, false),
+			1: order(route(2), game.ActionSurveil, 0, game.StanceNeutral, false),
+			2: order(empty, game.ActionNothing, 0, game.StanceEvasive, false),
+		},
+		2: {
+			0: order(route(2, 3), game.ActionDeal, game.ItemShiv, game.StanceAggressive, false),
+			1: order(route(0), game.ActionDeliver, 0, game.StanceEvasive, true),
+			2: order(route(1), game.ActionStakePost, 0, game.StanceNeutral, false),
+		},
+		3: {
+			0: order(route(1), game.ActionVanish, 0, game.StanceEvasive, false),
+			1: order(empty, game.ActionNothing, 0, game.StanceNeutral, false),
+			2: order(route(3), game.ActionDeal, game.ItemShiv, game.StanceAggressive, false),
+		},
+		4: {
+			0: order(route(2), game.ActionDeal, game.ItemMuscle, game.StanceNeutral, true),
+			1: order(route(1), game.ActionSurveil, 0, game.StanceEvasive, false),
+			2: order(route(0), game.ActionPickup, 0, game.StanceAggressive, false),
+		},
+		5: {
+			0: order(route(0), game.ActionDeliver, 0, game.StanceEvasive, true),
+			1: order(route(3), game.ActionDeal, game.ItemPoliceBand, game.StanceAggressive, true),
+			2: order(route(2), game.ActionStakePost, 0, game.StanceNeutral, true),
+		},
+		6: {
+			0: order(route(3), game.ActionSurveil, 0, game.StanceAggressive, false),
+			1: order(route(2), game.ActionPickup, 0, game.StanceEvasive, false),
+			2: order(empty, game.ActionVanish, 0, game.StanceEvasive, false),
+		},
 	}
 }
 

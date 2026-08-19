@@ -4,6 +4,18 @@
 // the debug panel all call Match, never their own copy of this arithmetic,
 // so bot data and human data stay directly comparable.
 //
+// It also computes GDD §22's per-round and per-action metric set — stance
+// distribution, Ledger purchase behaviour, action and item selection
+// frequency — via RoundActions, a separate function and type from Match/
+// MatchSummary (round_action.go). These are distributions read across a
+// whole sweep rather than a single per-configuration verdict, and every
+// field's own doc comment carries the caveat RFC §16.4 states for this
+// data specifically: "bot play is not human play" — a threshold's
+// recommended remedy (cut an action, widen a blackout) can be exactly
+// wrong when the only evidence is a bot that does not understand the
+// action, not a human who has rejected it. round_action.go's own doc
+// comment says which GDD §22 bullets have no field here at all, and why.
+//
 // # Where each row's answer comes from
 //
 // docs/decisions/D33-telemetry-event-stream-coverage.md audited all twenty
