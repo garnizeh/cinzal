@@ -8,10 +8,11 @@
 # it cannot name" — and §5 requires it be enforced in CI "rather than trusting
 # discipline, this is exactly the kind of rule that erodes at 2am".
 #
-# THE RULE (docs/decisions/D01-package-layout.md):
+# THE RULE (docs/decisions/D01-package-layout.md, extended by D34 for
+# internal/telemetry):
 #
 #   No package under internal/render/... or internal/web/... may DIRECTLY import
-#   internal/rules or any package beneath it.
+#   internal/rules, internal/telemetry, or any package beneath either.
 #
 # WHY DIRECT IMPORTS, AND WHY THAT IS EXACT RATHER THAN A COMPROMISE.
 #
@@ -42,7 +43,14 @@ set -euo pipefail
 MODULE="github.com/garnizeh/cinzal"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
-FORBIDDEN="$MODULE/internal/rules"
+# internal/telemetry is a sanctioned fourth reader of MatchState, alongside
+# cmd/simulate and internal/debug (D34) — it imports internal/rules
+# deliberately, for its final-state and order-log reads, and must be
+# forbidden from render/web exactly like internal/rules itself, rather than
+# leaving the guarantee to depend on what telemetry.Match's signature
+# happens to require today (D01's own rejected "what does this expose"
+# reasoning).
+FORBIDDEN=("$MODULE/internal/rules" "$MODULE/internal/telemetry")
 GUARDED="./internal/render/... ./internal/web/..."
 
 fail() { echo "check-fog-boundary: FAIL: $*" >&2; exit 1; }
@@ -77,10 +85,12 @@ while IFS= read -r pkg; do
 
         while IFS= read -r imp; do
             [ -n "$imp" ] || continue
-            case "$imp" in
-                "$FORBIDDEN"|"$FORBIDDEN"/*)
-                    violations="$violations  $pkg ($field) -> $imp"$'\n' ;;
-            esac
+            for forbidden in "${FORBIDDEN[@]}"; do
+                case "$imp" in
+                    "$forbidden"|"$forbidden"/*)
+                        violations="$violations  $pkg ($field) -> $imp"$'\n' ;;
+                esac
+            done
         done <<< "$imports"
     done
 done <<< "$pkgs"

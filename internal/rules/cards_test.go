@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -240,4 +241,66 @@ func incidentHazardOf(t *testing.T, id IncidentCardID) bool {
 	}
 	t.Fatalf("incident card ID %d not found in allIncidents", id)
 	return false
+}
+
+// TestEventCardTags pins EventCardTags against allEvents directly — the
+// accessor internal/telemetry uses for GDD §22 rows 13/14's seed-derivable
+// card identity (D33), so a divergence from the catalog here would be a
+// silent wrong answer for that package, not just this one.
+func TestEventCardTags(t *testing.T) {
+	tests := []struct {
+		id   EventCardID
+		want []EventTag
+	}{
+		{EventDragnet, []EventTag{TagConvergence}},
+		{EventFestival, []EventTag{TagConvergence}},
+		{EventShiftChange, []EventTag{TagOpportunity}},
+		{EventFencesWindfall, []EventTag{TagConvergence, TagOpportunity}},
+	}
+	for _, tc := range tests {
+		got := EventCardTags(tc.id)
+		if len(got) != len(tc.want) {
+			t.Fatalf("EventCardTags(%v) = %v, want %v", tc.id, got, tc.want)
+		}
+		for i := range got {
+			if got[i] != tc.want[i] {
+				t.Errorf("EventCardTags(%v) = %v, want %v", tc.id, got, tc.want)
+			}
+		}
+	}
+}
+
+// TestEventCardTagsUnknownID reports EventCardTags' documented behavior for
+// an ID naming no card in the catalog: nil, not a panic.
+func TestEventCardTagsUnknownID(t *testing.T) {
+	if got := EventCardTags(EventCardID(255)); got != nil {
+		t.Errorf("EventCardTags(255) = %v, want nil", got)
+	}
+}
+
+// TestEventCardTagsReturnsACopy mutates a returned slice and requires a
+// second call to come back unchanged — EventCardTags must never hand out
+// allEvents' own backing array, or one caller's mutation would corrupt the
+// catalog for every match this process resolves afterward, not just its
+// own read. before is snapshotted with its own slices.Clone, independent
+// of got: if EventCardTags regressed to returning allEvents' own slice
+// directly, before and got would alias the same backing array, and
+// mutating got would silently mutate before's view of it too — the
+// comparison below would then pass on a real regression instead of
+// catching it.
+func TestEventCardTagsReturnsACopy(t *testing.T) {
+	before := slices.Clone(EventCardTags(EventFencesWindfall))
+
+	got := EventCardTags(EventFencesWindfall)
+	got[0] = TagDamage
+
+	after := EventCardTags(EventFencesWindfall)
+	if len(after) != len(before) {
+		t.Fatalf("EventCardTags(EventFencesWindfall) after mutation = %v, want unchanged from %v", after, before)
+	}
+	for i := range after {
+		if after[i] != before[i] {
+			t.Errorf("EventCardTags(EventFencesWindfall) after mutation = %v, want unchanged from %v", after, before)
+		}
+	}
 }

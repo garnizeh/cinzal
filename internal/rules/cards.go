@@ -1,6 +1,10 @@
 package rules
 
-import "github.com/garnizeh/cinzal/internal/game"
+import (
+	"slices"
+
+	"github.com/garnizeh/cinzal/internal/game"
+)
 
 // EventTag is one of GDD §14.2's three event tags — damage, convergence,
 // opportunity. A card may carry more than one (Fence's Windfall and Dead
@@ -151,6 +155,25 @@ var allIncidents = []IncidentCard{
 	{IncidentDistractedGuard, "Distracted Guard", false},
 	{IncidentOpenDoors, "Open Doors", false},
 	{IncidentWordOfWork, "Word of Work", false},
+}
+
+// EventCardTags returns a copy of id's GDD §14.2 tags, or nil if id names no
+// card in the catalog. internal/telemetry's own read of the seed-derivable
+// card catalog (D33 rows 13/14): "which card was live this round" is
+// already reconstructible from MatchState.Graph.EventDeck alone, so this is
+// the one accessor telemetry needs to tell a Convergence-tagged round from
+// any other, without a second, duplicated copy of allEvents living outside
+// this package. Returns a copy, never c.Tags itself: allEvents is shared,
+// package-level, match-lifetime state, and a caller mutating the slice this
+// returned would corrupt the catalog for every match this process ever
+// resolves, not just its own read.
+func EventCardTags(id EventCardID) []EventTag {
+	for _, c := range allEvents {
+		if c.ID == id {
+			return slices.Clone(c.Tags)
+		}
+	}
+	return nil
 }
 
 // incidentCategory maps IncidentCard.Hazard onto ShuffleConstrained's int
