@@ -1,0 +1,37 @@
+# The explicit surface internal/bots may name from internal/rules.
+#
+# Read by scripts/check-bots-isolation.go. An allow-list, not a deny-list
+# (issue #195): a deny-list of `rules.MatchState` and friends would pass
+# silently the day `rules` exports something new that is just as unsafe. A
+# symbol reaching internal/bots must be added here deliberately, in a pull
+# request that can explain what it exposes and why that is still fog-safe —
+# see the entries below for the shape that explanation takes.
+#
+# One bare identifier per line — the name after `rules.`, not the qualified
+# form. Blank lines and lines starting with # are ignored.
+
+# Legal(v game.PlayerView, o game.Order, cfg game.Config) error
+# Validates a complete order against the same view a bot already holds.
+# Takes and returns only game types, plus a plain error.
+Legal
+
+# Affordances(v game.PlayerView, cfg game.Config, draft game.Order) Affordance
+# Affordance (affordance.go) is a flat struct of bool/int/game.NodeID fields —
+# the RFC §10.2 UI-state row, nothing that reaches the match state or graph.
+Affordances
+
+# Steps(v game.PlayerView, cfg game.Config) int
+# This round's step budget, derived from the view alone.
+Steps
+
+# BotRNG — the opaque per-(seat, round) draw stream Bot.Decide receives
+# (D32). Its one exported method, NextBot(BotPurpose, int) int, returns a
+# plain int; its unexported field never surfaces. internal/bots receives a
+# *BotRNG already constructed by the tick — it may hold this type, but must
+# never construct one itself, which is exactly what naming NewBotRNG (not on
+# this list) would require doing.
+BotRNG
+
+# SelectLeaseByFewestRounds(posts []game.Post) (game.NodeID, bool)
+# Tie-break helper over game.Post alone (runner.go's post-expiry pick).
+SelectLeaseByFewestRounds

@@ -150,7 +150,7 @@ No Node, no frontend build step, and no Docker for the rules engine — `interna
 
 ## The CI gates
 
-Four checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
+Five checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
 
 | Gate | Asserts |
 |---|---|
@@ -158,14 +158,23 @@ Four checks make the architecture real rather than conventional. They are not st
 | **Fog boundary** | The rendering and web layers cannot name the full match state |
 | **Debug isolation** | The production binary contains no debug routes |
 | **Secret scan** | No credentials or connection strings in the tree, or in the commits this change adds |
+| **Bots isolation** | `internal/bots`'s production code cannot name `MatchState`, the graph, or the match seed |
 
 If one of these blocks you, the answer is almost never to weaken the gate.
 
 The secret scan reads history as well as the tree, because a credential added in one commit and deleted in the next is absent from the tree and present in the history forever. It is scoped to the commits your branch adds: a credential somewhere else in the repository is not your pull request's problem, and making it one was a real defect ([#37](https://github.com/garnizeh/cinzal/issues/37)). Locally, `make secrets` scopes itself the same way, to `origin/main..HEAD` — falling back to the whole history of `HEAD` when `origin/main` is unknown or your branch adds nothing to it, as on `main` itself. It over-scans rather than under-scans: no path through the gate inspects zero commits, because a scan of nothing reports "no leaks found" exactly like a clean one.
 
+### The bots isolation gate
+
+`internal/bots` legitimately imports `internal/rules` — `Legal`, `Affordances`, `Steps`, `BotRNG` — so this cannot be an import-graph check the way the fog boundary is: the forbidden thing is not the import, it is which identifiers it is used to reach ([#195](https://github.com/garnizeh/cinzal/issues/195)). `scripts/check-bots-isolation.go` walks `internal/bots`'s production `.go` files and fails on two independent things: any `rules.X` reference whose `X` is not named in `scripts/bots-isolation-allowlist.txt`, and any `[32]byte` — the match seed's own shape — appearing anywhere a type can, whether or not the file names `rules` at all. Widening what a bot may reach means adding a name to that allow-list, in a pull request that explains why the new symbol is still fog-safe — see the entries already there for the shape that explanation takes.
+
+Test files are out of scope: `internal/bots`'s own tests legitimately build real matches (`rules.NewMatch`, `rules.Project`, `rules.Resolve`) to drive bots against realistic corpora rather than only hand-built fixtures. `bot_test.go`'s `TestPackageNamesNoMatchStateNowhere` is issue #190's narrower, source-level predecessor to this gate, and still runs — across every file in the package, test files included — as a second net against the literal identifier `MatchState`.
+
+`make bots-isolation-selftest` drives the gate against fixtures for each failure mode — a named `rules.MatchState`, a `:=`-inferred local that never spells the type name, a bare `[32]byte` with no `rules` import at all, a dot-import, a `doc.go`-only package (VACUOUS, not a pass), a parse error, and a missing allow-list — the same standard `check-bench-regression_test.sh` is held to below.
+
 ### The benchmark regression gate
 
-**`bench-compare` is also required**, but shaped differently from the four above: it only runs on a pull request that touches `internal/rules/gen`, this workflow, `check-bench-regression.sh`, or the `Makefile` — most pull requests skip it rather than pass it. When it runs, it benchmarks the base commit and this pull request's merge commit back to back on the same runner and fails for real past a 20%-per-case or 10%-geomean threshold (`scripts/check-bench-regression.sh`).
+**`bench-compare` is also required**, but shaped differently from the five above: it only runs on a pull request that touches `internal/rules/gen`, this workflow, `check-bench-regression.sh`, or the `Makefile` — most pull requests skip it rather than pass it. When it runs, it benchmarks the base commit and this pull request's merge commit back to back on the same runner and fails for real past a 20%-per-case or 10%-geomean threshold (`scripts/check-bench-regression.sh`).
 
 It started advisory (issue #113) because two data points could not characterise real CI-runner noise against those thresholds, and was promoted to required in [#127](https://github.com/garnizeh/cinzal/issues/127) once seven real same-runner comparisons had landed with zero false positives — worst single-case drift +6.27%, worst geomean 0.93%, both comfortably inside the thresholds.
 
