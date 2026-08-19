@@ -38,12 +38,19 @@ import (
 // actual" — the same property D32 itself names as what makes the
 // mid-match-handover fixture's refold assertion hold.
 
-// idleHandOrder is a hand-driven seat's order in the mid-match-handover
-// fixture: no bot involved, no BotRNG draw authoring it — the literal
-// "a returning player took the seat back" case RFC §8.2 describes.
-var idleHandOrder = game.Order{
-	Action: game.ActionOrder{Kind: game.ActionNothing},
-	Stance: game.StanceOrder{Stance: game.StanceNeutral},
+// idleHandOrderForRound is a hand-driven seat's order in the mid-match-
+// handover fixture: no bot involved, no BotRNG draw authoring it — the
+// literal "a returning player took the seat back" case RFC §8.2 describes.
+// Round is set to the round it is submitted for, matching every bot tier's
+// own Decide (drifter.go/runner.go/operator.go all set Round: v.Round on
+// the order they return) — RFC §11.1a: "Round is the round this form was
+// rendered for."
+func idleHandOrderForRound(round int) game.Order {
+	return game.Order{
+		Round:  game.RoundNumber(round),
+		Action: game.ActionOrder{Kind: game.ActionNothing},
+		Stance: game.StanceOrder{Stance: game.StanceNeutral},
+	}
 }
 
 // seatRole picks which tier decides seat's order for round, or the zero
@@ -116,7 +123,7 @@ func recordBotDrivenMatch(seed [32]byte, cfg game.Config, players int, role seat
 		for seat := game.SeatID(0); int(seat) < players; seat++ {
 			tier := role(round, seat)
 			if tier == 0 {
-				orders[seat] = idleHandOrder
+				orders[seat] = idleHandOrderForRound(round)
 				continue
 			}
 			v := rules.ProjectView(s, seat, cfg)
