@@ -55,6 +55,12 @@ type OperatorOptions struct {
 	// as "recent" when scoring confrontation threat.
 	ThreatLookback game.RoundNumber
 
+	// ThreatInfamyFloor is the minimum opponent Infamy that adds to
+	// threatEstimate — GDD §11's Feared combat modifier (+2) starts here,
+	// so an opponent at or above this Infamy is scored as a real fight
+	// risk.
+	ThreatInfamyFloor int
+
 	// BandJumpMinTier is the minimum contract tier (0-3, GDD §8.3) an
 	// opponent's EventDelivered anchor must carry to count as evidence of a
 	// likely credit-band jump.
@@ -89,9 +95,10 @@ type OperatorOptions struct {
 // InfamyComfortBand matches RunnerOptions.InfamyComfortBand (the Feared
 // ceiling); InfamyCooldownMargin at 1 holds off Vanishing only the one
 // round right before the next offer lands. ThreatItemThreshold at 1 means
-// either a single Feared-or-above opponent or one recent confrontation
-// nearby is enough to trigger a purchase, subject to affordability.
-// BandJumpMinTier at 2 (Tier III) and BandJumpLookback at 3 rounds mirror
+// either a single opponent at or above ThreatInfamyFloor (6, GDD §11's
+// Feared floor) or one recent confrontation nearby is enough to trigger a
+// purchase, subject to affordability. BandJumpMinTier at 2 (Tier III) and
+// BandJumpLookback at 3 rounds mirror
 // GDD §8.3's own jump in payment (Cr$ 20/30 against Tier I/II's Cr$ 8/14)
 // — the deliveries actually large enough to move a credit band (GDD
 // §5.1).
@@ -104,6 +111,7 @@ func DefaultOperatorOptions() OperatorOptions {
 		InfamyCooldownMargin:  1,
 		ThreatItemThreshold:   1,
 		ThreatLookback:        3,
+		ThreatInfamyFloor:     6,
 		BandJumpMinTier:       2,
 		BandJumpLookback:      3,
 	}
@@ -231,7 +239,13 @@ func findChokepoint(v game.PlayerView, opts OperatorOptions) (game.NodeID, bool)
 	best, bestDist, bestRate, found := game.NodeID(0), 0, -1.0, false
 	for _, id := range sortedNodeIDs(ids) {
 		stats := v.NodeStats[id]
-		if stats.ObservedRounds < opts.ChokepointMinObserved {
+		// ObservedRounds <= 0 is checked ahead of the ChokepointMinObserved
+		// comparison, not folded into it: OperatorOptions is exported and
+		// swept by cmd/simulate, so a sweep setting ChokepointMinObserved to
+		// 0 or below must not let a zero-observation node divide 0/0 into
+		// NaN, which compares false against every threshold below and would
+		// otherwise slip through as a qualifying chokepoint.
+		if stats.ObservedRounds <= 0 || stats.ObservedRounds < opts.ChokepointMinObserved {
 			continue
 		}
 		rate := float64(stats.TrafficRounds) / float64(stats.ObservedRounds)
@@ -399,7 +413,7 @@ func (b operatorBot) wantsItem(v game.PlayerView, end game.NodeID) (game.ItemID,
 	if !known || nv.Fog < game.FogInSight || nv.Type != game.NodeBlackMarket || len(nv.Market) == 0 {
 		return 0, false
 	}
-	if threatEstimate(v, b.opts.ThreatLookback) < b.opts.ThreatItemThreshold {
+	if threatEstimate(v, b.opts) < b.opts.ThreatItemThreshold {
 		return 0, false
 	}
 	for _, want := range operatorItemPreference {
@@ -412,15 +426,15 @@ func (b operatorBot) wantsItem(v game.PlayerView, end game.NodeID) (game.ItemID,
 
 // threatEstimate is the "threat estimate from the archive" RFC-001 §14.3
 // calls for, entirely re-derivable each round from game.PlayerView alone
-// (issue #190's no-memory rule): one point per opponent at Infamy 6+ (the
-// Feared/Legend combat modifier, GDD §11's +2/+3 rows) named in v.Others,
-// plus one point per EventConfrontation entry in v.Archive.Trail — this
-// seat's own persistent observation history, GDD §7.5 — that arrived
-// within lookback rounds of the current one.
-func threatEstimate(v game.PlayerView, lookback game.RoundNumber) int {
+// (issue #190's no-memory rule): one point per opponent at or above
+// ThreatInfamyFloor (the Feared/Legend combat modifier, GDD §11's +2/+3
+// rows) named in v.Others, plus one point per EventConfrontation entry in
+// v.Archive.Trail — this seat's own persistent observation history, GDD
+// §7.5 — that arrived within ThreatLookback rounds of the current one.
+func threatEstimate(v game.PlayerView, opts OperatorOptions) int {
 	threat := 0
 	for _, o := range v.Others {
-		if o.Infamy >= 6 {
+		if o.Infamy >= opts.ThreatInfamyFloor {
 			threat++
 		}
 	}
@@ -429,7 +443,7 @@ func threatEstimate(v game.PlayerView, lookback game.RoundNumber) int {
 			continue
 		}
 		delta := v.Round - e.Round
-		if delta >= 0 && delta <= lookback {
+		if delta >= 0 && delta <= opts.ThreatLookback {
 			threat++
 		}
 	}
