@@ -102,6 +102,14 @@ func RunMatch(seed [32]byte, cfg game.Config, players int, bot bots.Bot) (MatchR
 // incomplete shape through real Resolve calls — the shape that acceptance
 // criterion has to check is, by construction, unreachable from RunMatch's
 // own loop.
+//
+// This checks key identity, not just aggregate counts: a log holding
+// cfg.Rounds round-entries of players orders each, but under the wrong
+// round numbers or the wrong SeatIDs, has every count this function could
+// otherwise check right while still failing "one order per seat, every
+// round" — a shifted-key bug that preserved totals would pass a
+// count-only check and silently corrupt the fold this OrderLog exists to
+// feed (RFC §7.1).
 func validateComplete(s rules.MatchState, log rules.OrderLog, cfg game.Config, players int) error {
 	if s.Round != game.RoundNumber(cfg.Rounds) {
 		return fmt.Errorf("match reached round %d, cfg.Rounds is %d — the match did not finish", s.Round, cfg.Rounds)
@@ -110,15 +118,19 @@ func validateComplete(s rules.MatchState, log rules.OrderLog, cfg game.Config, p
 		return fmt.Errorf("order log holds %d round(s), want %d", len(log), cfg.Rounds)
 	}
 
-	total := 0
-	for round, orders := range log {
+	for round := 1; round <= cfg.Rounds; round++ {
+		orders, ok := log[game.RoundNumber(round)]
+		if !ok {
+			return fmt.Errorf("order log has no entry for round %d", round)
+		}
 		if len(orders) != players {
 			return fmt.Errorf("round %d holds %d order(s), want %d (one per seat)", round, len(orders), players)
 		}
-		total += len(orders)
-	}
-	if want := cfg.Rounds * players; total != want {
-		return fmt.Errorf("order log holds %d order(s) total, want %d (cfg.Rounds x players)", total, want)
+		for seat := game.SeatID(0); int(seat) < players; seat++ {
+			if _, ok := orders[seat]; !ok {
+				return fmt.Errorf("round %d has no order for seat %d", round, seat)
+			}
+		}
 	}
 
 	return nil

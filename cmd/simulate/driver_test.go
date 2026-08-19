@@ -166,4 +166,30 @@ func TestValidateComplete(t *testing.T) {
 			t.Error("validateComplete() = nil, want an error for an order log missing a round")
 		}
 	})
+
+	// A shifted round key preserves len(log) — still cfg.Rounds entries —
+	// while every round number is wrong. An aggregate count check cannot
+	// see this; validateComplete must check the round keys themselves.
+	t.Run("round keys shifted by one", func(t *testing.T) {
+		s := rules.MatchState{Round: game.RoundNumber(cfg.Rounds)}
+		log := completeLog()
+		log[game.RoundNumber(cfg.Rounds+1)] = log[1]
+		delete(log, 1)
+		if err := validateComplete(s, log, cfg, players); err == nil {
+			t.Error("validateComplete() = nil, want an error for round keys shifted off 1..cfg.Rounds")
+		}
+	})
+
+	// An out-of-range SeatID replacing a required seat preserves
+	// len(orders) == players for that round while no order exists for
+	// seat 0 — again invisible to a count-only check.
+	t.Run("a required seat replaced by an out-of-range SeatID", func(t *testing.T) {
+		s := rules.MatchState{Round: game.RoundNumber(cfg.Rounds)}
+		log := completeLog()
+		delete(log[1], game.SeatID(0))
+		log[1][game.SeatID(99)] = game.Order{}
+		if err := validateComplete(s, log, cfg, players); err == nil {
+			t.Error("validateComplete() = nil, want an error for a required seat replaced by an out-of-range SeatID")
+		}
+	})
 }
