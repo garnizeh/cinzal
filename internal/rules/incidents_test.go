@@ -130,10 +130,13 @@ func TestIncidentEligibleFiltersByEndingSector(t *testing.T) {
 	s := incidentsTestState(1, 3) // node 1 Old Docks, node 3 Mist Heights
 	validated := map[game.SeatID]game.Order{0: {}, 1: {}}
 
-	got := incidentEligible(s, validated, []game.SeatID{0, 1}, game.SectorOldDocks)
+	got, exposed := incidentEligible(s, validated, []game.SeatID{0, 1}, game.SectorOldDocks)
 
 	if len(got) != 1 || got[0] != 0 {
 		t.Errorf("incidentEligible = %v, want [0]", got)
+	}
+	if len(exposed) != 1 || exposed[0].Kind != game.EventIncidentExposed || exposed[0].Seat != 0 {
+		t.Errorf("incidentEligible exposed events = %v, want one EventIncidentExposed for seat 0", exposed)
 	}
 }
 
@@ -146,10 +149,13 @@ func TestIncidentEligibleExcludesCirculationPermit(t *testing.T) {
 		1: {Items: []game.ItemDiscard{{Item: game.ItemCirculationPermit}}},
 	}
 
-	got := incidentEligible(s, validated, []game.SeatID{0, 1}, game.SectorOldDocks)
+	got, exposed := incidentEligible(s, validated, []game.SeatID{0, 1}, game.SectorOldDocks)
 
 	if len(got) != 1 || got[0] != 0 {
 		t.Errorf("incidentEligible = %v, want [0] (seat 1 exempt via Circulation Permit)", got)
+	}
+	if len(exposed) != 1 || exposed[0].Seat != 0 {
+		t.Errorf("incidentEligible exposed events = %v, want one EventIncidentExposed for seat 0 (seat 1 exempt)", exposed)
 	}
 }
 
@@ -232,8 +238,8 @@ func TestResolveSnatchJobReturnsDebtEventOnSurrender(t *testing.T) {
 
 	events := resolveSnatchJob(&s, ctx, validated, []game.SeatID{0}, r)
 
-	if len(events) != 1 || events[0].Kind != game.EventLeaseExpired || events[0].Node != 2 {
-		t.Errorf("events = %+v, want one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
+	if len(events) != 2 || events[0].Kind != game.EventIncidentExposed || events[1].Kind != game.EventLeaseExpired || events[1].Node != 2 {
+		t.Errorf("events = %+v, want one EventIncidentExposed then one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
 	}
 }
 
@@ -277,8 +283,8 @@ func TestResolveGuardSweepReturnsDebtEventOnSurrender(t *testing.T) {
 
 	events := resolveGuardSweep(&s, ctx, validated, []game.SeatID{0})
 
-	if len(events) != 1 || events[0].Kind != game.EventLeaseExpired || events[0].Node != 2 {
-		t.Errorf("events = %+v, want one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
+	if len(events) != 2 || events[0].Kind != game.EventIncidentExposed || events[1].Kind != game.EventLeaseExpired || events[1].Node != 2 {
+		t.Errorf("events = %+v, want one EventIncidentExposed then one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
 	}
 }
 
@@ -440,8 +446,8 @@ func TestResolveShakedownReturnsDebtEventOnSurrender(t *testing.T) {
 
 	events := resolveShakedown(&s, ctx, validated, []game.SeatID{0})
 
-	if len(events) != 1 || events[0].Kind != game.EventLeaseExpired || events[0].Node != 2 {
-		t.Errorf("events = %+v, want one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
+	if len(events) != 2 || events[0].Kind != game.EventIncidentExposed || events[1].Kind != game.EventLeaseExpired || events[1].Node != 2 {
+		t.Errorf("events = %+v, want one EventIncidentExposed then one EventLeaseExpired at node 2 (Debt-forced surrender)", events)
 	}
 }
 
@@ -454,8 +460,8 @@ func TestResolveInformantRingRevealsPosition(t *testing.T) {
 
 	events := resolveInformantRing(&s, ctx, validated, []game.SeatID{0})
 
-	if len(events) != 1 || events[0].Kind != game.EventInformantRing || events[0].Seat != 0 || events[0].Node != 1 {
-		t.Errorf("events = %+v, want one EventInformantRing{Seat:0, Node:1}", events)
+	if len(events) != 2 || events[0].Kind != game.EventIncidentExposed || events[1].Kind != game.EventInformantRing || events[1].Seat != 0 || events[1].Node != 1 {
+		t.Errorf("events = %+v, want one EventIncidentExposed then one EventInformantRing{Seat:0, Node:1}", events)
 	}
 }
 
@@ -632,8 +638,8 @@ func TestResolveOpenDoorsBuysDeclaredItemAtHalfPrice(t *testing.T) {
 	if len(s.Graph.Nodes[3].Market) != 0 {
 		t.Errorf("Market = %v, want emptied", s.Graph.Nodes[3].Market)
 	}
-	if len(events) != 1 || events[0].Kind != game.EventItemPurchased {
-		t.Errorf("events = %+v, want one EventItemPurchased", events)
+	if len(events) != 2 || events[0].Kind != game.EventIncidentExposed || events[1].Kind != game.EventItemPurchased {
+		t.Errorf("events = %+v, want one EventIncidentExposed then one EventItemPurchased", events)
 	}
 }
 
@@ -646,8 +652,8 @@ func TestResolveOpenDoorsDegradesWhenNotDeclared(t *testing.T) {
 
 	events := resolveOpenDoors(&s, ctx, validated, []game.SeatID{0})
 
-	if events != nil {
-		t.Errorf("events = %+v, want nil (nothing declared)", events)
+	if len(events) != 1 || events[0].Kind != game.EventIncidentExposed {
+		t.Errorf("events = %+v, want one EventIncidentExposed and nothing else (nothing declared)", events)
 	}
 }
 
@@ -666,8 +672,8 @@ func TestResolveOpenDoorsDegradesOnOutOfRangeMarket(t *testing.T) {
 
 	events := resolveOpenDoors(&s, ctx, validated, []game.SeatID{0}) // must not panic
 
-	if events != nil {
-		t.Errorf("events = %+v, want nil (out-of-range OpenDoorsMarket)", events)
+	if len(events) != 1 || events[0].Kind != game.EventIncidentExposed {
+		t.Errorf("events = %+v, want one EventIncidentExposed and nothing else (out-of-range OpenDoorsMarket)", events)
 	}
 }
 

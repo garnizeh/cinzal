@@ -50,10 +50,16 @@ func TestEventKindNamesAreStable(t *testing.T) {
 		// EventInformants).
 		EventSpilledLoadCrate: "SpilledLoadCrate",
 		EventInformantRing:    "InformantRing",
+
+		// #196's own three: M2 telemetry additions D33 found the
+		// stream didn't carry a source for (GDD §22 rows 1, 6, 12).
+		EventRouteHalted:     "RouteHalted",
+		EventIncidentHit:     "IncidentHit",
+		EventIncidentExposed: "IncidentExposed",
 	}
 
-	if len(want) != 22 {
-		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows plus Step 0's 6 plus #72's 2 announcements plus #73's 2 is 22, table has %d", len(want))
+	if len(want) != 25 {
+		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows plus Step 0's 6 plus #72's 2 announcements plus #73's 2 plus #196's 3 is 25, table has %d", len(want))
 	}
 
 	for kind, name := range want {

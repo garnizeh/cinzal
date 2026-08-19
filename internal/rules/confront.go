@@ -47,9 +47,9 @@ func resolveOneConfrontation(s *MatchState, c confrontation, validated map[game.
 
 	winner, tie := determineOutcome(c.Seats, totals)
 	if tie {
-		resolveTie(s, c, validated, walks)
+		haltEvents := resolveTie(s, c, validated, walks)
 		applyMuscleLoss(s, c.Seats, nil, true)
-		return tieEvents(s.Round, c.Node, c.Seats)
+		return append(haltEvents, tieEvents(s.Round, c.Node, c.Seats, validated)...)
 	}
 
 	losers := orderLosersForPushback(*s, losersExcept(c.Seats, winner))
@@ -215,14 +215,18 @@ func losersExcept(seats []game.SeatID, winner game.SeatID) []game.SeatID {
 // an implementation necessity — advance() (movement.go) trusts
 // Route[step-1] to be adjacent to the seat's actual current position, and
 // a reverted position generally invalidates whatever the rest of a
-// multi-step route assumed.
-func resolveTie(s *MatchState, c confrontation, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk) {
+// multi-step route assumed. Returns one EventRouteHalted per participant
+// (GDD §22's "routes cancelled mid-route" numerator, D33 row 1).
+func resolveTie(s *MatchState, c confrontation, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk) []game.Event {
+	events := make([]game.Event, 0, len(c.Seats))
 	for _, seat := range c.Seats {
 		dest := walks[seat].Previous
 		s.Players[seat].Position = dest
 		walks[seat].Path = []game.NodeID{dest}
 		haltMovement(validated, seat)
+		events = append(events, game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: seat})
 	}
+	return events
 }
 
 // tieEvents records that a confrontation happened here even though nobody
@@ -231,7 +235,7 @@ func resolveTie(s *MatchState, c confrontation, validated map[game.SeatID]game.O
 // pairing to name, so this emits one EventConfrontation per adjacent pair
 // in seat order (K-1 events for K tied participants, one event for the
 // common two-way case) rather than every combinatorial pair.
-func tieEvents(round game.RoundNumber, node game.NodeID, seats []game.SeatID) []game.Event {
+func tieEvents(round game.RoundNumber, node game.NodeID, seats []game.SeatID, validated map[game.SeatID]game.Order) []game.Event {
 	events := make([]game.Event, 0, len(seats)-1)
 	for i := 0; i+1 < len(seats); i++ {
 		events = append(events, game.Event{
@@ -240,6 +244,9 @@ func tieEvents(round game.RoundNumber, node game.NodeID, seats []game.SeatID) []
 			Node:   node,
 			Seat:   seats[i],
 			Target: seats[i+1],
+			Stance: validated[seats[i+1]].Stance.Stance,
+			// Decisive left false: a tie has no winner/loser pairing to
+			// name (D33 row 9) — see tieEvents' own doc above.
 		})
 	}
 	return events
@@ -254,16 +261,19 @@ func tieEvents(round game.RoundNumber, node game.NodeID, seats []game.SeatID) []
 // other case leaves it untouched, "route continues" exactly as written.
 func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerCorrected bool, losers []game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) []game.Event {
 	s.Players[winner].Infamy = ApplyInfamyDelta(s.Players[winner].Infamy, InfamyGainConfrontationWin)
+	var haltEvents []game.Event
 	if winnerCorrected {
 		haltMovement(validated, winner)
+		haltEvents = append(haltEvents, game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: winner})
 	}
 
 	var eligible []game.SeatID
 	stakeCollected, shakedownCollected := 0, 0
 	for _, seat := range losers {
-		share, shaken, forfeit := resolveLoser(s, c, seat, validated, walks, cfg, r)
+		share, shaken, forfeit, haltEvent := resolveLoser(s, c, seat, validated, walks, cfg, r)
 		stakeCollected += share
 		shakedownCollected += shaken
+		haltEvents = append(haltEvents, haltEvent)
 		if forfeit {
 			eligible = append(eligible, seat)
 		}
@@ -287,7 +297,7 @@ func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerC
 		dropForfeitCargo(s, seat, c.Node)
 	}
 
-	return decisiveEvents(s.Round, c.Node, winner, losers)
+	return append(haltEvents, decisiveEvents(s.Round, c.Node, winner, losers, validated)...)
 }
 
 // resolveLoser applies GDD §15's Loser consequences for seat, in order:
@@ -299,10 +309,11 @@ func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerC
 // affordability check, so a stake can legally outgrow balance by the time it
 // resolves), the Cr$ shakedown this loser paid — GDD §15: "pay the Cr$4
 // shakedown to the winner", so the caller must credit it there too, exactly
-// like the stake share — and whether this seat's cargo is forfeit and still
+// like the stake share — whether this seat's cargo is forfeit and still
 // theirs to give — the caller decides whether the winner takes it or it
-// drops at the node.
-func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) (stakeShare, shakedownPaid int, forfeitCargo bool) {
+// drops at the node — and this loser's own EventRouteHalted (GDD §22's
+// "routes cancelled mid-route" numerator, D33 row 1).
+func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) (stakeShare, shakedownPaid int, forfeitCargo bool, haltEvent game.Event) {
 	p := &s.Players[seat]
 	o := validated[seat]
 
@@ -337,8 +348,9 @@ func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated ma
 
 	pushback(s, c, seat, o.Stance.Stance == game.StanceEvasive, walks, r)
 	haltMovement(validated, seat)
+	haltEvent = game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: seat}
 
-	return staked / 2, shakedownPaid, forfeitCargo
+	return staked / 2, shakedownPaid, forfeitCargo, haltEvent
 }
 
 // applyDeadlinePause finds p's contract matching its carried cargo and
@@ -505,16 +517,20 @@ func removeOneItem(items []game.ItemID, item game.ItemID) []game.ItemID {
 // decisiveEvents records one EventConfrontation per loser, Seat the winner
 // and Target that loser (RFC §9.1 row 7: "always named, both parties") —
 // GDD §15's displacement discussion: "a confrontation writes a public trace
-// naming both parties at that node."
-func decisiveEvents(round game.RoundNumber, node game.NodeID, winner game.SeatID, losers []game.SeatID) []game.Event {
+// naming both parties at that node." Stance names each loser's declared
+// stance and Decisive is always true here — GDD §22's "confrontations won
+// against an Evasive loser" (D33 row 9).
+func decisiveEvents(round game.RoundNumber, node game.NodeID, winner game.SeatID, losers []game.SeatID, validated map[game.SeatID]game.Order) []game.Event {
 	events := make([]game.Event, 0, len(losers))
 	for _, loser := range losers {
 		events = append(events, game.Event{
-			Kind:   game.EventConfrontation,
-			Round:  round,
-			Node:   node,
-			Seat:   winner,
-			Target: loser,
+			Kind:     game.EventConfrontation,
+			Round:    round,
+			Node:     node,
+			Seat:     winner,
+			Target:   loser,
+			Stance:   validated[loser].Stance.Stance,
+			Decisive: true,
 		})
 	}
 	return events
