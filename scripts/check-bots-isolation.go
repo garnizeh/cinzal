@@ -41,7 +41,19 @@
 // helper that takes or stores a bare [32]byte never has to name the rules
 // package to be carrying the seed, so this is a second, independent walk:
 // every array type of exactly this shape, anywhere a type can appear, fails
-// — regardless of whether the file imports internal/rules at all.
+// — regardless of whether the file imports internal/rules at all. Because
+// it is independent, it does not lean on the allow-list to catch what it
+// misses: a length given as a package-level constant (const seedLen = 32)
+// or a constant expression (16+16) is still exactly [32]byte, so this walk
+// resolves those too, evaluating internal/bots's own integer constants
+// (evalConstInt) rather than treating only a bare integer literal as
+// readable. What stays out of reach is a length borrowed from ANOTHER
+// package's constant (otherpkg.SeedLen) — resolving that needs the other
+// package built and type-checked, which is what this whole family of gate
+// (see check-game-types.go's own header) avoids by walking syntax instead
+// of go/types. A rules-qualified one is not a gap: rules.SeedLen would
+// already fail the selector check above for not being on the allow-list,
+// whatever position it appeared in.
 //
 // WHY TEST FILES ARE OUT OF SCOPE.
 //
@@ -150,17 +162,26 @@ func main() {
 	}
 
 	fset := token.NewFileSet()
-	var findings []finding
-	filesScanned := 0
-
+	files := make([]*ast.File, 0, len(prodFiles))
 	for _, name := range prodFiles {
 		path := filepath.Join(dir, name)
 		file, err := parser.ParseFile(fset, path, nil, parser.SkipObjectResolution)
 		if err != nil {
 			fatal("could not parse %s: %v", filepath.Join(target, name), err)
 		}
-		filesScanned++
+		files = append(files, file)
+	}
+	filesScanned := len(files)
 
+	// Collected across every production file before any file is walked for
+	// findings: a length constant can be declared in one file and used in
+	// another (const blocks are package-scoped, not file-scoped), and Go
+	// itself allows a constant to be referenced before its own declaration
+	// appears in source order.
+	consts := collectIntConsts(files)
+
+	var findings []finding
+	for _, file := range files {
 		rulesAlias, dotImportPos := rulesBinding(file)
 		if dotImportPos != token.NoPos {
 			findings = append(findings, finding{
@@ -184,7 +205,7 @@ func main() {
 					}
 				}
 			case *ast.ArrayType:
-				if isSeedShaped(node) {
+				if isSeedShaped(node, consts) {
 					findings = append(findings, finding{
 						fset.Position(node.Pos()),
 						"a [32]byte — the match seed's own shape (internal/rules/rng.go); internal/bots must never take, hold, or return one",
@@ -245,36 +266,176 @@ func rulesBinding(file *ast.File) (alias string, dotImportPos token.Pos) {
 }
 
 // isSeedShaped reports whether t is a fixed-length array of 32 bytes — a
-// literal length written in any base (0x20 and 040 count exactly as much as
-// 32), and byte's own predeclared alias uint8 counts as byte. Not a slice
+// length that EVALUATES to 32 (a literal in any base, a package-level
+// constant, or an arithmetic expression over either — see evalConstInt),
+// and byte's own predeclared alias uint8 counts as byte. Not a slice
 // (Len == nil) and not any other length or element type.
-//
-// What this deliberately still cannot see: a length given as a named
-// constant (const seedLen = 32; [seedLen]byte) or a constant expression
-// (16+16). Resolving either needs the file's constant declarations
-// evaluated — go/types territory, the same full type-checking
-// check-game-types.go's own header explains this family of gate avoids in
-// favour of walking syntax alone. The allow-list check above is this gate's
-// real defence against that path in practice: a seed cannot reach
-// internal/bots without first calling rules.NewBotRNG or rules.NewRNG to
-// produce one, and neither is on the allow-list — so a [N]byte with N
-// resolved elsewhere still has nowhere legitimate to get a seed's actual
-// bytes from. This check exists for the case that never needed a named
-// constant at all: a bare, literal [32]byte parameter or field.
-func isSeedShaped(t *ast.ArrayType) bool {
+func isSeedShaped(t *ast.ArrayType, consts map[string]constDef) bool {
 	if t.Len == nil {
 		return false
 	}
-	lit, ok := t.Len.(*ast.BasicLit)
-	if !ok || lit.Kind != token.INT {
-		return false
-	}
-	n, err := strconv.ParseInt(lit.Value, 0, 64) // base 0: honours 0x, 0o/0, 0b, and _ separators
-	if err != nil || n != 32 {
+	n, ok := evalConstInt(t.Len, consts, 0, nil)
+	if !ok || n != 32 {
 		return false
 	}
 	elt, ok := t.Elt.(*ast.Ident)
 	return ok && (elt.Name == "byte" || elt.Name == "uint8")
+}
+
+// constDef is a package-level constant's defining expression, plus the
+// iota value in force at its declaration (0 outside a const block, or when
+// the spec does not use iota).
+type constDef struct {
+	expr ast.Expr
+	iota int64
+}
+
+// collectIntConsts gathers every package-level `const Name = expr` (and
+// `const ( A = 1; B; C = 2 )`-style blocks, where an omitted Values list
+// repeats the previous spec's — the standard iota idiom) across files, by
+// name. It does not evaluate anything yet: evalConstInt does that lazily,
+// which is what lets a constant reference another declared earlier or
+// later in source order, in the same file or a different one — exactly how
+// Go's own package-level constants are scoped.
+func collectIntConsts(files []*ast.File) map[string]constDef {
+	consts := make(map[string]constDef)
+	for _, file := range files {
+		for _, decl := range file.Decls {
+			gd, ok := decl.(*ast.GenDecl)
+			if !ok || gd.Tok != token.CONST {
+				continue
+			}
+			var lastValues []ast.Expr
+			for iotaIdx, spec := range gd.Specs {
+				vs, ok := spec.(*ast.ValueSpec)
+				if !ok {
+					continue
+				}
+				values := vs.Values
+				if len(values) == 0 {
+					values = lastValues
+				} else {
+					lastValues = values
+				}
+				for i, name := range vs.Names {
+					if name.Name == "_" || i >= len(values) {
+						continue
+					}
+					consts[name.Name] = constDef{expr: values[i], iota: int64(iotaIdx)}
+				}
+			}
+		}
+	}
+	return consts
+}
+
+// evalConstInt evaluates expr as a constant integer, over the subset of Go
+// that a real length expression plausibly uses: integer literals in any
+// base, named package-level constants (recursively, guarded against a
+// cycle by seen), iota, parens, and the arithmetic/bitwise binary and unary
+// operators. Anything else — a call, a float or string constant, a
+// constant from another package — reports ok=false: not a value this
+// function can vouch for, not an assertion that it is safe.
+func evalConstInt(expr ast.Expr, consts map[string]constDef, iota int64, seen map[string]bool) (n int64, ok bool) {
+	switch e := expr.(type) {
+	case *ast.BasicLit:
+		if e.Kind != token.INT {
+			return 0, false
+		}
+		v, err := strconv.ParseInt(e.Value, 0, 64) // base 0: honours 0x, 0o/0, 0b, and _ separators
+		if err != nil {
+			return 0, false
+		}
+		return v, true
+
+	case *ast.Ident:
+		if e.Name == "iota" {
+			return iota, true
+		}
+		if seen[e.Name] {
+			return 0, false // a const referring back to itself, directly or through others
+		}
+		def, found := consts[e.Name]
+		if !found {
+			return 0, false
+		}
+		nextSeen := make(map[string]bool, len(seen)+1)
+		for k := range seen {
+			nextSeen[k] = true
+		}
+		nextSeen[e.Name] = true
+		return evalConstInt(def.expr, consts, def.iota, nextSeen)
+
+	case *ast.ParenExpr:
+		return evalConstInt(e.X, consts, iota, seen)
+
+	case *ast.UnaryExpr:
+		x, ok := evalConstInt(e.X, consts, iota, seen)
+		if !ok {
+			return 0, false
+		}
+		switch e.Op {
+		case token.SUB:
+			return -x, true
+		case token.ADD:
+			return x, true
+		case token.XOR:
+			return ^x, true
+		default:
+			return 0, false
+		}
+
+	case *ast.BinaryExpr:
+		x, ok := evalConstInt(e.X, consts, iota, seen)
+		if !ok {
+			return 0, false
+		}
+		y, ok := evalConstInt(e.Y, consts, iota, seen)
+		if !ok {
+			return 0, false
+		}
+		switch e.Op {
+		case token.ADD:
+			return x + y, true
+		case token.SUB:
+			return x - y, true
+		case token.MUL:
+			return x * y, true
+		case token.QUO:
+			if y == 0 {
+				return 0, false
+			}
+			return x / y, true
+		case token.REM:
+			if y == 0 {
+				return 0, false
+			}
+			return x % y, true
+		case token.SHL:
+			if y < 0 {
+				return 0, false
+			}
+			return x << uint64(y), true
+		case token.SHR:
+			if y < 0 {
+				return 0, false
+			}
+			return x >> uint64(y), true
+		case token.AND:
+			return x & y, true
+		case token.OR:
+			return x | y, true
+		case token.XOR:
+			return x ^ y, true
+		case token.AND_NOT:
+			return x &^ y, true
+		default:
+			return 0, false
+		}
+
+	default:
+		return 0, false
+	}
 }
 
 // readAllowlist reads one bare identifier per line from path. Blank lines

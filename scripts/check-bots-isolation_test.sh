@@ -165,6 +165,57 @@ count="$(printf '%s\n' "$out" | grep -c 'the match seed')"
 [ "$count" -ge 4 ] || fail "hex/uint8 seed shapes: expected all four occurrences flagged, got $count: $out"
 
 # ---------------------------------------------------------------------------
+# Case 4c (violation, constant-expression seed shapes): a named package-level
+# constant and an arithmetic expression are still exactly [32]byte, and this
+# gate is documented as independent of naming rules at all — so it must not
+# need a literal "32" in the source to catch them (CodeRabbit review on PR
+# #220, round two: the allow-list is not a substitute for this check doing
+# its own job). Also proves iota resolves, and that a constant NOT worth 32
+# is correctly left alone — same file, so the evaluator has every constant
+# in scope for both.
+# ---------------------------------------------------------------------------
+seedconst="$tmp/seed-const-expr"
+mkdir -p "$seedconst"
+cat >"$seedconst/consts.go" <<'EOF'
+package bots
+
+const seedLen = 32
+
+const (
+	tierDrifter = iota + 32 // first iota value is 0, so this is 32
+	tierRunner
+	tierOperator
+)
+
+const handLimit = 4 // an ordinary, unrelated constant — must never be flagged
+EOF
+cat >"$seedconst/bot.go" <<'EOF'
+package bots
+
+func rememberNamed(seed [seedLen]byte) [seedLen]byte {
+	return seed
+}
+
+func rememberArithmetic(seed [16 + 16]byte) [16 + 16]byte {
+	return seed
+}
+
+func rememberIota(seed [tierDrifter]byte) [tierDrifter]byte {
+	return seed
+}
+
+func hand() [handLimit]byte {
+	var h [handLimit]byte
+	return h
+}
+EOF
+run "$seedconst"
+[ "$code" -eq 1 ] || fail "constant-expression seed shapes: expected exit 1, got $code: $out"
+count="$(printf '%s\n' "$out" | grep -c 'the match seed')"
+[ "$count" -ge 6 ] || fail "constant-expression seed shapes: expected all six occurrences flagged, got $count: $out"
+printf '%s\n' "$out" | grep -q 'consts.go' && fail "constant-expression seed shapes: consts.go declares no array type and must not itself be flagged: $out"
+
+# ---------------------------------------------------------------------------
 # Case 5 (violation, dot import): binds every rules identifier into file
 # scope, which would otherwise let MatchState through unqualified.
 # ---------------------------------------------------------------------------
