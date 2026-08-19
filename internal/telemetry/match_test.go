@@ -208,6 +208,8 @@ func TestFinalThirdStart(t *testing.T) {
 		{rounds: 15, want: 11}, // GDD §4's default: final third is 11-15
 		{rounds: 6, want: 5},   // this package's own fixture: final third is 5-6
 		{rounds: 3, want: 3},   // final third is exactly round 3
+		{rounds: 2, want: 3},   // degenerate: start exceeds rounds, no round qualifies
+		{rounds: 1, want: 2},   // degenerate: start exceeds rounds, no round qualifies
 	}
 	for _, tc := range tests {
 		if got := finalThirdStart(tc.rounds); got != tc.want {

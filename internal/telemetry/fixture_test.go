@@ -169,9 +169,7 @@ func fixtureEvents() []game.Event {
 	// Rows 9, 10, 11, 14, 20: four confrontation groups, (Round, Node) —
 	// (2,1), (3,3), (4,2), (5,0).
 	events = append(events,
-		// Group (2,1): decisive, winner 0 over target 1, Evasive, at
-		// round 4's Convergence card (Dragnet) — round 4 has a
-		// confrontation, feeding row 14's numerator.
+		// Group (2,1): decisive, winner 0 over target 1, Evasive.
 		game.Event{Kind: game.EventConfrontation, Round: 2, Node: 1, Seat: 0, Target: 1, Stance: game.StanceEvasive, Decisive: true},
 
 		// Group (3,3): decisive, winner 1, two losers (0 Evasive, 2
@@ -180,7 +178,9 @@ func fixtureEvents() []game.Event {
 		game.Event{Kind: game.EventConfrontation, Round: 3, Node: 3, Seat: 1, Target: 2, Stance: game.StanceNeutral, Decisive: true},
 
 		// Group (4,2): a tie among all three seats — tieEvents' own
-		// K-1-events-for-K-participants shape, Decisive left false.
+		// K-1-events-for-K-participants shape, Decisive left false. Round
+		// 4's live event card is Dragnet (Convergence), so this group is
+		// the one feeding row 14's numerator.
 		game.Event{Kind: game.EventConfrontation, Round: 4, Node: 2, Seat: 0, Target: 1, Stance: game.StanceAggressive, Decisive: false},
 		game.Event{Kind: game.EventConfrontation, Round: 4, Node: 2, Seat: 1, Target: 2, Stance: game.StanceNeutral, Decisive: false},
 

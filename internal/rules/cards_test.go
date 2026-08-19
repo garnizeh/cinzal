@@ -276,3 +276,25 @@ func TestEventCardTagsUnknownID(t *testing.T) {
 		t.Errorf("EventCardTags(255) = %v, want nil", got)
 	}
 }
+
+// TestEventCardTagsReturnsACopy mutates a returned slice and requires a
+// second call to come back unchanged — EventCardTags must never hand out
+// allEvents' own backing array, or one caller's mutation would corrupt the
+// catalog for every match this process resolves afterward, not just its
+// own read.
+func TestEventCardTagsReturnsACopy(t *testing.T) {
+	before := EventCardTags(EventFencesWindfall)
+
+	got := EventCardTags(EventFencesWindfall)
+	got[0] = TagDamage
+
+	after := EventCardTags(EventFencesWindfall)
+	if len(after) != len(before) {
+		t.Fatalf("EventCardTags(EventFencesWindfall) after mutation = %v, want unchanged from %v", after, before)
+	}
+	for i := range after {
+		if after[i] != before[i] {
+			t.Errorf("EventCardTags(EventFencesWindfall) after mutation = %v, want unchanged from %v", after, before)
+		}
+	}
+}
