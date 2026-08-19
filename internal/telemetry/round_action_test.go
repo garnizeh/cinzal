@@ -2,6 +2,7 @@ package telemetry
 
 import (
 	"reflect"
+	"strings"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -99,21 +100,28 @@ func TestRoundActionsIsDeterministic(t *testing.T) {
 
 // TestRoundActionsFailsClosed is issue #198's own acceptance criterion: "a
 // frequency over a zero denominator is an error, not 0%." RoundActions
-// enforces this by rejecting every structurally degenerate input up front,
-// the same four shapes Match itself rejects (see RoundActions' own doc
-// comment for why player-rounds can never be zero once these pass).
+// enforces this by rejecting every structurally degenerate input up front
+// — the same four shapes Match itself rejects — and by rejecting a log
+// whose contents fall outside the closed domains this package's fold
+// counts against (a round key outside 1..cfg.Rounds, or a Stance/
+// ActionKind/ItemID this package does not enumerate), so a rename or a
+// misplaced guard in RoundActions' own precondition checks is caught by a
+// distinguishing substring of each error rather than a bare "err != nil"
+// that would still pass if two checks traded places.
 func TestRoundActionsFailsClosed(t *testing.T) {
 	tests := []struct {
-		name  string
-		state rules.MatchState
-		log   rules.OrderLog
-		cfg   game.Config
+		name    string
+		state   rules.MatchState
+		log     rules.OrderLog
+		cfg     game.Config
+		wantErr string
 	}{
 		{
-			name:  "cfg.Rounds is zero",
-			state: fixtureState(),
-			log:   fixtureOrderLog(),
-			cfg:   game.Config{Rounds: 0},
+			name:    "cfg.Rounds is zero",
+			state:   fixtureState(),
+			log:     fixtureOrderLog(),
+			cfg:     game.Config{Rounds: 0},
+			wantErr: "cfg.Rounds is zero",
 		},
 		{
 			name: "match did not reach cfg.Rounds",
@@ -122,8 +130,9 @@ func TestRoundActionsFailsClosed(t *testing.T) {
 				s.Round = 3
 				return s
 			}(),
-			log: fixtureOrderLog(),
-			cfg: fixtureConfig(),
+			log:     fixtureOrderLog(),
+			cfg:     fixtureConfig(),
+			wantErr: "did not finish",
 		},
 		{
 			name: "no players",
@@ -132,14 +141,66 @@ func TestRoundActionsFailsClosed(t *testing.T) {
 				s.Players = nil
 				return s
 			}(),
-			log: fixtureOrderLog(),
-			cfg: fixtureConfig(),
+			log:     fixtureOrderLog(),
+			cfg:     fixtureConfig(),
+			wantErr: "no players",
 		},
 		{
-			name:  "empty order log",
+			name:    "empty order log",
+			state:   fixtureState(),
+			log:     nil,
+			cfg:     fixtureConfig(),
+			wantErr: "no order was ever submitted",
+		},
+		{
+			name:  "round key outside 1..cfg.Rounds",
 			state: fixtureState(),
-			log:   nil,
-			cfg:   fixtureConfig(),
+			log: func() rules.OrderLog {
+				log := fixtureOrderLog()
+				log[7] = map[game.SeatID]game.Order{0: {
+					Action: game.ActionOrder{Kind: game.ActionNothing},
+					Stance: game.StanceOrder{Stance: game.StanceNeutral},
+				}}
+				return log
+			}(),
+			cfg:     fixtureConfig(),
+			wantErr: "outside 1-6",
+		},
+		{
+			name:  "invalid Stance",
+			state: fixtureState(),
+			log: func() rules.OrderLog {
+				log := fixtureOrderLog()
+				log[1][0] = game.Order{Action: game.ActionOrder{Kind: game.ActionNothing}} // Stance zero value
+				return log
+			}(),
+			cfg:     fixtureConfig(),
+			wantErr: "invalid Stance",
+		},
+		{
+			name:  "invalid Action",
+			state: fixtureState(),
+			log: func() rules.OrderLog {
+				log := fixtureOrderLog()
+				log[1][0] = game.Order{Stance: game.StanceOrder{Stance: game.StanceNeutral}} // Action zero value
+				return log
+			}(),
+			cfg:     fixtureConfig(),
+			wantErr: "invalid Action",
+		},
+		{
+			name:  "Deal with an invalid Item",
+			state: fixtureState(),
+			log: func() rules.OrderLog {
+				log := fixtureOrderLog()
+				log[1][0] = game.Order{
+					Action: game.ActionOrder{Kind: game.ActionDeal}, // Item zero value
+					Stance: game.StanceOrder{Stance: game.StanceNeutral},
+				}
+				return log
+			}(),
+			cfg:     fixtureConfig(),
+			wantErr: "invalid Item",
 		},
 	}
 
@@ -147,7 +208,10 @@ func TestRoundActionsFailsClosed(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			got, err := RoundActions(tc.state, tc.log, tc.cfg)
 			if err == nil {
-				t.Fatalf("RoundActions() error = nil, want an error")
+				t.Fatalf("RoundActions() error = nil, want an error containing %q", tc.wantErr)
+			}
+			if !strings.Contains(err.Error(), tc.wantErr) {
+				t.Errorf("RoundActions() error = %q, want it to contain %q", err.Error(), tc.wantErr)
 			}
 			if !reflect.DeepEqual(got, RoundActionSummary{}) {
 				t.Errorf("RoundActions() = %+v on error, want the zero RoundActionSummary", got)
@@ -161,13 +225,15 @@ func TestRoundActionsFailsClosed(t *testing.T) {
 // the fixture's own ActionFrequency against a second, hand-built map that
 // zeroes out Deal and doubles Surveil — deliberately not itself a
 // plausible tier's output, only a small, exact-by-construction check of
-// the subtraction.
+// the subtraction. b also omits game.ActionNothing entirely, pinning the
+// documented fallback: a missing key reads as the zero Rate, so that
+// entry's gap is 0 minus a's own value.
 func TestActionFrequencyGap(t *testing.T) {
 	got, err := RoundActions(fixtureState(), fixtureOrderLog(), fixtureConfig())
 	if err != nil {
 		t.Fatalf("RoundActions() error = %v, want nil", err)
 	}
-	a := got.ActionFrequency // Deal: 4/18, Surveil: 3/18
+	a := got.ActionFrequency // Deal: 4/18, Surveil: 3/18, Nothing: 2/18
 
 	b := map[game.ActionKind]Rate{
 		game.ActionPickup:    {Value: 3.0 / 18.0, N: 18},
@@ -176,7 +242,7 @@ func TestActionFrequencyGap(t *testing.T) {
 		game.ActionDeal:      {Value: 0, N: 18},
 		game.ActionVanish:    {Value: 2.0 / 18.0, N: 18},
 		game.ActionSurveil:   {Value: 6.0 / 18.0, N: 18},
-		game.ActionNothing:   {Value: 2.0 / 18.0, N: 18},
+		// game.ActionNothing is deliberately absent.
 	}
 
 	gap := ActionFrequencyGap(a, b)
@@ -188,7 +254,7 @@ func TestActionFrequencyGap(t *testing.T) {
 		game.ActionDeal:      0 - 4.0/18.0,
 		game.ActionVanish:    0,
 		game.ActionSurveil:   3.0 / 18.0,
-		game.ActionNothing:   0,
+		game.ActionNothing:   0 - 2.0/18.0, // b's missing entry reads as the zero Rate
 	}
 
 	if !reflect.DeepEqual(gap, want) {

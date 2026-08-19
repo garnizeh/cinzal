@@ -3,6 +3,7 @@ package telemetry
 import (
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/rules"
@@ -149,6 +150,16 @@ type RoundActionSummary struct {
 // every order in a completed match declares a real stance and a real
 // action, so none of these five populations can be empty short of the
 // structural failures already checked.
+//
+// The same posture applies to what the fold accepts, not only the
+// preconditions: a round key outside 1..cfg.Rounds, or a Stance/
+// ActionKind/ItemID this package does not enumerate in allStances/
+// allActions/allItems, is rejected rather than silently counted into one
+// field's total and dropped from another's — a caller-supplied log with
+// an out-of-range round previously left LedgerPurchaseRate and
+// LedgerPurchasesByRound disagreeing about the same purchases, the exact
+// "looks like an answer but isn't" failure this package's own doc comment
+// warns against elsewhere.
 func RoundActions(s rules.MatchState, log rules.OrderLog, cfg game.Config) (RoundActionSummary, error) {
 	if cfg.Rounds <= 0 {
 		return RoundActionSummary{}, errors.New("telemetry: RoundActions: cfg.Rounds is zero")
@@ -173,7 +184,20 @@ func RoundActions(s rules.MatchState, log rules.OrderLog, cfg game.Config) (Roun
 
 	for round, orders := range log {
 		idx := int(round) - 1
-		for _, order := range orders {
+		if idx < 0 || idx >= cfg.Rounds {
+			return RoundActionSummary{}, fmt.Errorf("telemetry: RoundActions: OrderLog has round %d, outside 1-%d", round, cfg.Rounds)
+		}
+		for seat, order := range orders {
+			if !slices.Contains(allStances, order.Stance.Stance) {
+				return RoundActionSummary{}, fmt.Errorf("telemetry: RoundActions: round %d seat %d declares an invalid Stance %v", round, seat, order.Stance.Stance)
+			}
+			if !slices.Contains(allActions, order.Action.Kind) {
+				return RoundActionSummary{}, fmt.Errorf("telemetry: RoundActions: round %d seat %d declares an invalid Action %v", round, seat, order.Action.Kind)
+			}
+			if order.Action.Kind == game.ActionDeal && !slices.Contains(allItems, order.Action.Item) {
+				return RoundActionSummary{}, fmt.Errorf("telemetry: RoundActions: round %d seat %d declares Deal with an invalid Item %v", round, seat, order.Action.Item)
+			}
+
 			stanceCounts[order.Stance.Stance]++
 			actionCounts[order.Action.Kind]++
 			if order.Action.Kind == game.ActionDeal {
@@ -181,9 +205,7 @@ func RoundActions(s rules.MatchState, log rules.OrderLog, cfg game.Config) (Roun
 			}
 			if order.AddOns.BuyLedger {
 				ledgerTotal++
-				if idx >= 0 && idx < cfg.Rounds {
-					ledgerByRound[idx]++
-				}
+				ledgerByRound[idx]++
 			}
 		}
 	}
@@ -234,7 +256,10 @@ func RoundActions(s rules.MatchState, log rules.OrderLog, cfg game.Config) (Roun
 // internal/bots must stay out of it, so the caller supplies both maps and
 // labels which is which — cmd/simulate calling
 // ActionFrequencyGap(drifter.ActionFrequency, operator.ActionFrequency) is
-// the expected shape.
+// the expected shape. A key absent from a or b reads as Go's zero Rate
+// (Value 0), the same as never having chosen that action at all — the
+// gap it produces is just the other map's own value, not a missing entry
+// or a panic.
 func ActionFrequencyGap(a, b map[game.ActionKind]Rate) map[game.ActionKind]float64 {
 	gap := make(map[game.ActionKind]float64, len(allActions))
 	for _, k := range allActions {

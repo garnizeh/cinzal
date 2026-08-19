@@ -141,6 +141,11 @@ func fixtureOrderLog() rules.OrderLog {
 	route := func(nodes ...game.NodeID) game.Order { return game.Order{Route: nodes} }
 	empty := game.Order{}
 
+	// noItem is ItemID's reserved-invalid zero value, named here to state
+	// "this order buys nothing" explicitly — only a Deal order names a
+	// real item.
+	const noItem = game.ItemID(0)
+
 	// order attaches Action/Stance/AddOns to a route- or empty-shaped
 	// order without disturbing its Route, so match_test.go's existing
 	// Route-only expectations stay exactly as they were.
@@ -153,34 +158,34 @@ func fixtureOrderLog() rules.OrderLog {
 
 	return rules.OrderLog{
 		1: {
-			0: order(route(1), game.ActionPickup, 0, game.StanceAggressive, false),
-			1: order(route(2), game.ActionSurveil, 0, game.StanceNeutral, false),
-			2: order(empty, game.ActionNothing, 0, game.StanceEvasive, false),
+			0: order(route(1), game.ActionPickup, noItem, game.StanceAggressive, false),
+			1: order(route(2), game.ActionSurveil, noItem, game.StanceNeutral, false),
+			2: order(empty, game.ActionNothing, noItem, game.StanceEvasive, false),
 		},
 		2: {
 			0: order(route(2, 3), game.ActionDeal, game.ItemShiv, game.StanceAggressive, false),
-			1: order(route(0), game.ActionDeliver, 0, game.StanceEvasive, true),
-			2: order(route(1), game.ActionStakePost, 0, game.StanceNeutral, false),
+			1: order(route(0), game.ActionDeliver, noItem, game.StanceEvasive, true),
+			2: order(route(1), game.ActionStakePost, noItem, game.StanceNeutral, false),
 		},
 		3: {
-			0: order(route(1), game.ActionVanish, 0, game.StanceEvasive, false),
-			1: order(empty, game.ActionNothing, 0, game.StanceNeutral, false),
+			0: order(route(1), game.ActionVanish, noItem, game.StanceEvasive, false),
+			1: order(empty, game.ActionNothing, noItem, game.StanceNeutral, false),
 			2: order(route(3), game.ActionDeal, game.ItemShiv, game.StanceAggressive, false),
 		},
 		4: {
 			0: order(route(2), game.ActionDeal, game.ItemMuscle, game.StanceNeutral, true),
-			1: order(route(1), game.ActionSurveil, 0, game.StanceEvasive, false),
-			2: order(route(0), game.ActionPickup, 0, game.StanceAggressive, false),
+			1: order(route(1), game.ActionSurveil, noItem, game.StanceEvasive, false),
+			2: order(route(0), game.ActionPickup, noItem, game.StanceAggressive, false),
 		},
 		5: {
-			0: order(route(0), game.ActionDeliver, 0, game.StanceEvasive, true),
+			0: order(route(0), game.ActionDeliver, noItem, game.StanceEvasive, true),
 			1: order(route(3), game.ActionDeal, game.ItemPoliceBand, game.StanceAggressive, true),
-			2: order(route(2), game.ActionStakePost, 0, game.StanceNeutral, true),
+			2: order(route(2), game.ActionStakePost, noItem, game.StanceNeutral, true),
 		},
 		6: {
-			0: order(route(3), game.ActionSurveil, 0, game.StanceAggressive, false),
-			1: order(route(2), game.ActionPickup, 0, game.StanceEvasive, false),
-			2: order(empty, game.ActionVanish, 0, game.StanceEvasive, false),
+			0: order(route(3), game.ActionSurveil, noItem, game.StanceAggressive, false),
+			1: order(route(2), game.ActionPickup, noItem, game.StanceEvasive, false),
+			2: order(empty, game.ActionVanish, noItem, game.StanceEvasive, false),
 		},
 	}
 }
