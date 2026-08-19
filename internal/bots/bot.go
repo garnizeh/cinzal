@@ -30,11 +30,10 @@ type Bot interface {
 type Tier uint8
 
 // The three doc comments below state each tier's RFC-001 §14.3 target
-// behaviour. Drifter's Decide is now that behaviour: Sample (legalspace.go),
-// wired in by drifter.go. Runner's Decide is now its own real greedy
-// pathing (runner.go, issue #193). Operator's Decide is still, for now, the
-// same provisional decideStayOrMove (decide.go) — its cross-round planning
-// lands in #194, replacing only operator.go.
+// behaviour, and all three are now real: Drifter's Decide is Sample
+// (legalspace.go, wired in by drifter.go), Runner's is its own greedy
+// pathing (runner.go, issue #193), and Operator's is its own cross-round
+// planning (operator.go, issue #194).
 const (
 	_ Tier = iota // zero is reserved invalid, matching internal/game's enum convention
 
@@ -53,11 +52,15 @@ const (
 	// default (RFC-001 §8.2, §14.2, §14.3).
 	Runner
 
-	// Operator will plan across rounds — reading the heat map for
-	// chokepoints, routing around unstable sectors, timing its Infamy
-	// climb (RFC-001 §14.3). It is deliberately not meant to be
-	// superhuman: a lopsided win rate against humans will be a balance
-	// finding, not a bot achievement.
+	// Operator plans across rounds, re-derived fresh from the view every
+	// call (issue #190's no-memory rule) — reads the heat map for
+	// chokepoints and leases them, routes around unstable sectors weighted
+	// by the displayed deck counts, times its Infamy climb against Contact
+	// Cooldown, buys items when a confrontation looks likely, uses the
+	// Ledger when a rival's band jumps (RFC-001 §14.3, operator.go's
+	// OperatorOptions). It is deliberately not meant to be superhuman: a
+	// lopsided win rate against humans will be a balance finding, not a
+	// bot achievement.
 	Operator
 )
 
@@ -92,7 +95,7 @@ func For(t Tier) Bot {
 	case Runner:
 		return NewRunner(DefaultRunnerOptions())
 	case Operator:
-		return operatorBot{}
+		return NewOperator(DefaultOperatorOptions())
 	default:
 		panic(fmt.Sprintf("bots: For(%d): not a declared Tier", uint8(t)))
 	}

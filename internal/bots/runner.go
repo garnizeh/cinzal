@@ -64,11 +64,11 @@ func (b runnerBot) Decide(v game.PlayerView, cfg game.Config, r *rules.BotRNG) g
 		Round:  v.Round,
 		Route:  route.Nodes,
 		Stance: runnerStance(v),
-		AddOns: b.maybeRenewLease(v, cfg),
+		AddOns: maybeRenewLease(v, cfg),
 	}
 
 	if route.EndsHidden {
-		order.PushingOn = b.choosePushingOn(v, objective, haveObjective)
+		order.PushingOn = choosePushingOn(v, objective, haveObjective)
 	}
 
 	// legalPushingOn (internal/rules/legal.go) forbids combining a
@@ -81,7 +81,7 @@ func (b runnerBot) Decide(v game.PlayerView, cfg game.Config, r *rules.BotRNG) g
 		order.Action = b.chooseAction(v, route, objective, haveObjective)
 	}
 
-	order.ContractChoice = b.chooseContractChoice(v, cfg)
+	order.ContractChoice = chooseContractChoice(v, cfg)
 
 	return order
 }
@@ -366,7 +366,7 @@ func exploreScore(v game.PlayerView, rt Route, targetX, targetY int, haveObjecti
 // heard of still names a direction to push toward (GDD §9.1's priority
 // ladder). No bias at all — an unweighted blind walk — when there is
 // nothing to steer by.
-func (b runnerBot) choosePushingOn(v game.PlayerView, objective game.NodeID, haveObjective bool) game.PushingOn {
+func choosePushingOn(v game.PlayerView, objective game.NodeID, haveObjective bool) game.PushingOn {
 	var bias *game.Sector
 	if haveObjective {
 		if nv, known := v.Nodes[objective]; known {
@@ -468,7 +468,7 @@ func runnerCanPickup(v game.PlayerView, end, objective game.NodeID, haveObjectiv
 // read internal/rules only for Legal, Affordances, Steps and *BotRNG
 // (legalspace_test.go's own dependency check), the same discipline
 // legalspace.go's knownSubgraphDistance duplicate already follows.
-func (b runnerBot) maybeRenewLease(v game.PlayerView, cfg game.Config) game.AddOns {
+func maybeRenewLease(v game.PlayerView, cfg game.Config) game.AddOns {
 	const aboutToLapse = 2 // rounds remaining or fewer counts as "about to lapse"
 
 	if cfg.LeaseCostPerBlock <= 0 || len(v.You.Posts) == 0 {
@@ -507,7 +507,7 @@ const unknownContractDistance = 1 << 30
 // (higher always wins), then by the known portion of their own route
 // distance as a tie-break between two offers of the same tier — the more
 // certain choice, all else equal.
-func (b runnerBot) chooseContractChoice(v game.PlayerView, cfg game.Config) *int {
+func chooseContractChoice(v game.PlayerView, cfg game.Config) *int {
 	if len(v.You.PendingOffer) == 0 {
 		return nil
 	}
