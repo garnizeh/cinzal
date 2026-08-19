@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -9,10 +10,10 @@ import (
 // gdd22Row is one row of D33's audit (docs/decisions/D33-telemetry-event-
 // stream-coverage.md) — the classification of one GDD §22 per-match metric
 // against the event stream, transcribed here as executable documentation.
-// Exactly one of Events or Other is set: Events names the EventKind(s) a
-// telemetry consumer reads to compute the metric; Other explains why no
-// event answers it (a final-state read, order-log access, a deferred
-// milestone, or no operational definition at all).
+// At least one of Events or Other is set: Events names the EventKind(s) a
+// telemetry consumer reads to compute the metric; Other records a caveat
+// or explains why no event answers it (a final-state read, order-log
+// access, a deferred milestone, or no operational definition at all).
 type gdd22Row struct {
 	row    int
 	metric string
@@ -76,8 +77,8 @@ func TestGDD22MetricsHaveAnEventOrOtherSource(t *testing.T) {
 			t.Errorf("row %d (%s): unmapped — neither an EventKind source nor an explanation for why one doesn't apply", r.row, r.metric)
 		}
 		for _, k := range r.events {
-			if k == 0 {
-				t.Errorf("row %d (%s): zero-value EventKind in Events", r.row, r.metric)
+			if strings.HasPrefix(k.String(), "EventKind(") {
+				t.Errorf("row %d (%s): %v is not a declared EventKind (String() falls through to its invalid-value format)", r.row, r.metric, k)
 			}
 		}
 	}

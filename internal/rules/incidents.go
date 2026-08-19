@@ -278,6 +278,12 @@ func resolveFlood(s *MatchState, ctx incidentContext, validated map[game.SeatID]
 // — a penalty that pushes a seat into Debt can surrender a lease — is
 // captured and returned, matching resolveOneDelivery's own precedent
 // (deliveries.go) for every other applyDebt call site in this package.
+// applyDebt's own event only fires on that rarer lease-surrender case, not
+// on the unconditional Cr$6-and-cargo hit GDD §14.3's text states as
+// mandatory — so, unlike resolveInformantRing/resolveOpenDoors, every
+// eligible seat here also gets its own EventIncidentHit (D33 row 6; #221
+// review — D33's own audit missed that this resolver's "already emits an
+// event" only covers the surrender edge case, not the ordinary hit).
 func resolveSnatchJob(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID, r *RNG) []game.Event {
 	candidates := nodesOutsideSector(s.Graph, *ctx.sector)
 	if len(candidates) == 0 {
@@ -287,12 +293,14 @@ func resolveSnatchJob(s *MatchState, ctx incidentContext, validated map[game.Sea
 	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
 	for _, seat := range eligible {
 		p := &s.Players[seat]
+		origin := p.Position
 		if _, e := applyDebt(s, seat, snatchJobLoss, s.Round); e != nil {
 			events = append(events, *e)
 		}
 		p.Cargo = nil
 		p.Position = PartialFisherYates(r, PurposeIncidentRelocate, candidates, 1)[0]
 		markNodeKnown(p, p.Position) // GDD §7.2 / §15: Known however you got there.
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: origin, Seat: seat})
 	}
 	return events
 }
@@ -302,7 +310,9 @@ func resolveSnatchJob(s *MatchState, ctx incidentContext, validated map[game.Sea
 // no GDD text says it lands anywhere — and the underlying Contract, if
 // bound, is left untouched: the crate is gone, but the deal itself can
 // still be re-sourced from its Warehouse. The debt event is captured and
-// returned — see resolveSnatchJob's own doc.
+// returned — see resolveSnatchJob's own doc — and, for the same reason
+// given there, every eligible seat also gets its own EventIncidentHit
+// (D33 row 6; #221 review).
 func resolveGuardSweep(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
 	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
 	for _, seat := range eligible {
@@ -312,6 +322,7 @@ func resolveGuardSweep(s *MatchState, ctx incidentContext, validated map[game.Se
 		}
 		p.Infamy = ApplyInfamyDelta(p.Infamy, -1)
 		p.Cargo = nil
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: p.Position, Seat: seat})
 	}
 	return events
 }
@@ -439,13 +450,16 @@ func resolveSinkhole(s *MatchState, sector game.Sector, r *RNG) {
 // here pays Cr$ 4" — routed through applyDebt like every other mandatory
 // Cr$ obligation in this package (resolvePayrollDay, events.go, states the
 // same reasoning). The debt event is captured and returned — see
-// resolveSnatchJob's own doc.
+// resolveSnatchJob's own doc — and, for the same reason given there, every
+// eligible seat also gets its own EventIncidentHit (D33 row 6; #221
+// review).
 func resolveShakedown(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
 	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
 	for _, seat := range eligible {
 		if _, e := applyDebt(s, seat, shakedownCost, s.Round); e != nil {
 			events = append(events, *e)
 		}
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: s.Players[seat].Position, Seat: seat})
 	}
 	return events
 }
