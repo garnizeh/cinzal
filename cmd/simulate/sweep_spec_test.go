@@ -34,6 +34,8 @@ func TestParseSweepFlagsErrors(t *testing.T) {
 		{"empty field name", []string{"=1,2"}},
 		{"no values", []string{"LeaseCostPerBlock="}},
 		{"unparsable value", []string{"LeaseCostPerBlock=notanumber"}},
+		{"duplicate field across flags", []string{"Rounds=10,15", "Rounds=20,25"}},
+		{"duplicate value within one dimension", []string{"LeaseCostPerBlock=2,2"}},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -77,10 +79,13 @@ func TestExpandSweepOrder(t *testing.T) {
 }
 
 // TestExpandSweepDoesNotAliasBaseConfig guards against a reflect.Set on
-// one point's cfg silently mutating another's — cfg is a value, but the
-// composite fields inside it (maps) are reference types, so a shallow
-// mistake here would show up as every point sharing one PostCapByPlayers
-// map instead of the game.DefaultConfig() default's own copy semantics.
+// one point's cfg silently mutating another's, on two levels: the swept
+// scalar field itself, and — since a Go struct copy only copies a map
+// field's header, not its underlying data — game.DefaultConfig()'s own
+// map fields (PostCapByPlayers, MapByPlayers), which expandSweep must
+// give each point its own copy of by constructing every point from a
+// fresh game.DefaultConfig() call rather than copying a previous point's
+// Config forward.
 func TestExpandSweepDoesNotAliasBaseConfig(t *testing.T) {
 	dims, err := parseSweepFlags([]string{"LeaseCostPerBlock=1,2,3"})
 	if err != nil {
@@ -91,6 +96,15 @@ func TestExpandSweepDoesNotAliasBaseConfig(t *testing.T) {
 		want := i + 1
 		if p.cfg.LeaseCostPerBlock != want {
 			t.Errorf("points[%d].cfg.LeaseCostPerBlock = %d, want %d — points are aliasing one Config", i, p.cfg.LeaseCostPerBlock, want)
+		}
+	}
+
+	for i := 1; i < len(points); i++ {
+		if reflect.ValueOf(points[0].cfg.PostCapByPlayers).Pointer() == reflect.ValueOf(points[i].cfg.PostCapByPlayers).Pointer() {
+			t.Errorf("points[0] and points[%d] share the same PostCapByPlayers map instance", i)
+		}
+		if reflect.ValueOf(points[0].cfg.MapByPlayers).Pointer() == reflect.ValueOf(points[i].cfg.MapByPlayers).Pointer() {
+			t.Errorf("points[0] and points[%d] share the same MapByPlayers map instance", i)
 		}
 	}
 }

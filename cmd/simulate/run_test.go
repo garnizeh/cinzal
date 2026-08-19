@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -241,6 +242,37 @@ func TestRunErrorRowContinuesSweepAndExitsNonZero(t *testing.T) {
 	}
 }
 
+// TestRunResumeWithPriorErrorRowExitsNonZero is the CodeRabbit-flagged bug
+// fixed via csvReport.hadPriorError: a resumed run over a file that
+// already holds an error-status row must not report success just because
+// every configuration in it is already recorded (and therefore skipped).
+// panicRunner proves the failed configuration is genuinely skipped, not
+// retried — retrying it could only reproduce the same deterministic
+// failure, so resuming spends no compute re-confirming that.
+func TestRunResumeWithPriorErrorRowExitsNonZero(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "sweep.csv")
+	var stderr bytes.Buffer
+
+	failing := func(seeds [][32]byte, cfg game.Config, players int, bot bots.Bot, workers int) ([]MatchResult, error) {
+		if cfg.LeaseCostPerBlock == 2 {
+			return nil, errors.New("synthetic failure for LeaseCostPerBlock=2")
+		}
+		return make([]MatchResult, len(seeds)), nil
+	}
+	if code := runWithDeps(realArgs(out), &stderr, failing, fakeGitSHA); code != 1 {
+		t.Fatalf("first run = %d, want 1", code)
+	}
+
+	stderr.Reset()
+	code := runWithDeps(realArgs(out), &stderr, panicRunner, fakeGitSHA)
+	if code != 1 {
+		t.Errorf("resumed run over a file with a prior error row = %d, want 1 (must not report success)", code)
+	}
+	if !strings.Contains(stderr.String(), "already recorded, skipping") {
+		t.Errorf("resume did not skip the already-recorded configurations:\n%s", stderr.String())
+	}
+}
+
 func panicRunner(seeds [][32]byte, cfg game.Config, players int, bot bots.Bot, workers int) ([]MatchResult, error) {
 	panic("matchRunner should not be called when validation fails before any match runs")
 }
@@ -269,7 +301,7 @@ func TestRunFailsClosedBeforeAnyWork(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			args := append([]string{}, tt.args...)
-			if idx := indexOf(args, "x.csv"); idx != -1 {
+			if idx := slices.Index(args, "x.csv"); idx != -1 {
 				args[idx] = filepath.Join(t.TempDir(), "x.csv")
 			}
 			var stderr bytes.Buffer
@@ -282,13 +314,4 @@ func TestRunFailsClosedBeforeAnyWork(t *testing.T) {
 			}
 		})
 	}
-}
-
-func indexOf(s []string, v string) int {
-	for i, x := range s {
-		if x == v {
-			return i
-		}
-	}
-	return -1
 }

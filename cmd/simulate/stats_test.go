@@ -2,6 +2,7 @@ package main
 
 import (
 	"math"
+	"reflect"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/telemetry"
@@ -140,7 +141,13 @@ func TestComputeMetricsAllExcluded(t *testing.T) {
 // metricSpecs entry: the number of specs must track the number of
 // telemetry-computed fields, less the one deliberate omission (Solo).
 func TestMetricSpecsCoverage(t *testing.T) {
-	const wantCount = 15 // telemetry.MatchSummary's computed fields, excluding Solo
+	// Derived from telemetry.MatchSummary itself, not a literal count: a
+	// literal only catches an edit to metricSpecs, never a new
+	// MatchSummary field landing without one (the actual failure mode
+	// this test exists to catch).
+	summaryType := reflect.TypeFor[telemetry.MatchSummary]()
+	wantCount := summaryType.NumField() - 1 // one deliberate omission: Solo
+
 	if len(metricSpecs) != wantCount {
 		t.Errorf("len(metricSpecs) = %d, want %d — did telemetry.MatchSummary gain or lose a field?", len(metricSpecs), wantCount)
 	}
@@ -150,5 +157,11 @@ func TestMetricSpecsCoverage(t *testing.T) {
 			t.Errorf("metricSpecs has a duplicate name %q", spec.name)
 		}
 		seen[spec.name] = true
+		if _, ok := summaryType.FieldByName(spec.name); !ok {
+			t.Errorf("metricSpecs name %q is not a telemetry.MatchSummary field", spec.name)
+		}
+	}
+	if seen["Solo"] {
+		t.Error("metricSpecs unexpectedly includes Solo")
 	}
 }

@@ -66,6 +66,15 @@ type csvReport struct {
 	w      *csv.Writer
 	header []string
 	done   map[string]bool
+
+	// hadPriorError is true when a resumed file already held at least one
+	// error-status row. A configuration that already failed once will
+	// fail identically on a retry (the whole system is deterministic:
+	// same shared seed set, same Config), so resuming skips it rather
+	// than re-running a foregone conclusion — but that failure still has
+	// to reach run's exit code, or a resumed sweep over a file with a
+	// standing error row would silently report success.
+	hadPriorError bool
 }
 
 // openReport opens outPath for a sweep described by prov and header. A
@@ -86,7 +95,7 @@ func openReport(outPath string, prov provenance, header []string) (*csvReport, e
 	}
 	defer func() { _ = existing.Close() }() // read-only handle, already fully consumed by the point this runs
 
-	done, err := verifyAndReadExisting(existing, prov, header)
+	done, hadPriorError, err := verifyAndReadExisting(existing, prov, header)
 	if err != nil {
 		return nil, fmt.Errorf("cmd/simulate: resume %s: %w", outPath, err)
 	}
@@ -95,7 +104,7 @@ func openReport(outPath string, prov provenance, header []string) (*csvReport, e
 	if err != nil {
 		return nil, fmt.Errorf("cmd/simulate: reopen %s for append: %w", outPath, err)
 	}
-	return &csvReport{f: f, w: csv.NewWriter(f), header: header, done: done}, nil
+	return &csvReport{f: f, w: csv.NewWriter(f), header: header, done: done, hadPriorError: hadPriorError}, nil
 }
 
 func createReport(outPath string, prov provenance, header []string) (*csvReport, error) {
@@ -122,47 +131,57 @@ func createReport(outPath string, prov provenance, header []string) (*csvReport,
 // follows to build the resume skip-set keyed by each row's own swept
 // values (existingRowKey) — the same key format configKey produces for a
 // candidate configPoint, so the two agree without either depending on
-// where the fixed columns happen to sit in header.
-func verifyAndReadExisting(f *os.File, prov provenance, header []string) (map[string]bool, error) {
+// where the fixed columns happen to sit in header. hadPriorError is true
+// when any row already on disk has status != "ok" — see csvReport's own
+// field comment for why that still has to reach an exit code even though
+// the configuration itself is skipped, not retried.
+func verifyAndReadExisting(f *os.File, prov provenance, header []string) (done map[string]bool, hadPriorError bool, err error) {
 	br := bufio.NewReader(f)
 
 	line1, err := br.ReadString('\n')
 	if err != nil && !errors.Is(err, io.EOF) {
-		return nil, fmt.Errorf("read provenance line: %w", err)
+		return nil, false, fmt.Errorf("read provenance line: %w", err)
 	}
 	line1 = strings.TrimRight(line1, "\n")
 	if line1 != prov.line() {
-		return nil, fmt.Errorf("existing file's provenance line does not match this invocation:\n  have: %s\n  want: %s", line1, prov.line())
+		return nil, false, fmt.Errorf("existing file's provenance line does not match this invocation:\n  have: %s\n  want: %s", line1, prov.line())
 	}
 
 	r := csv.NewReader(br)
 	gotHeader, err := r.Read()
 	if err != nil {
-		return nil, fmt.Errorf("read header line: %w", err)
+		return nil, false, fmt.Errorf("read header line: %w", err)
 	}
 	if !slices.Equal(gotHeader, header) {
-		return nil, fmt.Errorf("existing file's header does not match this invocation's columns:\n  have: %s\n  want: %s", strings.Join(gotHeader, ","), strings.Join(header, ","))
+		return nil, false, fmt.Errorf("existing file's header does not match this invocation's columns:\n  have: %s\n  want: %s", strings.Join(gotHeader, ","), strings.Join(header, ","))
 	}
 
 	sweepIdx := make([]int, 0)
+	statusIdx := -1
 	for i, h := range header {
 		if strings.HasPrefix(h, "sweep.") {
 			sweepIdx = append(sweepIdx, i)
 		}
+		if h == "status" {
+			statusIdx = i
+		}
 	}
 
-	done := map[string]bool{}
+	done = map[string]bool{}
 	for {
 		row, err := r.Read()
 		if errors.Is(err, io.EOF) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("read data row: %w", err)
+			return nil, false, fmt.Errorf("read data row: %w", err)
 		}
 		done[existingRowKey(row, sweepIdx)] = true
+		if statusIdx >= 0 && row[statusIdx] != "ok" {
+			hadPriorError = true
+		}
 	}
-	return done, nil
+	return done, hadPriorError, nil
 }
 
 // existingRowKey is configKey's counterpart for a CSV row already on disk:

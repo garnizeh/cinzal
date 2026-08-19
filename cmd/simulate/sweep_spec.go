@@ -62,6 +62,7 @@ func parseSweepFlags(raw []string) ([]sweepDim, error) {
 	cfgType := reflect.TypeFor[game.Config]()
 
 	dims := make([]sweepDim, 0, len(raw))
+	seenFields := make(map[string]bool, len(raw))
 	for _, r := range raw {
 		field, valuesRaw, ok := strings.Cut(r, "=")
 		if !ok || field == "" {
@@ -70,6 +71,16 @@ func parseSweepFlags(raw []string) ([]sweepDim, error) {
 		if valuesRaw == "" {
 			return nil, fmt.Errorf("cmd/simulate: --sweep %q: no values after '='", r)
 		}
+		// A field named by two --sweep flags would make expandSweep apply
+		// both dimensions to the same Config field (last one wins) while
+		// still emitting two "sweep.<Field>" columns — the recorded first
+		// dimension's column would then describe a value the executed
+		// Config never actually held. Rejected here, before any match
+		// runs, same as an unknown field name.
+		if seenFields[field] {
+			return nil, fmt.Errorf("cmd/simulate: --sweep %q: field %q is already swept by an earlier --sweep flag", r, field)
+		}
+		seenFields[field] = true
 
 		sf, ok := cfgType.FieldByName(field)
 		if !ok {
@@ -80,11 +91,21 @@ func parseSweepFlags(raw []string) ([]sweepDim, error) {
 		}
 
 		values := make([]any, 0)
+		seenValues := make(map[string]bool)
 		for vs := range strings.SplitSeq(valuesRaw, ",") {
 			v, err := parseScalar(vs, sf.Type.Kind())
 			if err != nil {
 				return nil, fmt.Errorf("cmd/simulate: --sweep %q: value %q: %w", r, vs, err)
 			}
+			// A repeated value would produce two configPoints sharing one
+			// configKey, so a resume could only ever skip one of them —
+			// rejected for the same "fail before the first match runs"
+			// reason as a duplicate field.
+			key := formatScalar(v)
+			if seenValues[key] {
+				return nil, fmt.Errorf("cmd/simulate: --sweep %q: value %q is repeated", r, vs)
+			}
+			seenValues[key] = true
 			values = append(values, v)
 		}
 
@@ -106,7 +127,10 @@ func supportedSweepKind(k reflect.Kind) bool {
 func parseScalar(s string, k reflect.Kind) (any, error) {
 	switch k {
 	case reflect.Int:
-		n, err := strconv.ParseInt(s, 10, 64)
+		// strconv.IntSize, not a fixed 64: on a 32-bit build, Go's int is
+		// 32 bits, and parsing at 64-bit width here would silently
+		// truncate a value ParseInt should have rejected as overflow.
+		n, err := strconv.ParseInt(s, 10, strconv.IntSize)
 		if err != nil {
 			return nil, err
 		}
@@ -155,32 +179,55 @@ type configPoint struct {
 	cfg    game.Config
 }
 
-// expandSweep builds the ordered cartesian product of dims over
-// game.DefaultConfig(), applying each dimension's field=value by
+// expandSweep builds the ordered cartesian product of dims's values, then
+// constructs each configPoint's Config from its own fresh
+// game.DefaultConfig() call, applying every dimension's value by
 // reflection. dims[0]'s values vary slowest, matching how
 // "--sweep A=1,2 --sweep B=3,4" reads left to right: (1,3), (1,4), (2,3),
 // (2,4). This order is what row order in the CSV follows, and it is fixed
 // by the command line alone — nothing here depends on iteration order over
 // a map.
+//
+// Building the value combinations first and the Configs second — rather
+// than copying a previous point's Config forward and mutating the copy —
+// means no two points ever share game.DefaultConfig()'s map fields
+// (PostCapByPlayers, MapByPlayers): a Go struct copy only copies a map
+// field's header, not its underlying data, so copying forward would leave
+// every point's map aliased to the same one. Nothing in this package
+// writes into those maps today, but a shared map between points that are
+// meant to describe independent matches is a defect waiting on a future
+// reader, not a safe invariant to lean on.
 func expandSweep(dims []sweepDim) []configPoint {
-	points := []configPoint{{cfg: game.DefaultConfig()}}
+	combos := [][]any{{}}
 	for _, d := range dims {
-		next := make([]configPoint, 0, len(points)*len(d.values))
-		for _, p := range points {
+		next := make([][]any, 0, len(combos)*len(d.values))
+		for _, c := range combos {
 			for _, v := range d.values {
-				cfg := p.cfg
-				setConfigField(&cfg, d.field, v)
-				values := append(slices.Clone(p.values), v)
-				next = append(next, configPoint{values: values, cfg: cfg})
+				next = append(next, append(slices.Clone(c), v))
 			}
 		}
-		points = next
+		combos = next
+	}
+
+	points := make([]configPoint, len(combos))
+	for i, values := range combos {
+		cfg := game.DefaultConfig()
+		for j, d := range dims {
+			setConfigField(&cfg, d.field, values[j])
+		}
+		points[i] = configPoint{values: values, cfg: cfg}
 	}
 	return points
 }
 
 func setConfigField(cfg *game.Config, field string, v any) {
-	reflect.ValueOf(cfg).Elem().FieldByName(field).Set(reflect.ValueOf(v))
+	fv := reflect.ValueOf(cfg).Elem().FieldByName(field)
+	// Convert, not a bare Set: every one of game.Config's current scalar
+	// fields is a plain int/float64/bool/string, so v's type already
+	// matches fv's exactly — but a future field of a defined type (e.g.
+	// "type Rounds int") would make a bare Set panic, since Set requires
+	// exact type identity where Convert only requires convertibility.
+	fv.Set(reflect.ValueOf(v).Convert(fv.Type()))
 }
 
 // sweepSpecString renders dims into the canonical form recorded in the

@@ -48,7 +48,7 @@ func logLine(w io.Writer, format string, args ...any) {
 	_, _ = fmt.Fprintf(w, format+"\n", args...)
 }
 
-func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGitSHA func() (string, error)) int {
+func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGitSHA func() (string, error)) (status int) {
 	fs := flag.NewFlagSet("simulate", flag.ContinueOnError)
 	fs.SetOutput(stderr)
 	matches := fs.Int("matches", 0, "matches to run per configuration")
@@ -133,12 +133,24 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 	}
 	defer func() {
 		if cerr := report.close(); cerr != nil {
+			// A close failure means the final flush didn't land — a full
+			// disk, most plausibly — so the CSV on disk may be missing
+			// data this run believes it wrote. That has to override
+			// whatever status the function body already decided on.
 			logLine(stderr, "cmd/simulate: close report: %v", cerr)
+			status = 1
 		}
 	}()
 
 	bot := bots.For(tier)
-	anyErr := false
+	// A resumed file that already holds an error-status row starts this
+	// run's own exit status as failed too: that configuration is skipped
+	// below rather than retried (see csvReport.hadPriorError's own
+	// comment), and skipping it must not look like success.
+	anyErr := report.hadPriorError
+	if anyErr {
+		logLine(stderr, "cmd/simulate: resumed file already contains an error-status row; exit status will be non-zero")
+	}
 
 	for i, p := range points {
 		label := sweepValuesString(dims, p)
