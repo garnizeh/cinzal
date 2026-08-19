@@ -40,6 +40,25 @@ func Project(s MatchState, seat game.SeatID) game.PlayerView {
 	return v
 }
 
+// ProjectView is Project plus D27's own post-fill: it sets
+// You.StepAllowance from Steps(view, cfg) and You.RoundsToNextOffer from
+// RoundsToNextOffer(s, seat, cfg), the two Config-dependent SelfState
+// fields Project's decided, Config-free signature cannot set itself (D27's
+// option 2). D27 named this "internal/match's responsibility" back when
+// internal/match was the only caller ever going to exist — issue #199
+// gave it a second caller (cmd/simulate) before internal/match exists at
+// all, which is why the post-fill lives here, as one exported function,
+// rather than as a private helper duplicated in both callers: two
+// implementations of the same two-line fill-in is how a bot and a human
+// seat would end up shown different step budgets for no reason either
+// caller could see.
+func ProjectView(s MatchState, seat game.SeatID, cfg game.Config) game.PlayerView {
+	v := Project(s, seat)
+	v.You.StepAllowance = Steps(v, cfg)
+	v.You.RoundsToNextOffer = RoundsToNextOffer(s, seat, cfg)
+	return v
+}
+
 // projectSelf builds SelfState: exact and complete, nothing fog-filtered
 // (GDD §5). Unlike legalView (validate.go), which reads EntrySnapshot mid-
 // Resolve for the round being validated, this reads live Player state —

@@ -31,7 +31,7 @@ import (
 // byte — and returns each match's mean RP across its 4 seats, plus how many
 // matches actually reached round 15. Real rules.NewMatch/Resolve/Project
 // calls throughout, exactly like TestRunnerGoldenMatchFourPlayersFifteenRounds
-// above; projectForBot (that file) performs the same StepAllowance/
+// above; rules.ProjectView performs the same StepAllowance/
 // RoundsToNextOffer fill-in this harness also needs.
 func runCohort(t *testing.T, tier bots.Tier, cfg game.Config, base [32]byte, n int) (meanRP []float64, completed int) {
 	t.Helper()
@@ -53,7 +53,7 @@ func runCohort(t *testing.T, tier bots.Tier, cfg game.Config, base [32]byte, n i
 		for round := 1; round <= cfg.Rounds; round++ {
 			orders := make(map[game.SeatID]game.Order, players)
 			for seat := game.SeatID(0); int(seat) < players; seat++ {
-				v := projectForBot(s, seat, cfg)
+				v := rules.ProjectView(s, seat, cfg)
 				orders[seat] = bot.Decide(v, cfg, rules.NewBotRNG(seed, seat, round))
 			}
 
