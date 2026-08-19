@@ -141,6 +141,30 @@ run "$seed"
 printf '%s\n' "$out" | grep -q 'the match seed' || fail "bare [32]byte: expected the seed-shape line, got: $out"
 
 # ---------------------------------------------------------------------------
+# Case 4b (violation, seed shape spelled two other ways): a hex length
+# literal and byte's own predeclared alias uint8 must not slip past a check
+# that only matched the exact source text "32" and the exact name "byte"
+# (CodeRabbit review on PR #220 — the original isSeedShaped missed both).
+# ---------------------------------------------------------------------------
+seedalt="$tmp/seed-alt-spellings"
+mkdir -p "$seedalt"
+cat >"$seedalt/bot.go" <<'EOF'
+package bots
+
+func rememberHex(seed [0x20]byte) [0x20]byte {
+	return seed
+}
+
+func rememberUint8(seed [32]uint8) [32]uint8 {
+	return seed
+}
+EOF
+run "$seedalt"
+[ "$code" -eq 1 ] || fail "hex/uint8 seed shapes: expected exit 1, got $code: $out"
+count="$(printf '%s\n' "$out" | grep -c 'the match seed')"
+[ "$count" -ge 4 ] || fail "hex/uint8 seed shapes: expected all four occurrences flagged, got $count: $out"
+
+# ---------------------------------------------------------------------------
 # Case 5 (violation, dot import): binds every rules identifier into file
 # scope, which would otherwise let MatchState through unqualified.
 # ---------------------------------------------------------------------------

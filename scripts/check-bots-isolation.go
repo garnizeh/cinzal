@@ -244,19 +244,37 @@ func rulesBinding(file *ast.File) (alias string, dotImportPos token.Pos) {
 	return "", token.NoPos
 }
 
-// isSeedShaped reports whether t is exactly [32]byte — a fixed-length array
-// literal, not a slice (Len == nil) and not any other length or element
-// type.
+// isSeedShaped reports whether t is a fixed-length array of 32 bytes — a
+// literal length written in any base (0x20 and 040 count exactly as much as
+// 32), and byte's own predeclared alias uint8 counts as byte. Not a slice
+// (Len == nil) and not any other length or element type.
+//
+// What this deliberately still cannot see: a length given as a named
+// constant (const seedLen = 32; [seedLen]byte) or a constant expression
+// (16+16). Resolving either needs the file's constant declarations
+// evaluated — go/types territory, the same full type-checking
+// check-game-types.go's own header explains this family of gate avoids in
+// favour of walking syntax alone. The allow-list check above is this gate's
+// real defence against that path in practice: a seed cannot reach
+// internal/bots without first calling rules.NewBotRNG or rules.NewRNG to
+// produce one, and neither is on the allow-list — so a [N]byte with N
+// resolved elsewhere still has nowhere legitimate to get a seed's actual
+// bytes from. This check exists for the case that never needed a named
+// constant at all: a bare, literal [32]byte parameter or field.
 func isSeedShaped(t *ast.ArrayType) bool {
 	if t.Len == nil {
 		return false
 	}
 	lit, ok := t.Len.(*ast.BasicLit)
-	if !ok || lit.Kind != token.INT || lit.Value != "32" {
+	if !ok || lit.Kind != token.INT {
+		return false
+	}
+	n, err := strconv.ParseInt(lit.Value, 0, 64) // base 0: honours 0x, 0o/0, 0b, and _ separators
+	if err != nil || n != 32 {
 		return false
 	}
 	elt, ok := t.Elt.(*ast.Ident)
-	return ok && elt.Name == "byte"
+	return ok && (elt.Name == "byte" || elt.Name == "uint8")
 }
 
 // readAllowlist reads one bare identifier per line from path. Blank lines
