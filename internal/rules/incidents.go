@@ -93,8 +93,16 @@ func incidentCardThisRound(round game.RoundNumber, deck []IncidentCardID) (Incid
 // function's live Position would even reflect the attempted entry), or
 // Riot (D4 is explicit: "the generic 'ending in the sector' filter isn't
 // reflexively applied to this one card too" — Riot's scope is entry-based).
-func incidentEligible(s MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, sector game.Sector) []game.SeatID {
+//
+// The second return value is one EventIncidentExposed per eligible seat —
+// GDD §22's "players ending a route in a flagged unstable sector" (D33
+// row 12), independent of what the incident then does to them (that's
+// EventIncidentHit, row 6) — built here, once, so every caller shares the
+// same source of truth for "ending in the sector" rather than each
+// resolver re-deriving it.
+func incidentEligible(s MatchState, validated map[game.SeatID]game.Order, seats []game.SeatID, sector game.Sector) ([]game.SeatID, []game.Event) {
 	var eligible []game.SeatID
+	var exposed []game.Event
 	for _, seat := range seats {
 		if s.Graph.Nodes[s.Players[seat].Position].Sector != sector {
 			continue
@@ -103,8 +111,9 @@ func incidentEligible(s MatchState, validated map[game.SeatID]game.Order, seats 
 			continue
 		}
 		eligible = append(eligible, seat)
+		exposed = append(exposed, game.Event{Kind: game.EventIncidentExposed, Round: s.Round, Node: s.Players[seat].Position, Seat: seat})
 	}
-	return eligible
+	return eligible, exposed
 }
 
 // retreatTowardSectorEdge returns the lowest-NodeID neighbor of node whose
@@ -171,17 +180,17 @@ func incident(s *MatchState, ctx incidentContext, validated map[game.SeatID]game
 	var events []game.Event
 	switch ctx.card {
 	case IncidentFlood:
-		resolveFlood(s, ctx, validated, seats)
+		events = resolveFlood(s, ctx, validated, seats)
 	case IncidentSnatchJob:
 		events = resolveSnatchJob(s, ctx, validated, seats, r)
 	case IncidentGuardSweep:
 		events = resolveGuardSweep(s, ctx, validated, seats)
 	case IncidentTorched:
-		resolveTorched(s, *ctx.sector)
+		events = resolveTorched(s, *ctx.sector)
 	case IncidentTurfWar:
-		resolveTurfWar(s, ctx, validated, seats, walks, cfg, r)
+		events = resolveTurfWar(s, ctx, validated, seats, walks, cfg, r)
 	case IncidentStreetsBlocked:
-		resolveStreetsBlocked(s, ctx, validated, seats)
+		events = resolveStreetsBlocked(s, ctx, validated, seats)
 	case IncidentGasLeak, IncidentRiot:
 		// Already resolved this round — see doc above.
 	case IncidentSinkhole:
@@ -193,13 +202,13 @@ func incident(s *MatchState, ctx incidentContext, validated map[game.SeatID]game
 	case IncidentSpilledLoad:
 		events = resolveSpilledLoad(s, *ctx.sector, r)
 	case IncidentLocalInformant:
-		resolveLocalInformant(s, ctx, validated, seats)
+		events = resolveLocalInformant(s, ctx, validated, seats)
 	case IncidentDistractedGuard:
-		resolveDistractedGuard(s, ctx, validated, seats)
+		events = resolveDistractedGuard(s, ctx, validated, seats)
 	case IncidentOpenDoors:
 		events = resolveOpenDoors(s, ctx, validated, seats)
 	case IncidentWordOfWork:
-		resolveWordOfWork(s, ctx, validated, seats)
+		events = resolveWordOfWork(s, ctx, validated, seats)
 	}
 
 	s.UnstableSector = nextUnstableSector(*s, cfg, r)
@@ -227,18 +236,29 @@ func nextUnstableSector(s MatchState, cfg game.Config, r *RNG) *game.Sector {
 }
 
 // resolveFlood applies GDD §14.3's Flood: "Carried cargo drops at your
-// node. Retreat 1 step toward the sector edge."
-func resolveFlood(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) {
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+// node. Retreat 1 step toward the sector edge." Emits EventIncidentHit for
+// a seat iff cargo was actually dropped or the retreat actually succeeded
+// (D33 row 6) — a boxed-in seat with no cargo is genuinely unaffected.
+func resolveFlood(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		p := &s.Players[seat]
-		if p.Cargo != nil {
+		origin := p.Position
+		hadCargo := p.Cargo != nil
+		if hadCargo {
 			dropForfeitCargo(s, seat, p.Position)
 		}
+		retreated := false
 		if dest, ok := retreatTowardSectorEdge(s.Graph, p.Position, *ctx.sector); ok {
 			p.Position = dest
 			markNodeKnown(p, dest) // GDD §7.2 / §15: Known however you got there.
+			retreated = true
+		}
+		if hadCargo || retreated {
+			events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: origin, Seat: seat})
 		}
 	}
+	return events
 }
 
 // resolveSnatchJob applies GDD §14.3's Snatch Job: "Lose Cr$ 6 and your
@@ -258,21 +278,29 @@ func resolveFlood(s *MatchState, ctx incidentContext, validated map[game.SeatID]
 // — a penalty that pushes a seat into Debt can surrender a lease — is
 // captured and returned, matching resolveOneDelivery's own precedent
 // (deliveries.go) for every other applyDebt call site in this package.
+// applyDebt's own event only fires on that rarer lease-surrender case, not
+// on the unconditional Cr$6-and-cargo hit GDD §14.3's text states as
+// mandatory — so, unlike resolveInformantRing/resolveOpenDoors, every
+// eligible seat here also gets its own EventIncidentHit (D33 row 6; #221
+// review — D33's own audit missed that this resolver's "already emits an
+// event" only covers the surrender edge case, not the ordinary hit).
 func resolveSnatchJob(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID, r *RNG) []game.Event {
 	candidates := nodesOutsideSector(s.Graph, *ctx.sector)
 	if len(candidates) == 0 {
 		return nil
 	}
 
-	var events []game.Event
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		p := &s.Players[seat]
+		origin := p.Position
 		if _, e := applyDebt(s, seat, snatchJobLoss, s.Round); e != nil {
 			events = append(events, *e)
 		}
 		p.Cargo = nil
 		p.Position = PartialFisherYates(r, PurposeIncidentRelocate, candidates, 1)[0]
 		markNodeKnown(p, p.Position) // GDD §7.2 / §15: Known however you got there.
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: origin, Seat: seat})
 	}
 	return events
 }
@@ -282,16 +310,19 @@ func resolveSnatchJob(s *MatchState, ctx incidentContext, validated map[game.Sea
 // no GDD text says it lands anywhere — and the underlying Contract, if
 // bound, is left untouched: the crate is gone, but the deal itself can
 // still be re-sourced from its Warehouse. The debt event is captured and
-// returned — see resolveSnatchJob's own doc.
+// returned — see resolveSnatchJob's own doc — and, for the same reason
+// given there, every eligible seat also gets its own EventIncidentHit
+// (D33 row 6; #221 review).
 func resolveGuardSweep(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
-	var events []game.Event
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		p := &s.Players[seat]
 		if _, e := applyDebt(s, seat, guardSweepLoss, s.Round); e != nil {
 			events = append(events, *e)
 		}
 		p.Infamy = ApplyInfamyDelta(p.Infamy, -1)
 		p.Cargo = nil
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: p.Position, Seat: seat})
 	}
 	return events
 }
@@ -299,17 +330,23 @@ func resolveGuardSweep(s *MatchState, ctx incidentContext, validated map[game.Se
 // resolveTorched applies GDD §14.3's Torched: "Every post in the sector
 // loses 3 rounds of lease, present or not." Sector-wide, not player-scoped
 // (posts, not players present) — no eligibility filter, no Circulation
-// Permit interaction. Per D14 §1 (decided): only ever decrements, never
-// floors or closes a lease itself — Upkeep's own step 2 (issue #74) is the
-// sole place a lease transitions to expired, its check already widened
-// from "== 0" to "<= 0" in anticipation of this.
-func resolveTorched(s *MatchState, sector game.Sector) {
+// Permit interaction (so, unlike every other row-6 resolver, it doesn't
+// call incidentEligible — a Post's Owner needn't be standing in the sector
+// at all). Per D14 §1 (decided): only ever decrements, never floors or
+// closes a lease itself — Upkeep's own step 2 (issue #74) is the sole
+// place a lease transitions to expired, its check already widened from
+// "== 0" to "<= 0" in anticipation of this. Emits EventIncidentHit for
+// every affected Post's Owner (D33 row 6).
+func resolveTorched(s *MatchState, sector game.Sector) []game.Event {
+	var events []game.Event
 	for i := range s.Graph.Nodes {
 		n := &s.Graph.Nodes[i]
 		if n.Sector == sector && n.Post != nil {
 			n.Post.RoundsRemaining -= 3
+			events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: n.ID, Seat: n.Post.Owner})
 		}
 	}
+	return events
 }
 
 // turfWarTotal computes Turf War's own TOTAL (GDD §14.3: "Roll D6 + your
@@ -343,10 +380,14 @@ func turfWarTotal(s *MatchState, seat game.SeatID, node game.NodeID, o game.Orde
 // cargo, retreat 1 step toward the sector edge) — the package's existing
 // "strictly greater wins, a tie goes to nobody" convention
 // (confront.go's determineOutcome) applied against a fixed value instead
-// of a rival's own total.
-func resolveTurfWar(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) {
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+// of a rival's own total. Emits EventIncidentHit only for a seat that
+// actually loses (D33 row 6: "a Turf War loss") — eligibility alone isn't
+// enough, unlike the unconditional resolvers below.
+func resolveTurfWar(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) []game.Event {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		p := &s.Players[seat]
+		origin := p.Position
 		total := turfWarTotal(s, seat, p.Position, validated[seat], walks[seat], cfg, r)
 		if total > turfWarTarget {
 			continue
@@ -358,16 +399,23 @@ func resolveTurfWar(s *MatchState, ctx incidentContext, validated map[game.SeatI
 			p.Position = dest
 			markNodeKnown(p, dest) // GDD §7.2 / §15: Known however you got there.
 		}
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: origin, Seat: seat})
 	}
+	return events
 }
 
 // resolveStreetsBlocked applies GDD §14.3's Streets Blocked: "Your route
 // next round is capped at 1 step" — sets Player.StreetsBlocked, consumed
 // next round via SeatSnapshot/legalView/Steps (validate.go, steps.go).
-func resolveStreetsBlocked(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) {
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+// Every eligible seat is unconditionally affected, so EventIncidentHit
+// fires for the whole eligible set (D33 row 6).
+func resolveStreetsBlocked(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		s.Players[seat].StreetsBlocked = true
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: s.Players[seat].Position, Seat: seat})
 	}
+	return events
 }
 
 // resolveSinkhole applies GDD §14.3's Sinkhole: "One random node in the
@@ -381,6 +429,14 @@ func resolveStreetsBlocked(s *MatchState, ctx incidentContext, validated map[gam
 // is not yet a fully closed question. A no-op when it happens keeps
 // PurposeIncidentSinkhole's draw lazy (RFC §6.4) rather than panicking
 // Resolve for the whole table.
+//
+// Deliberately not a D33 row-6 EventIncidentHit source, despite being
+// named in that row's resolver list: this card affects a node, not a
+// player — no incidentEligible call, no player-position check at all at
+// the moment it fires — so there is no seat to attribute a hit to. A
+// player already standing on the chosen node isn't displaced or otherwise
+// touched; only future movement through it is affected, which is a
+// pathfinding fact (advance(), movement.go), not an incident-round event.
 func resolveSinkhole(s *MatchState, sector game.Sector, r *RNG) {
 	candidates := nodesInSector(s.Graph, sector)
 	if len(candidates) == 0 {
@@ -394,13 +450,16 @@ func resolveSinkhole(s *MatchState, sector game.Sector, r *RNG) {
 // here pays Cr$ 4" — routed through applyDebt like every other mandatory
 // Cr$ obligation in this package (resolvePayrollDay, events.go, states the
 // same reasoning). The debt event is captured and returned — see
-// resolveSnatchJob's own doc.
+// resolveSnatchJob's own doc — and, for the same reason given there, every
+// eligible seat also gets its own EventIncidentHit (D33 row 6; #221
+// review).
 func resolveShakedown(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
-	var events []game.Event
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		if _, e := applyDebt(s, seat, shakedownCost, s.Round); e != nil {
 			events = append(events, *e)
 		}
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: s.Players[seat].Position, Seat: seat})
 	}
 	return events
 }
@@ -411,8 +470,8 @@ func resolveShakedown(s *MatchState, ctx incidentContext, validated map[game.Sea
 // RFC §9.1 row 11), but its own row, 15, per D26: a distinct Kind so
 // recap/telemetry can attribute the reveal to the incident.
 func resolveInformantRing(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
-	var events []game.Event
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		events = append(events, game.Event{
 			Kind: game.EventInformantRing, Round: s.Round, Seat: seat, Node: s.Players[seat].Position,
 		})
@@ -445,11 +504,16 @@ func resolveSpilledLoad(s *MatchState, sector game.Sector, r *RNG) []game.Event 
 // resolveLocalInformant applies GDD §14.3's Local Informant: "gains sight
 // of every node within 2 steps of wherever they end their route next
 // round" — sets Player.LocalInformant, consumed and cleared next round by
-// seatSight/distributeTrail (trail.go).
-func resolveLocalInformant(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) {
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+// seatSight/distributeTrail (trail.go). Every eligible seat is
+// unconditionally affected, so EventIncidentHit fires for the whole
+// eligible set (D33 row 6).
+func resolveLocalInformant(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		s.Players[seat].LocalInformant = true
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: s.Players[seat].Position, Seat: seat})
 	}
+	return events
 }
 
 // resolveDistractedGuard applies the step half of GDD §14.3's Distracted
@@ -457,10 +521,15 @@ func resolveLocalInformant(s *MatchState, ctx incidentContext, validated map[gam
 // consumed next round via SeatSnapshot/legalView/Steps. The card's other
 // half, "leaves no trace this round," is resolved earlier the same round,
 // inside writeTrail() (trail.go) — see incidentContext's own doc for why.
-func resolveDistractedGuard(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) {
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+// Every eligible seat is unconditionally affected, so EventIncidentHit
+// fires for the whole eligible set (D33 row 6).
+func resolveDistractedGuard(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		s.Players[seat].DistractedGuard = true
+		events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: s.Players[seat].Position, Seat: seat})
 	}
+	return events
 }
 
 // resolveOpenDoors applies GDD §14.3's Open Doors via D14 §4's mechanism: a
@@ -487,8 +556,8 @@ func resolveDistractedGuard(s *MatchState, ctx incidentContext, validated map[ga
 // processes every seat's order in one call, so one seat's out-of-range
 // value must not panic resolution for the whole table.
 func resolveOpenDoors(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
-	var events []game.Event
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		o := validated[seat]
 		market := o.AddOns.OpenDoorsMarket
 		if market == nil {
@@ -527,11 +596,15 @@ func resolveOpenDoors(s *MatchState, ctx incidentContext, validated map[game.Sea
 // resolveWordOfWork applies GDD §14.3's Word of Work: "immediately
 // receives a contract offer, ignoring the Contact Cooldown" — identical
 // mechanism to resolveOldFavour (events.go), scoped to the eligible
-// subset instead of every seat.
-func resolveWordOfWork(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) {
-	for _, seat := range incidentEligible(*s, validated, seats, *ctx.sector) {
+// subset instead of every seat. Not a D33 row-6 resolver — a contract
+// offer is a boon, not a hit — so the only events here are the shared
+// EventIncidentExposed batch from incidentEligible.
+func resolveWordOfWork(s *MatchState, ctx incidentContext, validated map[game.SeatID]game.Order, seats []game.SeatID) []game.Event {
+	eligible, events := incidentEligible(*s, validated, seats, *ctx.sector)
+	for _, seat := range eligible {
 		s.Players[seat].LastOfferRound = 0
 	}
+	return events
 }
 
 // pressure is Resolve's Phase 7 Legend-tier check (GDD §14.4) — unlike

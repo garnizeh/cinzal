@@ -479,12 +479,21 @@ func TestResolveConfrontationsDecisiveOneOnOne(t *testing.T) {
 		t.Errorf("loser's order = %+v, want halted (Route nil, Action Nothing)", o)
 	}
 
-	if len(events) != 1 {
-		t.Fatalf("events = %v, want exactly 1 EventConfrontation", events)
+	if len(events) != 2 {
+		t.Fatalf("events = %v, want exactly 1 EventRouteHalted + 1 EventConfrontation", events)
 	}
-	ev := events[0]
+	if halt := events[0]; halt.Kind != game.EventRouteHalted || halt.Seat != 1 || halt.Node != 12 {
+		t.Errorf("halt event = %+v, want Kind RouteHalted, Seat 1 (the loser), Node 12", halt)
+	}
+	ev := events[1]
 	if ev.Kind != game.EventConfrontation || ev.Seat != 0 || ev.Target != 1 || ev.Node != 12 {
 		t.Errorf("event = %+v, want Kind Confrontation, Seat 0, Target 1, Node 12", ev)
+	}
+	if !ev.Decisive {
+		t.Error("event.Decisive = false, want true")
+	}
+	if ev.Stance != game.StanceNeutral {
+		t.Errorf("event.Stance = %v, want %v (loser's declared stance)", ev.Stance, game.StanceNeutral)
 	}
 }
 
@@ -675,8 +684,23 @@ func TestResolveConfrontationsTieRevertsWithNoPenalty(t *testing.T) {
 			t.Errorf("seat %d order = %+v, want halted", seat, o)
 		}
 	}
-	if len(events) != 1 || events[0].Seat != 0 || events[0].Target != 1 {
-		t.Errorf("events = %+v, want one Confrontation entry naming both seats", events)
+	if len(events) != 3 {
+		t.Fatalf("events = %+v, want 2 EventRouteHalted + 1 EventConfrontation", events)
+	}
+	for i, seat := range []game.SeatID{0, 1} {
+		if h := events[i]; h.Kind != game.EventRouteHalted || h.Seat != seat {
+			t.Errorf("halt event %d = %+v, want Kind RouteHalted, Seat %d", i, h, seat)
+		}
+	}
+	ev := events[2]
+	if ev.Kind != game.EventConfrontation || ev.Seat != 0 || ev.Target != 1 {
+		t.Errorf("events[2] = %+v, want one Confrontation entry naming both seats", ev)
+	}
+	if ev.Decisive {
+		t.Error("tie event.Decisive = true, want false")
+	}
+	if ev.Stance != game.StanceAggressive {
+		t.Errorf("tie event.Stance = %v, want %v (Target's declared stance)", ev.Stance, game.StanceAggressive)
 	}
 }
 
@@ -780,12 +804,17 @@ func TestResolveConfrontationsMeleeLosersDrawPushbackInSeatOrder(t *testing.T) {
 	if got := r.Consumed(PurposePushbackHop); got != 3 {
 		t.Errorf("pushback.hop consumed = %d, want 3 (one stationary Neutral loser each)", got)
 	}
-	if len(events) != 3 {
-		t.Fatalf("events = %v, want 3 (one per loser, winner named in each)", events)
+	if len(events) != 6 {
+		t.Fatalf("events = %v, want 3 EventRouteHalted + 3 EventConfrontation (one per loser)", events)
 	}
-	for i, ev := range events {
-		if ev.Seat != 0 || ev.Target != game.SeatID(i+1) {
-			t.Errorf("events[%d] = %+v, want Seat 0, Target %d", i, ev, i+1)
+	for i, seat := range []game.SeatID{1, 2, 3} {
+		if h := events[i]; h.Kind != game.EventRouteHalted || h.Seat != seat {
+			t.Errorf("halt event %d = %+v, want Kind RouteHalted, Seat %d", i, h, seat)
+		}
+	}
+	for i, ev := range events[3:] {
+		if ev.Kind != game.EventConfrontation || ev.Seat != 0 || ev.Target != game.SeatID(i+1) {
+			t.Errorf("events[%d] = %+v, want Kind Confrontation, Seat 0, Target %d", i+3, ev, i+1)
 		}
 	}
 	for _, seat := range []game.SeatID{1, 2, 3} {
@@ -851,8 +880,8 @@ func TestResolveConfrontationsMeleeTwoStationaryEvasiveLosersPushbackHopInSeatOr
 		t.Errorf("losers' pushback positions = (%d, %d), want (%d, %d) from the seat-ordered reference — pushback.hop was not consumed in seat order",
 			s.Players[1].Position, s.Players[2].Position, refS.Players[1].Position, refS.Players[2].Position)
 	}
-	if len(events) != 2 {
-		t.Fatalf("events = %v, want 2 (one per loser, winner named in each)", events)
+	if len(events) != 4 {
+		t.Fatalf("events = %v, want 2 EventRouteHalted + 2 EventConfrontation (one per loser)", events)
 	}
 }
 
@@ -877,13 +906,22 @@ func TestResolveConfrontationsCrossingSnapsBothToTheSameNode(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	resolveConfrontations(&s, []confrontation{{Node: 0, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	events := resolveConfrontations(&s, []confrontation{{Node: 0, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
 
 	if s.Players[0].Position != 0 {
 		t.Errorf("winner Position = %d, want 0 (the fight's own node, corrected back from its raw destination 1)", s.Players[0].Position)
 	}
 	if o := validated[0]; o.Route != nil {
 		t.Errorf("winner's remaining route = %v, want halted — it no longer starts from the winner's corrected position", o.Route)
+	}
+	if len(events) != 3 {
+		t.Fatalf("events = %v, want 2 EventRouteHalted (corrected winner + loser) + 1 EventConfrontation", events)
+	}
+	if h := events[0]; h.Kind != game.EventRouteHalted || h.Seat != 0 || h.Node != 0 {
+		t.Errorf("halt event = %+v, want Kind RouteHalted, Seat 0 (the corrected winner), Node 0", h)
+	}
+	if h := events[1]; h.Kind != game.EventRouteHalted || h.Seat != 1 || h.Node != 0 {
+		t.Errorf("halt event = %+v, want Kind RouteHalted, Seat 1 (the loser), Node 0", h)
 	}
 }
 
@@ -906,8 +944,8 @@ func TestResolveConfrontationsPushbackIntoOccupiedNodeTriggersNoSecondFight(t *t
 
 	events := resolveConfrontations(&s, []confrontation{{Node: 3, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
 
-	if len(events) != 1 {
-		t.Fatalf("events = %v, want exactly 1 — pushback must not trigger a second confrontation on its own", events)
+	if len(events) != 2 {
+		t.Fatalf("events = %v, want exactly 1 EventRouteHalted + 1 EventConfrontation — pushback must not trigger a second confrontation on its own", events)
 	}
 	if s.Players[1].Position != 2 {
 		t.Errorf("loser Position = %d, want 2 (its own prior node, already occupied by uninvolved seat 2)", s.Players[1].Position)

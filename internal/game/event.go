@@ -151,6 +151,31 @@ const (
 	// distinct kind so recap/telemetry can attribute the reveal to the
 	// incident rather than the global event card.
 	EventInformantRing
+
+	// The three kinds below are M2's telemetry additions (D33's decision,
+	// issue #196): GDD §22 metrics the event stream didn't carry a source
+	// for. None of the three is an RFC §9.1 writer row — they must never
+	// be routed through writeTrail/buildRoundAnchors into a PlayerView.
+
+	// EventRouteHalted fires wherever a confrontation clears a seat's
+	// remaining route and action (GDD §15: "loses the remainder of their
+	// route and their action") — a tie participant, a decisive loser, or
+	// the rare crossing-corrected winner. GDD §22's "routes cancelled
+	// mid-route" numerator; the denominator ("of submitted routes") is
+	// order-log-shaped, not an event (D33 row 1).
+	EventRouteHalted
+
+	// EventIncidentHit fires when a sector incident actually affects a
+	// seat — as opposed to merely being eligible for one, see
+	// EventIncidentExposed below — from a resolver that otherwise mutates
+	// MatchState with no trace of its own (D33 row 6).
+	EventIncidentHit
+
+	// EventIncidentExposed fires for every seat ending this round in the
+	// flagged unstable sector, independent of what (if anything) the
+	// live incident then does to them — GDD §22's "players ending a
+	// route in a flagged unstable sector" (D33 row 12).
+	EventIncidentExposed
 )
 
 // String returns the event kind's name, or "EventKind(n)" for an invalid
@@ -201,6 +226,12 @@ func (k EventKind) String() string {
 		return "SpilledLoadCrate"
 	case EventInformantRing:
 		return "InformantRing"
+	case EventRouteHalted:
+		return "RouteHalted"
+	case EventIncidentHit:
+		return "IncidentHit"
+	case EventIncidentExposed:
+		return "IncidentExposed"
 	default:
 		return invalidEnumString("EventKind", int(k))
 	}
@@ -238,4 +269,16 @@ type Event struct {
 	// names tier alongside actor and location (GDD §7.3), matching
 	// Anchor's own Tier field (view.go), which this is the source of.
 	Tier int
+
+	// Stance is the declared stance of Target, the confrontation's loser
+	// (or, for a tie, the adjacent Target in tieEvents' chain). Populated
+	// only for EventConfrontation's Target — see Decisive below for why a
+	// tied Evasive Target must not be read as a win (D33 row 9).
+	Stance Stance
+
+	// Decisive reports whether this EventConfrontation had a winner/loser
+	// pairing (true) or was a tie with no winner (false, the zero value)
+	// — required alongside Stance so a tie's identically-shaped
+	// EventConfrontation can't be miscounted as a win (D33 row 9).
+	Decisive bool
 }
