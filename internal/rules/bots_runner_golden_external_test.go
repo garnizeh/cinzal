@@ -8,20 +8,6 @@ import (
 	"github.com/garnizeh/cinzal/internal/rules"
 )
 
-// projectForBot is what internal/match will eventually do on every Project
-// call (docs/decisions/D27-project-config-parameter.md, internal/match's
-// own doc.go): fill in the two SelfState fields rules.Project's Config-free
-// signature cannot set — StepAllowance and RoundsToNextOffer. M2 has no
-// internal/match yet, so this harness performs that fill-in itself, once,
-// here, exactly the pothole issue #191 named ("a bot reading
-// v.You.StepAllowance == 0 plans a zero-step route").
-func projectForBot(s rules.MatchState, seat game.SeatID, cfg game.Config) game.PlayerView {
-	v := rules.Project(s, seat)
-	v.You.StepAllowance = rules.Steps(v, cfg)
-	v.You.RoundsToNextOffer = rules.RoundsToNextOffer(s, seat, cfg)
-	return v
-}
-
 // TestRunnerGoldenMatchFourPlayersFifteenRounds is issue #193's own golden-
 // match acceptance criterion: a real 15-round, 4-player match — real
 // rules.NewMatch/Resolve/Project calls, no test-scripted orders — with
@@ -57,7 +43,7 @@ func TestRunnerGoldenMatchFourPlayersFifteenRounds(t *testing.T) {
 	for round := 1; round <= cfg.Rounds; round++ {
 		orders := make(map[game.SeatID]game.Order, players)
 		for seat := game.SeatID(0); int(seat) < players; seat++ {
-			v := projectForBot(s, seat, cfg)
+			v := rules.ProjectView(s, seat, cfg)
 			o := runner.Decide(v, cfg, rules.NewBotRNG(seed, seat, round))
 
 			if len(o.Route) == 0 {

@@ -150,7 +150,7 @@ No Node, no frontend build step, and no Docker for the rules engine — `interna
 
 ## The CI gates
 
-Five checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
+Six checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
 
 | Gate | Asserts |
 |---|---|
@@ -159,6 +159,7 @@ Five checks make the architecture real rather than conventional. They are not st
 | **Debug isolation** | The production binary contains no debug routes |
 | **Secret scan** | No credentials or connection strings in the tree, or in the commits this change adds |
 | **Bots isolation** | `internal/bots`'s production code cannot name `MatchState`, the graph, or the match seed |
+| **Simulate dependencies** | `cmd/simulate` depends on nothing but `internal/rules`, `internal/bots`, `internal/game` and `internal/telemetry` |
 
 If one of these blocks you, the answer is almost never to weaken the gate.
 
@@ -169,6 +170,10 @@ The secret scan reads history as well as the tree, because a credential added in
 `internal/bots` legitimately imports `internal/rules` — `Legal`, `Affordances`, `Steps`, `BotRNG` — so this cannot be an import-graph check the way the fog boundary is: the forbidden thing is not the import, it is which identifiers it is used to reach ([#195](https://github.com/garnizeh/cinzal/issues/195)). `scripts/check-bots-isolation.go` walks `internal/bots`'s production `.go` files and fails on two independent things: any `rules.X` reference whose `X` is not named in `scripts/bots-isolation-allowlist.txt`, and any `[32]byte` — the match seed's own shape — appearing anywhere a type can, whether or not the file names `rules` at all. Widening what a bot may reach means adding a name to that allow-list, in a pull request that explains why the new symbol is still fog-safe — see the entries already there for the shape that explanation takes.
 
 Test files are out of scope: `internal/bots`'s own tests legitimately build real matches (`rules.NewMatch`, `rules.Project`, `rules.Resolve`) to drive bots against realistic corpora rather than only hand-built fixtures. `bot_test.go`'s `TestPackageNamesNoMatchStateNowhere` is issue #190's narrower, source-level predecessor to this gate, and still runs — across every file in the package, test files included — as a second net against the literal identifier `MatchState`.
+
+### The simulate dependency gate
+
+RFC-001 §16.4 states `cmd/simulate` "needs only `rules` and `bots`" — a dependency claim, not just a description, and issue #199 is the one that makes it an enforced one. `scripts/check-simulate-deps.sh` runs `go list -deps ./cmd/simulate` and fails unless the internal packages it names are exactly `internal/rules` (its own `internal/rules/gen` dependency included), `internal/bots`, `internal/game` and `internal/telemetry` — the last two are what the RFC's own sentence leaves implicit: `rules` and `bots` both hand the driver `game` values it has to name to call them, and `internal/telemetry` is D34's GDD §22 metric set, the thing this whole command exists to produce. Anything else — `internal/match` chief among them, once it exists — fails the gate. Unlike bots isolation, this stays a plain `go list`/`grep` pipeline rather than an AST walk, so it needs no fixture selftest of its own.
 
 `make bots-isolation-selftest` drives the gate against fixtures for each failure mode — a named `rules.MatchState`, a `:=`-inferred local that never spells the type name, a bare `[32]byte` with no `rules` import at all, a dot-import, a `doc.go`-only package (VACUOUS, not a pass), a parse error, and a missing allow-list — the same standard `check-bench-regression_test.sh` is held to below.
 

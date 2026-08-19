@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity fog debug-isolation secrets bots-isolation bots-isolation-selftest check replay clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps check replay clean
 
 ## help      list these targets
 help:
@@ -157,6 +157,10 @@ bots-isolation:
 bots-isolation-selftest:
 	./scripts/check-bots-isolation_test.sh
 
+## simulate-deps  assert cmd/simulate depends on only rules/bots/game/telemetry
+simulate-deps:
+	./scripts/check-simulate-deps.sh
+
 # Paths holding generated output. EMPTY UNTIL M3 AND M5 — templ output arrives
 # with the templates, sqlc output with the schema. Each milestone appends here.
 GENERATED :=
@@ -192,7 +196,10 @@ generate-check: generate
 # bots-isolation joined in M2 (issue #195), the same shape as the four M0
 # gates before it: it can always run once internal/bots exists, so unlike
 # generate-check it belongs on this line rather than staying out until
-# something makes it non-vacuous.
+# something makes it non-vacuous. simulate-deps joined the same way, in the
+# same milestone, once cmd/simulate held a real driver to check (issue
+# #199) — a plain go list/grep, so unlike bots-isolation it needs no
+# selftest of its own (check-packages.sh, the same shape, has none either).
 #
 # generate-check is deliberately absent from this line for the same reason,
 # not an oversight: with GENERATED still empty (M3/M5 not landed), it can only
@@ -210,7 +217,7 @@ generate-check: generate
 #
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
-check: packages purity fog debug-isolation secrets bots-isolation bots-isolation-selftest lint test bench-regression-selftest prod dev
+check: packages purity fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps lint test bench-regression-selftest prod dev
 
 ## replay    golden-replay determinism suite, for the cross-OS/arch matrix (issue #80)
 #
