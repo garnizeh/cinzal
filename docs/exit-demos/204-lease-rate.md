@@ -98,7 +98,7 @@ All figures `mean [95% interval]`.
 
 **`LeaseBlockRounds=1` gives exactly 0.0000 for Operator at every player count — a precise, reproducible mechanism, not noise.** `internal/bots/operator.go:508` always funds a fresh stake with `const blocks = 1`. At `LeaseBlockRounds=1`, that stake has `RoundsRemaining=1` the moment it's placed; by the next round's `Decide`, upkeep has already expired and removed it from `v.You.Posts`. `internal/bots/runner.go:471-494`'s `maybeRenewLease` (the renewal heuristic Operator shares with Runner) only renews a post that's still *in* `v.You.Posts` with `RoundsRemaining <= 2` — it never sees the post again once it's gone, so Operator can never catch a one-round-duration lease before it lapses. This isn't cost-sensitive: the grid below shows the same exact-zero at `rounds=1` for `cost∈{1,3,6}`.
 
-**Operator's rounds curve is nearly flat (0.0011–0.0027 across the whole tested range) — pushing duration up does not close the gap.** Drifter's curve keeps climbing (0.003→0.031 at 2p from rounds 1→6) because it has no renewal-timing dependency, but even its best value in this sweep is 30× below the failing floor.
+**Excluding `LeaseBlockRounds=1`, Operator's rounds curve is nearly flat (0.0011–0.0027); including that case, the measured range is 0.0000–0.0027 — pushing duration up does not close the gap.** Drifter's curve keeps climbing (0.003→0.031 at 2p from rounds 1→6) because it has no renewal-timing dependency, but even its best value in this sweep is 30× below the failing floor.
 
 ### Practical ceiling and true collapse-to-zero (supplementary points, 4p)
 
