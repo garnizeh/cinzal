@@ -69,7 +69,7 @@ The crossing is between 44 and 46: at 44 both seeds' whole intervals sit above 1
 
 > **Update ([D38](D38-board-going-unused-indicator.md), 2026-08-20):** the two rows read below are not proxies for the question this section is actually asking. "The Board" is §7.5's deduction UI, and *its* usage is §22 rows 15 and 16 — UI instrumentation no bot sweep can produce. Rows 8 and 19 are the headless guardrail on R9's **remedy**: whether raising node count has thinned the Board's own data past usefulness. That is exactly what this section measures, so the numbers and the conclusion below stand unchanged; only the label "proxy" was wrong.
 
-| Nodes | Share of map under sight, final third *(row 8, target 30-55%)* | Heat Map entries at low confidence *(row 14, target < 40%)* |
+| Nodes | Share of map under sight, final third *(row 8, target 30-55%)* | Heat Map entries at low confidence *(row 19, target < 40%)* |
 |---|---|---|
 | 28 *(shipped)* | 0.4095 [0.4084, 0.4106] | 0.3698 [0.3687, 0.3709] |
 | 32 | 0.3712 [0.3702, 0.3723] | 0.3924 [0.3913, 0.3936] |
@@ -79,9 +79,9 @@ The crossing is between 44 and 46: at 44 both seeds' whole intervals sit above 1
 | 46 | 0.2813 [0.2804, 0.2821] | 0.4451 [0.4439, 0.4463] |
 | 52 | 0.2556 [0.2549, 0.2564] | 0.4594 [0.4581, 0.4606] |
 
-(Seed 1 shown; across the whole sweep seed 2 differs from it by at most 0.0012 on row 8 and 0.0007 on row 14, so the second seed changes nothing here and is omitted for readability.) For reference, the 4-player 28-node map `#229` shipped — the configuration this repository has accepted as correct — measures 0.4328 and 0.3634 on these two rows.
+(Seed 1 shown; across the whole sweep seed 2 differs from it by at most 0.0012 on row 8 and 0.0007 on row 19, so the second seed changes nothing here and is omitted for readability.) For reference, the 4-player 28-node map `#229` shipped — the configuration this repository has accepted as correct — measures 0.4328 and 0.3634 on these two rows.
 
-Row 14 leaves its `< 40%` target between 32 and 36 nodes; row 8 leaves its 30-55% band between 40 and 44. Both are outside their targets at every tested node count that clears R9 (46, 48, 52); the sweep did not measure the counts between and past them, and this decision claims nothing about those beyond the direction the eight measured points move. **Neither reaches its own documented *failing* line** — row 8's stated action is `> 65%` ("post sight still too generous") and has no threshold defined on the low side at all, and row 14's is `> 60%`. So this is not a second tripped exit criterion, and this decision does not claim one; it is two independent measures of observation coverage moving monotonically the wrong way, out of the bands the design chose, to buy the confrontation row. That is the pattern R9's own text instructs a reader to watch for, read through the only proxies §22 currently has.
+Row 19 leaves its `< 40%` target between 32 and 36 nodes; row 8 leaves its 30-55% band between 40 and 44. Both are outside their targets at every tested node count that clears R9 (46, 48, 52); the sweep did not measure the counts between and past them, and this decision claims nothing about those beyond the direction the eight measured points move. **Neither reaches its own documented *failing* line** — row 8's stated action is `> 65%` ("post sight still too generous") and has no threshold defined on the low side at all, and row 19's is `> 60%`. So this is not a second tripped exit criterion, and this decision does not claim one; it is two independent measures of observation coverage moving monotonically the wrong way, out of the bands the design chose, to buy the confrontation row. That is the pattern R9's own text instructs a reader to watch for, read through the only proxies §22 currently has.
 
 **What Option A would actually cost, stated fully.** `#232` scoped it as a change to D8 and framed the rest as carrying forward unchanged. At the node count that actually clears R9 it is larger than that:
 
