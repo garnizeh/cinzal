@@ -481,31 +481,75 @@ func (b operatorBot) chooseAddOns(v game.PlayerView, cfg game.Config, draft game
 	return addOns
 }
 
+// stakeBlocksToSurviveUpkeep is the fewest lease blocks a fresh stake may
+// declare and still leave a post standing when the next round's Decide runs
+// — the one thing maybeRenewLease (runner.go) cannot supply for itself.
+//
+// A stake resolves in the same round it is submitted: resolveStakePost sets
+// the new post's RoundsRemaining to blocks * cfg.LeaseBlockRounds
+// (internal/rules/actions.go), resolveAddons deliberately skips renewal for
+// any seat whose action this round was StakePost (internal/rules/addons.go —
+// RenewBlocks does double duty and is fully consumed by the stake), and the
+// same round's Upkeep then takes one round back off the lease and closes it
+// at zero (upkeepLeases, internal/rules/upkeep.go). So a stake needs
+// blocks * LeaseBlockRounds >= 2 to hand anything at all to the next round;
+// anything less expires in the round it was bought, unrenewable by
+// construction.
+//
+// Issue #236: hardcoding one block made that condition an unstated
+// assumption about the shipped LeaseBlockRounds=3, and it does not hold at
+// LeaseBlockRounds=1 — the post expired the very round it was staked, so
+// maybeRenewLease's own window never got a look at it and Operator finished
+// every such match holding exactly zero leases, a reproducible 0.0000 at
+// every player count and every cost tested (docs/exit-demos/204-lease-rate.md's
+// rounds curve). Ceil division leaves the default at one block (3 rounds
+// already clears the bar, so nothing about the shipped configuration
+// changes) and buys a second only where a single block genuinely cannot
+// survive its own Upkeep. The result is at most 2, well inside GDD §10.4's
+// four-block ceiling, so a stake never declares more blocks than a post may
+// hold. Zero when leasing is switched off entirely (LeaseBlockRounds <= 0),
+// which fundNewStake reads as "do not stake."
+func stakeBlocksToSurviveUpkeep(cfg game.Config) int {
+	if cfg.LeaseBlockRounds <= 0 {
+		return 0
+	}
+
+	// One Upkeep decrement in the staking round itself, plus the one round
+	// that must still remain for the post to be in v.You.Posts — and so
+	// inside leaseAboutToLapse's window — at the next Decide.
+	const roundsNeeded = 2
+	return (roundsNeeded + cfg.LeaseBlockRounds - 1) / cfg.LeaseBlockRounds
+}
+
 // fundNewStake is GDD §10.4's "you declare the duration up front," applied
 // to Operator's own chokepoint pick: a fresh Stake Post is only worth
 // anything if this same order also funds it (a 0-block stake lapses
 // immediately, GDD §10.4's own lease table — no sight, no round-15 RP).
-// One block (Cr$ 3, 3 rounds) is enough to hold the post past this round;
-// maybeRenewLease's own "about to lapse" check keeps it topped up in later
-// rounds the same way it already maintains any other post. The combination
-// is trialled against rules.Legal directly — the post cap (GDD §10.3) is
-// exactly the kind of check this package must read from rules rather than
-// re-derive (legalspace.go's own discipline) — so a stake Operator cannot
-// actually afford or is capped out of is never spent on at all.
+// stakeBlocksToSurviveUpkeep buys the shortest duration that outlives the
+// staking round; maybeRenewLease's own "about to lapse" check keeps it
+// topped up from there the same way it already maintains any other post.
+// The combination is trialled against rules.Legal directly — the post cap
+// (GDD §10.3) is exactly the kind of check this package must read from
+// rules rather than re-derive (legalspace.go's own discipline) — so a stake
+// Operator cannot actually afford or is capped out of is never spent on at
+// all.
 func fundNewStake(v game.PlayerView, cfg game.Config, draft game.Order, node game.NodeID) (game.AddOns, bool) {
-	if cfg.LeaseCostPerBlock <= 0 || cfg.LeaseBlockRounds <= 0 {
+	if cfg.LeaseCostPerBlock <= 0 {
 		return game.AddOns{}, false
 	}
 
-	// One block (Cr$ 3, 3 rounds, GDD §10.4) is enough to hold the post
-	// past this round without committing the larger up-front sum a
-	// multi-block stake would — maybeRenewLease's own "about to lapse"
-	// check already tops it up in later rounds the same way it maintains
-	// any other post, so the ongoing GDD §10.1 payoff (2 RP live at round
-	// 15, a shot at sector majority) is funded incrementally rather than
-	// gambled on a single large purchase competing with contract cash
+	// The shortest lease that survives its own round, not a fixed count —
+	// enough to hold the post past this round without committing the larger
+	// up-front sum a longer stake would, since maybeRenewLease already tops
+	// it up in later rounds. The ongoing GDD §10.1 payoff (2 RP live at
+	// round 15, a shot at sector majority) is funded incrementally rather
+	// than gambled on a single large purchase competing with contract cash
 	// flow at the moment the chokepoint first qualifies.
-	const blocks = 1
+	blocks := stakeBlocksToSurviveUpkeep(cfg)
+	if blocks <= 0 {
+		return game.AddOns{}, false
+	}
+
 	cost := blocks * cfg.LeaseCostPerBlock
 	if v.You.Balance-cost < runnerReserve(cfg) {
 		return game.AddOns{}, false
