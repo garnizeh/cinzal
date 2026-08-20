@@ -10,6 +10,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -55,6 +56,7 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 	players := fs.Int("players", 0, "player count for every match in the sweep")
 	botsFlag := fs.String("bots", "", "bot tier every seat plays: drifter, runner, or operator")
 	outPath := fs.String("out", "", "CSV output path")
+	breakdownPath := fs.String("breakdown", "", "optional second CSV: issue #205's per-round, per-card and Tier IV decompositions of §22 rows 1, 6 and 4 (see breakdown.go)")
 	seedFlag := fs.String("seed", defaultRootSeedString, "root seed string; the 32-byte seed is SHA-256 of this string")
 	workers := fs.Int("workers", 0, "matches to run concurrently per configuration; <=0 uses GOMAXPROCS")
 	var sweepRaw sweepFlags
@@ -143,6 +145,31 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 		}
 	}()
 
+	var breakdown *breakdownReport
+	if *breakdownPath != "" {
+		// A resumed sweep skips configurations already in the --out file,
+		// and the breakdown file has no resume path of its own
+		// (breakdownReport), so those configurations' rows would simply be
+		// absent from a breakdown written alongside the resume — a file
+		// that looks complete and silently measured less than it claims.
+		// Refuse the combination rather than produce it.
+		if len(report.done) > 0 {
+			logLine(stderr, "cmd/simulate: --breakdown cannot be combined with resuming %s: %d configuration(s) already recorded there would have no breakdown rows", *outPath, len(report.done))
+			return 1
+		}
+		breakdown, err = openBreakdownReport(*breakdownPath, prov, breakdownHeader(dims))
+		if err != nil {
+			logLine(stderr, "%v", err)
+			return 1
+		}
+		defer func() {
+			if cerr := breakdown.close(); cerr != nil {
+				logLine(stderr, "cmd/simulate: close breakdown: %v", cerr)
+				status = 1
+			}
+		}()
+	}
+
 	bot := bots.For(tier)
 	// A resumed file that already holds an error-status row starts this
 	// run's own exit status as failed too: that configuration is skipped
@@ -182,6 +209,13 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 		}
 		row["config_json"] = string(cfgJSON)
 
+		// The breakdown file's fixed columns are the sweep row's own, minus
+		// the Config itself and plus its digest — see breakdownHeader.
+		breakdownFixed := maps.Clone(row)
+		delete(breakdownFixed, "config_json")
+		cfgDigest := sha256.Sum256(cfgJSON)
+		breakdownFixed["config_sha256"] = hex.EncodeToString(cfgDigest[:])
+
 		results, runErr := runMatches(seeds, p.cfg, *players, bot, *workers)
 		if runErr != nil {
 			// Fails closed (issue #200's own acceptance criterion): a
@@ -193,8 +227,17 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 			row["status"] = "error"
 			row["error"] = runErr.Error()
 			row["matches_completed"] = "0"
+			breakdownFixed["status"] = "error"
+			breakdownFixed["error"] = runErr.Error()
+			breakdownFixed["matches_completed"] = "0"
 			anyErr = true
 			logLine(stderr, "[%d/%d] %s: ERROR: %v", i+1, len(points), label, runErr)
+			if breakdown != nil {
+				if err := breakdown.writeErrorRow(breakdownFixed); err != nil {
+					logLine(stderr, "cmd/simulate: write breakdown row: %v", err)
+					return 1
+				}
+			}
 		} else {
 			row["status"] = "ok"
 			row["matches_completed"] = strconv.Itoa(len(results))
@@ -210,6 +253,18 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 				}
 				row[spec.name+"_n"] = strconv.Itoa(m.n)
 				row[spec.name+"_excluded"] = strconv.Itoa(m.excluded)
+			}
+			if breakdown != nil {
+				breakdownFixed["status"] = "ok"
+				breakdownFixed["matches_completed"] = strconv.Itoa(len(results))
+				breakdowns := make([]Breakdown, len(results))
+				for k, res := range results {
+					breakdowns[k] = res.Breakdown
+				}
+				if err := breakdown.writeRows(breakdownFixed, aggregateBreakdowns(breakdowns, p.cfg)); err != nil {
+					logLine(stderr, "cmd/simulate: write breakdown row: %v", err)
+					return 1
+				}
 			}
 			logLine(stderr, "[%d/%d] %s: done", i+1, len(points), label)
 		}

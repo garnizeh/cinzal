@@ -176,6 +176,29 @@ func EventCardTags(id EventCardID) []EventTag {
 	return nil
 }
 
+// IncidentCatalog returns a copy of GDD §14.3's full 16-card sector incident
+// catalog, in the canonical order the IncidentCardID block above declares —
+// hazards first, then boons, each in the GDD's own table order.
+//
+// The counterpart to EventCardTags above, and there for the same reason:
+// which incident card was live in a given round is already reconstructible
+// from MatchState.Graph.IncidentDeck alone (D33's seed-derivable card
+// identity, which internal/telemetry's liveIncidentRounds already relies
+// on), but that reconstruction yields a bare IncidentCardID. GDD §22's row 6
+// is an aggregate over all of them, and R6's third dial is stated as "cut
+// the deck to the six least punishing" (GDD §20) — a per-card breakdown is
+// the only thing that can name those six, and it needs each card's name and
+// hazard/boon flag to do it.
+//
+// Returns a copy, never allIncidents itself: it is shared, package-level,
+// match-lifetime state, and a caller mutating what this returned would
+// corrupt the catalog for every match this process ever resolves. Cloning
+// the slice is a full copy here, unlike EventCardTags' case — IncidentCard
+// holds no reference-typed field of its own.
+func IncidentCatalog() []IncidentCard {
+	return slices.Clone(allIncidents)
+}
+
 // incidentCategory maps IncidentCard.Hazard onto ShuffleConstrained's int
 // category, per D03's quota: 9 hazards, 4 boons.
 const (

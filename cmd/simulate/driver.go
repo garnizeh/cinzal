@@ -29,6 +29,13 @@ type MatchResult struct {
 	Log     rules.OrderLog
 	Scores  []rules.FinalScoreBreakdown
 	Summary telemetry.MatchSummary
+
+	// Breakdown is the #205 exit demonstration's own decompositions of §22
+	// rows 1, 6 and 4 (breakdown.go). Computed unconditionally, the same
+	// way Summary is: two of its three parts need facts that only exist
+	// between rounds, so a --breakdown flag consulted after the fact would
+	// have nothing left to compute them from.
+	Breakdown Breakdown
 }
 
 // RunMatch runs one match headlessly, from seed and cfg, every seat played
@@ -56,6 +63,7 @@ func RunMatch(seed [32]byte, cfg game.Config, players int, bot bots.Bot) (MatchR
 
 	log := make(rules.OrderLog, cfg.Rounds)
 	var events []game.Event
+	tracker := newBreakdownTracker(players)
 
 	for round := 1; round <= cfg.Rounds; round++ {
 		orders := make(map[game.SeatID]game.Order, players)
@@ -74,6 +82,7 @@ func RunMatch(seed [32]byte, cfg game.Config, players int, bot bots.Bot) (MatchR
 		}
 		s = next
 		events = append(events, roundEvents...)
+		tracker.observe(s, roundEvents)
 	}
 
 	if err := validateComplete(s, log, cfg, players); err != nil {
@@ -86,13 +95,14 @@ func RunMatch(seed [32]byte, cfg game.Config, players int, bot bots.Bot) (MatchR
 	}
 
 	return MatchResult{
-		Seed:    seed,
-		Players: players,
-		Final:   s,
-		Events:  events,
-		Log:     log,
-		Scores:  rules.FinalScore(s),
-		Summary: summary,
+		Seed:      seed,
+		Players:   players,
+		Final:     s,
+		Events:    events,
+		Log:       log,
+		Scores:    rules.FinalScore(s),
+		Summary:   summary,
+		Breakdown: tracker.finish(s, log, events, cfg),
 	}, nil
 }
 
