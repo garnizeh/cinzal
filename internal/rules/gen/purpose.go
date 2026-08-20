@@ -74,7 +74,8 @@ const (
 	// PurposeLayout is the layout pass's per-sector partial Fisher-Yates
 	// over the fixed 9-cell quadrant lattice (D10): exactly one draw per
 	// node in that sector, so exactly Params.Nodes draws overall, always —
-	// D8 caps every sector at 8 nodes, comfortably under the 9-cell
-	// lattice, so this never truncates or retries. See layout.go.
+	// Params.validate's maxSupportedNodes ceiling keeps every sector under
+	// the lattice's own size, so this never truncates or retries. See
+	// layout.go.
 	PurposeLayout = "gen.layout"
 )

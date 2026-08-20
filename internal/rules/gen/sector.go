@@ -16,16 +16,29 @@ var sectorOrder = [4]game.Sector{
 	game.SectorNorthVale,
 }
 
-// sectorSizes splits n nodes into exactly four sector sizes, each within D8's
-// [3, 8] range: base = n/4 nodes each, the n%4 remainder handed out one at a
-// time in sectorOrder — the same largest-remainder-flavored, fixed-tie-break
-// shape D9 already established for node types
-// (docs/decisions/D09-node-type-rounding.md). Deterministic: no RNG draw, so
-// two different seeds at the same node count always agree on sizes and only
-// disagree on which physical nodes fill them (assignSectors). Every
-// currently supported node count (12, 15, 16, 20, 22, 25, 28) produces sizes
-// within [3, 8]; Params.validate's minSupportedNodes floor is what keeps
-// that true for any future caller.
+// minSectorNodes and maxSectorNodes are D8's per-sector range — each of the
+// four sectors holds 3 to 8 nodes (GDD §6.1 constraint 3,
+// docs/decisions/D08-sector-size-constraint.md). Params.validate derives
+// both of its Nodes bounds from them rather than restating 12 and 32 by
+// hand, so a D8 edit moves the accepted node range with it.
+const (
+	minSectorNodes = 3
+	maxSectorNodes = 8
+)
+
+// sectorSizes splits n nodes into exactly four sector sizes: base = n/4 nodes
+// each, the n%4 remainder handed out one at a time in sectorOrder — the same
+// largest-remainder-flavored, fixed-tie-break shape D9 already established
+// for node types (docs/decisions/D09-node-type-rounding.md). Deterministic:
+// no RNG draw, so two different seeds at the same node count always agree on
+// sizes and only disagree on which physical nodes fill them (assignSectors).
+//
+// It stays pure arithmetic and reports no error of its own: an n outside the
+// range D8 admits produces a split outside D8's [3, 8] range, silently.
+// Params.validate is the single gate for that, at both ends
+// (minSupportedNodes and maxSupportedNodes) and before the first attempt —
+// a caller error belongs in Generate's returned error, not discovered
+// halfway through building a graph nobody can use.
 func sectorSizes(n int) [4]int {
 	base := n / 4
 	rem := n % 4

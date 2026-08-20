@@ -29,8 +29,10 @@ var quadrantOrigins = [4]point{
 
 // latticeCells is the fixed 3x3 grid of candidate points inside one
 // quadrant, margin 75 units from the quadrant's own edges and spaced 175
-// units apart, in row-major order (D10). D8 caps every sector at 8 nodes,
-// always <= len(latticeCells), so the lattice never runs short.
+// units apart, in row-major order (D10). Its length is one of the two limits
+// maxSupportedNodes takes the tighter of, so Params.validate rejects any
+// node count whose sectors could outgrow it before generation starts — the
+// lattice never runs short of a graph that got as far as being built.
 var latticeCells = [9]point{
 	{X: 75, Y: 75}, {X: 250, Y: 75}, {X: 425, Y: 75},
 	{X: 75, Y: 250}, {X: 250, Y: 250}, {X: 425, Y: 250},
@@ -44,8 +46,8 @@ var latticeCells = [9]point{
 // nodes — sorted ascending NodeID, the canonical order nodesInSector
 // already returns — lands on. Cost is exactly one draw per node in that
 // sector, so exactly b.n draws overall, always: no rejection loop and no
-// data-dependent cost, because the lattice (9 cells) never runs short of
-// D8's own sector-size cap (8).
+// data-dependent cost, because the lattice never runs short of a sector
+// (maxSupportedNodes, enforced by Params.validate).
 func computeLayout(rand Rand, b *builder) (x, y []int) {
 	x = make([]int, b.n)
 	y = make([]int, b.n)
