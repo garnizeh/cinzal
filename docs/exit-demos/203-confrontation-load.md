@@ -18,7 +18,7 @@
 
 Raw CSVs for all 16 configurations (4 player counts × 2 tiers × 2 seeds) are in [`203/`](203/), produced by:
 
-```
+```bash
 simulate --matches 10000 --players <N> --bots <drifter|operator> \
   --sweep Rounds=15 --seed <root-seed-string> \
   --out 203/p<N>-<tier>-<seed-label>.csv
@@ -79,7 +79,7 @@ GDD §20's R2 entry reports encounters under a pure random walk, 3,000 matches p
 
 Every Drifter figure lands within the same order of magnitude as R2's — the harness is measuring the game, not itself, which is the bar this comparison exists to clear. The 2-player row's near-exact match is coincidental: R2's 4.5 was measured on the pre-fix 19-node map with no rotation, ours on the shipped 15-node rotating-border map; two different mechanisms landing on close numbers is not evidence either is wrong, just a reminder the comparison isn't apples-to-apples at that row.
 
-The 3p/4p/5p rows run lower than R2 by 15–30%, not an order of magnitude. Divergence is expected, not a defect: Drifter draws uniformly over the *full legal-order space* (actions, stances, contract choices), not a pure positional random walk the way R2's model did — GDD §20 itself names this as the likely direction ("real players actively avoid each other, which pulls the number down"), and Drifter's stance/action noise plausibly does some of the same work. A gap this size, in the direction the spec already anticipated, is a result, not a bug.
+The 3p/4p/5p rows run lower than R2 by approximately 27%, 31%, and 10% respectively — not an order of magnitude. Divergence is expected, not a defect: Drifter draws uniformly over the *full legal-order space* (actions, stances, contract choices), not a pure positional random walk the way R2's model did — GDD §20 itself names this as the likely direction ("real players actively avoid each other, which pulls the number down"), and Drifter's stance/action noise plausibly does some of the same work. A gap this size, in the direction the spec already anticipated, is a result, not a bug.
 
 ## Scope note
 
