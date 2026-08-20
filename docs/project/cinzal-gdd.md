@@ -407,12 +407,12 @@ The seven rows above are every node count currently supported (§6.1's per-playe
 
 ### 6.3 Two-player rules
 
-Two players average 4.5 encounters a match, and **27% of matches produce fewer than three** (§20) — figures measured on the pre-fix 19-node map, which is what motivated the changes below. A duel that runs fifteen rounds with no interaction isn't a duel, it's two spreadsheets sharing a background image. Two changes apply at this player count only:
+Two players average 4.5 encounters a match under a pure random walk (§20's R2), and **27% of matches produce fewer than three** — figures measured on the pre-fix 19-node map, which is what motivated the changes below. A duel that runs fifteen rounds with no interaction isn't a duel, it's two spreadsheets sharing a background image. Two changes apply at this player count only:
 
 1. **Rotating borders.** Each round, only **half the Borders accept deliveries**, announced in the Headline alongside the unstable sector. The active set rotates. This concentrates every delivery run in the match into a shrinking target area, which is the most direct convergence pressure available without touching the map. A Border can never be closed by every source at once: if Dragnet's seal (§14.2) would combine with this round's rotation to leave none open, at least one always reopens — see [D28](../decisions/D28-dragnet-rotating-borders-fallback.md).
 2. **Tighter map.** 15 nodes — already reflected in the generation table above. The 19-node figure quoted in the simulation below was the pre-fix value.
 
-No simulation existed to check this against when the fix was written; M2's harness now has (§22). Measured together, at the shipped default `Config`, Drifter tier: **4.5** confrontations a match — clear of §22's `< 4` failing line, but at the low edge of the 4–12 target band, not the 9–12 once claimed here. Both changes are 2p-only and should never leak into 3+ player tables, where the problem is the reverse.
+No simulation checked the fix itself when this section was written; M2's harness now has (§22). Measured together — shipped default `Config`, Drifter tier, the 15-node rotating-border map, 10,000 matches per configuration, two independently-drawn root seeds — the post-fix rate is **also 4.5** confrontations a match: clear of §22's `< 4` failing line, but at the low edge of the 4–12 target band, not the 9–12 once claimed here. The match to the pre-fix random-walk figure above is coincidence, not evidence the fix is inert — different map, different player model (Drifter's full legal-order space against a pure positional walk); it's this post-fix number the exit criterion reads. Both changes are 2p-only and should never leak into 3+ player tables, where the problem is the reverse.
 
 ### 6.4 Layout (D10)
 
