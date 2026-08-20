@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.25 (scope-locked for prototype)
+## Game Design Document — v2.26 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -191,6 +191,11 @@
 > - **§6.1's 4-player row raises to 28 nodes, 41-45 edges** (from 25 nodes, 36-40 edges). [#203](https://github.com/garnizeh/cinzal/blob/main/docs/exit-demos/203-confrontation-load.md)'s exit demonstration measured 13.35-13.38 confrontations per match at the old 25-node map (Drifter, both root seeds) — clearing R9's `> 12` action threshold. The roadmap's own action table names raising node count as the first lever to pull; re-measured at 28 nodes, the rate drops to 11.7-11.9, back inside the 4-12 target band.
 > - **The 5-player row is unchanged, and R9's threshold is not cleared there.** The same measurement found 19.10-19.12 confrontations per match at the shipped 28-node map — also over threshold, and by a wider margin. Raising node count cannot close this one: 32 nodes is the most this package's map generator can produce under [D8](../decisions/D08-sector-size-constraint.md)'s four-sector, 3-8-nodes-per-sector split, and even there the measured rate (16.5-16.6) stays well above 12. Closing the 5-player gap needs a decision this changelog entry does not make — filed as [#232](https://github.com/garnizeh/cinzal/issues/232); see `docs/exit-demos/229-node-count-raise.md` for the full measurement.
 > - No other rule changes. Companion RFC is unaffected — §6.1's table is GDD-owned data, not an RFC-level architecture concern.
+>
+> **Changelog v2.25 → v2.26** — §6.3's two-player claim was projected, not measured (issue #230)
+> - **§6.3 claimed the two-player fix "simulated together" put the confrontation rate "into the 9-12 band, comfortably inside target."** No simulation harness existed when that sentence was written (v1.2, long before M2) — it was a projection dressed up as a measurement. [#203](https://github.com/garnizeh/cinzal/blob/main/docs/exit-demos/203-confrontation-load.md)'s exit demonstration is the first time it was actually run: **4.5** confrontations a match (4.51 [4.46, 4.55] / 4.47 [4.42, 4.51]) at the shipped default `Config`, Drifter tier, 10,000 matches per configuration, two independently-drawn root seeds — clear of §22's `< 4` failing line, but at the low edge of the 4-12 target band, nowhere near 9-12.
+> - **§6.3 now states the measured figure in place of the earlier, never-simulated one.** No rule changes — rotating borders and the 15-node map are exactly as before, and §22's "Confrontations per match, 2 players" criterion still reads NO ACTION. This corrects the document's own narrative claim; it is not a design response to a bad number.
+> - Companion RFC moves to r32 (pointer only — §6.3's confrontation-rate figure is GDD-owned data, the same footing as v2.25's §6.1 correction).
 
 ---
 
@@ -402,12 +407,12 @@ The seven rows above are every node count currently supported (§6.1's per-playe
 
 ### 6.3 Two-player rules
 
-Two players average 4.5 encounters a match, and **27% of matches produce fewer than three** (§20) — figures measured on the pre-fix 19-node map, which is what motivated the changes below. A duel that runs fifteen rounds with no interaction isn't a duel, it's two spreadsheets sharing a background image. Two changes apply at this player count only:
+Two players average 4.5 encounters a match under a pure random walk (§20's R2), and **27% of matches produce fewer than three** — figures measured on the pre-fix 19-node map, which is what motivated the changes below. A duel that runs fifteen rounds with no interaction isn't a duel, it's two spreadsheets sharing a background image. Two changes apply at this player count only:
 
 1. **Rotating borders.** Each round, only **half the Borders accept deliveries**, announced in the Headline alongside the unstable sector. The active set rotates. This concentrates every delivery run in the match into a shrinking target area, which is the most direct convergence pressure available without touching the map. A Border can never be closed by every source at once: if Dragnet's seal (§14.2) would combine with this round's rotation to leave none open, at least one always reopens — see [D28](../decisions/D28-dragnet-rotating-borders-fallback.md).
 2. **Tighter map.** 15 nodes — already reflected in the generation table above. The 19-node figure quoted in the simulation below was the pre-fix value.
 
-Simulated together these put the two-player rate into the 9–12 band, comfortably inside target. Both are 2p-only and should never leak into 3+ player tables, where the problem is the reverse.
+No simulation checked the fix itself when this section was written; M2's harness now has (§22). Measured together — shipped default `Config`, Drifter tier, the 15-node rotating-border map, 10,000 matches per configuration, two independently-drawn root seeds — the post-fix rate is **also 4.5** confrontations a match: clear of §22's `< 4` failing line, but at the low edge of the 4–12 target band, not the 9–12 once claimed here. The match to the pre-fix random-walk figure above is coincidence, not evidence the fix is inert — different map, different player model (Drifter's full legal-order space against a pure positional walk); it's this post-fix number the exit criterion reads. Both changes are 2p-only and should never leak into 3+ player tables, where the problem is the reverse.
 
 ### 6.4 Layout (D10)
 

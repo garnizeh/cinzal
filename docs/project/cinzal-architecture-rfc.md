@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r31 · **Companion doc:** `cinzal-gdd.md` **v2.25**
+**Status:** draft for review · **Revision:** r32 · **Companion doc:** `cinzal-gdd.md` **v2.26**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -177,6 +177,9 @@
 >
 > **Changelog r30 → r31** — companion pointer only (issue #229)
 > - GDD §6.1's 4-player node/edge row moved (25→28 nodes) to clear R9's confrontation-load threshold, measured in [#203](https://github.com/garnizeh/cinzal/blob/main/docs/exit-demos/203-confrontation-load.md) and re-measured in `docs/exit-demos/229-node-count-raise.md`. §6.1's table is GDD-owned data (per-player-count node/edge counts), not an architecture concern this RFC states — no section here changes. Companion doc moves to GDD v2.25.
+>
+> **Changelog r31 → r32** — companion pointer only (issue #230)
+> - GDD §6.3's two-player narrative claim ("9-12 band") is corrected to the measured figure (4.5, [#203](https://github.com/garnizeh/cinzal/blob/main/docs/exit-demos/203-confrontation-load.md)). §6.3's confrontation-rate figure is GDD-owned data, not an architecture concern this RFC states — no section here changes. Companion doc moves to GDD v2.26.
 
 ---
 
