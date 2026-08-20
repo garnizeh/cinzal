@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.26 (scope-locked for prototype)
+## Game Design Document — v2.27 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -196,6 +196,11 @@
 > - **§6.3 claimed the two-player fix "simulated together" put the confrontation rate "into the 9-12 band, comfortably inside target."** No simulation harness existed when that sentence was written (v1.2, long before M2) — it was a projection dressed up as a measurement. [#203](https://github.com/garnizeh/cinzal/blob/main/docs/exit-demos/203-confrontation-load.md)'s exit demonstration is the first time it was actually run: **4.5** confrontations a match (4.51 [4.46, 4.55] / 4.47 [4.42, 4.51]) at the shipped default `Config`, Drifter tier, 10,000 matches per configuration, two independently-drawn root seeds — clear of §22's `< 4` failing line, but at the low edge of the 4-12 target band, nowhere near 9-12.
 > - **§6.3 now states the measured figure in place of the earlier, never-simulated one.** No rule changes — rotating borders and the 15-node map are exactly as before, and §22's "Confrontations per match, 2 players" criterion still reads NO ACTION. This corrects the document's own narrative claim; it is not a design response to a bad number.
 > - Companion RFC moves to r32 (pointer only — §6.3's confrontation-rate figure is GDD-owned data, the same footing as v2.25's §6.1 correction).
+>
+> **Changelog v2.26 → v2.27** — v2.25's generator-ceiling claim was wrong, and the 5-player R9 row is decided (issue #232, [D37](../decisions/D37-five-player-confrontation-load.md))
+> - **v2.25's entry above states that 32 nodes "is the most this package's map generator can produce."** It is not. `gen.Params.validate()` bounds `Nodes` only from below, `sectorSizes()` has no cap, and D8's 3-8 range is asserted only in tests — 33-36 nodes generate valid graphs today. The real ceiling is **36**; at 37, the first 10-node sector overruns [D10](../decisions/D10-map-layout.md)'s fixed 9-cell layout lattice and the generator panics rather than failing validation ([#239](https://github.com/garnizeh/cinzal/issues/239)). D8's stated 3-8 range is unchanged and still correct as a *rule*; what was wrong was the claim that anything enforces it.
+> - **R9's 5-player threshold does clear by node count — at 46 nodes — and D37 declines to buy it.** Swept 28 → 52 nodes at 5 players (Drifter, 10,000 matches per configuration, two root seeds), confrontations per match fall from 19.10 to 10.3, crossing `> 12` between 44 (12.08 / 12.15) and 46 (11.59 / 11.62). But by 46 nodes §22's "share of map under sight in the final third" has fallen out of its 30-55% band (0.281) and "Heat Map entries at low confidence" has risen out of its `< 40%` target (0.445) — the two nearest proxies for the "Board goes unused" leading indicator R9's own text (§20) names as the thing to watch. Reaching 46 nodes would also mean reopening D8's per-sector ceiling (8 → 12) and D10's layout lattice (9 → 16 cells, cutting minimum separation from 175/150 units to 130/110).
+> - **No rule changes.** §6.1's table, constraint 3's 3-8 range, §6.2's four named sectors and §22's 4-12 band are all exactly as before. R9's 5-player row closes as measured-and-deferred to M5.5, the same disposition [D36](../decisions/D36-lease-rate-chokepoint-gate.md) gave the lease rate. Companion RFC moves to r33 (pointer only — the node/edge table and the R9 band are GDD-owned data).
 
 ---
 

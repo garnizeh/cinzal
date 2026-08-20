@@ -202,11 +202,13 @@ func DefaultConfig() Config {
 		// docs/exit-demos/229-node-count-raise.md.
 		//
 		// 5's confrontation rate (19.1, same measurement) does not have a
-		// matching fix here: raising Nodes to 32, the maximum this
-		// package's generator can produce under D8's four-sector/3-8-per-
-		// sector split, only brings it down to ~16.5 — still far over the
-		// threshold. That gap is open, tracked separately (see the exit
-		// demo doc), not silently left unaddressed.
+		// matching fix here. D37 swept node count from 28 to 52 at 5
+		// players and found R9's threshold does clear — at 46 nodes — but
+		// only well past the point where §22's two observation-coverage
+		// rows have left their own target bands, which is the "Board goes
+		// unused" failure R9 names as the thing to watch. The row is
+		// deferred to M5.5 rather than bought at that price; see
+		// docs/decisions/D37-five-player-confrontation-load.md.
 		MapByPlayers: map[int]MapSpec{
 			2: {Nodes: 15, MinEdges: 21, MaxEdges: 23},
 			3: {Nodes: 22, MinEdges: 31, MaxEdges: 35},
