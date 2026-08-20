@@ -204,7 +204,7 @@ func DefaultConfig() Config {
 		// 5's confrontation rate (19.1, same measurement) does not have a
 		// matching fix here: raising Nodes to 32, the maximum this
 		// package's generator can produce under D8's four-sector/3-8-per-
-		// sector split, only brings it down to ~16.8 — still far over the
+		// sector split, only brings it down to ~16.5 — still far over the
 		// threshold. That gap is open, tracked separately (see the exit
 		// demo doc), not silently left unaddressed.
 		MapByPlayers: map[int]MapSpec{
