@@ -75,6 +75,14 @@ CodeRabbit runs on the free OSS tier and often skips a PR with "Review limit rea
 
 **The only reliable signal is negative: a finding still raised against the current head means not addressed.** Everything else — a green check, no new review on your latest commit, a missing `✅ Addressed` marker — is inconclusive; a clean incremental review posts nothing, and the marker isn't guaranteed even on a real fix.
 
+**`pulls/<n>/comments` is not the complete set of findings — check the review body too.** A finding CodeRabbit can't anchor to a diff position (typically a line untouched by the specific commit range an incremental review diffed against) never becomes a comment at all; it lands as an "Outside diff range comments" block inside the *review object's own `body` field* instead, with no comment ID and nothing in `pulls/<n>/comments`:
+
+```
+gh api repos/<owner>/<repo>/pulls/<n>/reviews/<review_id> --jq .body
+```
+
+Read this for every review whose `body` isn't empty, not just its positioned comments — a comments-only audit reads as complete and silently isn't. Found 2026-08-20 on PR #228: a full `pulls/<n>/comments` audit reported zero unaddressed findings while a real one sat unposted in the review body, and the user had to paste it by hand.
+
 Procedure: after pushing a fix, check whether the finding is still raised against the head. If not, and the fix is right, resolve the thread and record *why* in the reply. If quota was available, the review fires on its own — don't trigger manually. On "Review limit reached," wait 20–45 min then `@coderabbitai review`; if it answers "Already reviewed," that's an answer, not a refusal — look for `✅ Addressed` markers rather than retrying. If a merge genuinely can't wait for review, say so in the PR description. When matching the marker in tooling, note the wording varies with commit count — match `Addressed in commits? …`, not just the singular form.
 
 If you disagree with a finding, reply with reasoning — CodeRabbit answers and concedes when it's wrong (it did on a suggestion that would have introduced `game.State`, inverting D01). If a reply 404s, the thread went outdated after your push; post a PR-level comment instead.
