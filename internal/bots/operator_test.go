@@ -1,11 +1,33 @@
 package bots
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/rules"
 )
+
+// chokepointFixtureView is the two-node graph this file's two leasing tests
+// share: the seat stands on node 1, node 2 is one Known step away and is the
+// only candidate a NodeStats entry can nominate as a chokepoint, and the
+// balance is ample so nothing here is decided by affordability.
+//
+// Others carries one opponent because legalPostCap (internal/rules/legal.go)
+// reads players as len(v.Others)+1, and DefaultConfig's PostCapByPlayers has
+// no entry for a 1-player match — a fixture without it would make
+// ActionStakePost illegal for a reason neither test means to exercise.
+func chokepointFixtureView() game.PlayerView {
+	return game.PlayerView{
+		Round: 4,
+		You:   game.SelfState{Position: 1, Balance: 100},
+		Nodes: map[game.NodeID]game.NodeView{
+			1: {Fog: game.FogKnown, Type: game.NodeWarehouse, Edges: []game.NodeID{2}},
+			2: {Fog: game.FogKnown, Type: game.NodeWarehouse, Edges: []game.NodeID{1}},
+		},
+		Others: []game.OpponentView{{Seat: 1}},
+	}
+}
 
 // TestOperatorLeasesChokepoint is RFC-001 §14.3's "reads the heat map for
 // chokepoints and leases them" (GDD §7.5), fired both ways: a node whose
@@ -18,22 +40,7 @@ func TestOperatorLeasesChokepoint(t *testing.T) {
 	r := rules.NewBotRNG(seed, game.SeatID(0), 4)
 	opts := DefaultOperatorOptions()
 
-	newView := func() game.PlayerView {
-		return game.PlayerView{
-			Round: 4,
-			You:   game.SelfState{Position: 1, Balance: 100},
-			Nodes: map[game.NodeID]game.NodeView{
-				1: {Fog: game.FogKnown, Type: game.NodeWarehouse, Edges: []game.NodeID{2}},
-				2: {Fog: game.FogKnown, Type: game.NodeWarehouse, Edges: []game.NodeID{1}},
-			},
-			// legalPostCap (internal/rules/legal.go) reads players as
-			// len(v.Others)+1 — DefaultConfig's PostCapByPlayers has no
-			// entry for a 1-player match, which would make ActionStakePost
-			// illegal regardless of the chokepoint decision this test means
-			// to isolate.
-			Others: []game.OpponentView{{Seat: 1}},
-		}
-	}
+	newView := chokepointFixtureView
 
 	// observed and traffic are built from opts itself, not hardcoded
 	// numbers, so this test tracks DefaultOperatorOptions' own values
@@ -274,5 +281,113 @@ func TestOperatorNeverIllegalOverGoldenCorpus(t *testing.T) {
 
 	if orders == 0 {
 		t.Fatal("corpus produced zero orders — the driven loop ran over nothing")
+	}
+}
+
+// TestOperatorLeaseSurvivesAtEveryBlockRounds is issue #236's regression, run
+// as the full lease lifecycle rather than an arithmetic assertion about
+// AddOns: stake at a qualifying chokepoint, then step the post through every
+// remaining round of the match applying the same three rules functions
+// resolution itself applies — rules.RenewedRoundsRemaining for the stake's
+// own up-front blocks (resolveStakePost, internal/rules/actions.go) and for
+// each renewal (resolveAddons, internal/rules/addons.go), rules.DecrementLease
+// for the Upkeep that runs at the end of every one of those same rounds
+// (upkeepLeases, internal/rules/upkeep.go). The post must be live at the end.
+//
+// Before the fix, LeaseBlockRounds=1 failed at the very first decrement: a
+// one-block stake was placed with RoundsRemaining=1 and expired in the round
+// it was bought, so maybeRenewLease never saw it in v.You.Posts again and
+// Operator ended every such match holding exactly zero leases — the precise,
+// reproducible 0.0000 at every player count and every cost in
+// docs/exit-demos/204-lease-rate.md's rounds curve. Swept across the same
+// LeaseBlockRounds values that demo swept, so the shipped default is covered
+// by the identical assertion rather than a separate one.
+//
+// The view's balance is held constant round over round on purpose: this
+// asserts the renewal *timing* invariant, not the lease economy — whether
+// Operator can afford an indefinite renewal streak is exactly the question
+// runnerReserve and the cost sweep already answer, and letting the balance
+// drain here would fold that separate question into this test's outcome.
+func TestOperatorLeaseSurvivesAtEveryBlockRounds(t *testing.T) {
+	opts := DefaultOperatorOptions()
+	observed := opts.ChokepointMinObserved + 1
+	const chokepoint = game.NodeID(2)
+
+	for _, blockRounds := range []int{1, 2, 3, 4, 6} {
+		t.Run(fmt.Sprintf("LeaseBlockRounds=%d", blockRounds), func(t *testing.T) {
+			cfg := game.DefaultConfig()
+			cfg.LeaseBlockRounds = blockRounds
+			seed := testSeed(0x62)
+
+			v := chokepointFixtureView()
+			v.NodeStats = map[game.NodeID]game.NodeStats{
+				chokepoint: {ObservedRounds: observed, TrafficRounds: observed},
+			}
+
+			stake := For(Operator).Decide(v, cfg, rules.NewBotRNG(seed, game.SeatID(0), int(v.Round)))
+			if stake.Action.Kind != game.ActionStakePost || stake.AddOns.RenewPost != chokepoint {
+				t.Fatalf("round %d: Action=%v RenewPost=%d, want StakePost at node %d",
+					v.Round, stake.Action.Kind, stake.AddOns.RenewPost, chokepoint)
+			}
+
+			rounds := rules.RenewedRoundsRemaining(0, stake.AddOns.RenewBlocks, cfg)
+			rounds, expired := rules.DecrementLease(rounds)
+			if expired {
+				t.Fatalf("a %d-block stake at LeaseBlockRounds=%d expired in the round it was staked — maybeRenewLease can never see it again (issue #236)",
+					stake.AddOns.RenewBlocks, blockRounds)
+			}
+
+			for round := v.Round + 1; round <= game.RoundNumber(cfg.Rounds); round++ {
+				held := chokepointFixtureView()
+				held.Round = round
+				held.You.Posts = []game.Post{{Node: chokepoint, RoundsRemaining: rounds}}
+
+				o := For(Operator).Decide(held, cfg, rules.NewBotRNG(seed, game.SeatID(0), int(round)))
+
+				// resolveAddons' own two conditions (internal/rules/addons.go):
+				// a renewal naming a post this seat holds, on an order whose
+				// action this round was not itself a StakePost.
+				if o.AddOns.RenewBlocks > 0 && o.AddOns.RenewPost == chokepoint && o.Action.Kind != game.ActionStakePost {
+					rounds = rules.RenewedRoundsRemaining(rounds, o.AddOns.RenewBlocks, cfg)
+				}
+
+				rounds, expired = rules.DecrementLease(rounds)
+				if expired {
+					t.Fatalf("post at node %d lapsed at the end of round %d of %d, having been renewed by %d block(s) that round",
+						chokepoint, round, cfg.Rounds, o.AddOns.RenewBlocks)
+				}
+			}
+		})
+	}
+}
+
+// TestOperatorStakeBlocksLeavesTheShippedDefaultAlone pins the other half of
+// issue #236's fix: stakeBlocksToSurviveUpkeep buys a second block only where
+// one genuinely cannot outlive its own round, so at the shipped
+// LeaseBlockRounds=3 — and at every longer duration — a fresh stake still
+// costs exactly one block, as it did before the fix. Without this, a fix that
+// simply always bought two blocks would satisfy the lifecycle test above
+// while silently doubling the up-front cost of every lease in the shipped
+// configuration.
+func TestOperatorStakeBlocksLeavesTheShippedDefaultAlone(t *testing.T) {
+	cfg := game.DefaultConfig()
+	if got := stakeBlocksToSurviveUpkeep(cfg); got != 1 {
+		t.Errorf("DefaultConfig (LeaseBlockRounds=%d): stakeBlocksToSurviveUpkeep = %d, want 1 — the shipped stake cost must not change",
+			cfg.LeaseBlockRounds, got)
+	}
+
+	for _, tc := range []struct{ blockRounds, want int }{
+		{0, 0}, // leasing switched off entirely — fundNewStake reads this as "do not stake"
+		{1, 2},
+		{2, 1},
+		{3, 1},
+		{6, 1},
+		{15, 1},
+	} {
+		cfg := game.DefaultConfig()
+		cfg.LeaseBlockRounds = tc.blockRounds
+		if got := stakeBlocksToSurviveUpkeep(cfg); got != tc.want {
+			t.Errorf("LeaseBlockRounds=%d: stakeBlocksToSurviveUpkeep = %d, want %d", tc.blockRounds, got, tc.want)
+		}
 	}
 }

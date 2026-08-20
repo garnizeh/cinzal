@@ -457,6 +457,19 @@ func runnerCanPickup(v game.PlayerView, end, objective game.NodeID, haveObjectiv
 		len(v.You.Contracts) > 0
 }
 
+// leaseAboutToLapse is maybeRenewLease's own lookahead: a post with this
+// many rounds remaining or fewer counts as "about to lapse" (GDD §18).
+//
+// The window is in rounds, not blocks, so it holds at every
+// cfg.LeaseBlockRounds — but only for a post the bot can still see. A lease
+// that lapses before it is ever observed is outside any window's reach, and
+// keeping it observable is the *staking* side's job, not this one's:
+// operator.go's stakeBlocksToSurviveUpkeep funds every fresh stake with
+// enough blocks to survive its own round's Upkeep, so a post always reaches
+// the next Decide with at least one round remaining — inside this window by
+// definition (issue #236).
+const leaseAboutToLapse = 2
+
 // maybeRenewLease is GDD §18's Autopilot heuristic ("renew leases about to
 // lapse") applied under RFC-001 §14.3's own reserve clause: a lease about
 // to expire is renewed by exactly one block, and only when doing so leaves
@@ -468,9 +481,13 @@ func runnerCanPickup(v game.PlayerView, end, objective game.NodeID, haveObjectiv
 // read internal/rules only for Legal, Affordances, Steps and *BotRNG
 // (legalspace_test.go's own dependency check), the same discipline
 // legalspace.go's knownSubgraphDistance duplicate already follows.
+//
+// One block is always enough to hold the post for another round, at every
+// LeaseBlockRounds: resolveAddons tops the lease up by cfg.LeaseBlockRounds
+// (addons.go) before the same round's Upkeep takes one round back off it
+// (upkeepLeases, upkeep.go), so even the shortest possible block leaves the
+// post live and back inside leaseAboutToLapse's window next round.
 func maybeRenewLease(v game.PlayerView, cfg game.Config) game.AddOns {
-	const aboutToLapse = 2 // rounds remaining or fewer counts as "about to lapse"
-
 	if cfg.LeaseCostPerBlock <= 0 || len(v.You.Posts) == 0 {
 		return game.AddOns{}
 	}
@@ -482,7 +499,7 @@ func maybeRenewLease(v game.PlayerView, cfg game.Config) game.AddOns {
 			target = p
 		}
 	}
-	if target.RoundsRemaining > aboutToLapse {
+	if target.RoundsRemaining > leaseAboutToLapse {
 		return game.AddOns{}
 	}
 
