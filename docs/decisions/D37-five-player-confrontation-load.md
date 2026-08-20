@@ -67,6 +67,8 @@ The crossing is between 44 and 46: at 44 both seeds' whole intervals sit above 1
 
 **What the map looks like at 46 nodes.** GDD §22 has no computed row for R9's own leading indicator — "the Board going unused" is named in §20 and §22's R9 row and is measured nowhere, which is what [#233](https://github.com/garnizeh/cinzal/issues/233) exists to fix. The two nearest existing rows are proxies for it rather than the thing itself, and both leave their target bands well before R9 clears:
 
+> **Update ([D38](D38-board-going-unused-indicator.md), 2026-08-20):** the two rows read below are not proxies for the question this section is actually asking. "The Board" is §7.5's deduction UI, and *its* usage is §22 rows 15 and 16 — UI instrumentation no bot sweep can produce. Rows 8 and 19 are the headless guardrail on R9's **remedy**: whether raising node count has thinned the Board's own data past usefulness. That is exactly what this section measures, so the numbers and the conclusion below stand unchanged; only the label "proxy" was wrong.
+
 | Nodes | Share of map under sight, final third *(row 8, target 30-55%)* | Heat Map entries at low confidence *(row 14, target < 40%)* |
 |---|---|---|
 | 28 *(shipped)* | 0.4095 [0.4084, 0.4106] | 0.3698 [0.3687, 0.3709] |
@@ -106,4 +108,5 @@ None of these is a reason on its own; together they are the shape of change that
 - **The "generator caps at 32 nodes, enforced by `Params.validate()`" claim is corrected** in `docs/exit-demos/229-node-count-raise.md`, `internal/game/config.go`'s `MapByPlayers` comment, and GDD's v2.25 changelog entry, in this decision's PR. The real ceiling is 36 and nothing enforces it.
 - **[#239](https://github.com/garnizeh/cinzal/issues/239)** is filed as a follow-up task: `gen.Params.validate` has no upper bound on `Nodes`, and 37+ panics in `computeLayout` rather than failing validation. Independent of this decision closing — it is a fail-closed gap, not a balance question.
 - **[#233](https://github.com/garnizeh/cinzal/issues/233) is now load-bearing rather than tidy-up.** This decision had to read R9's own leading indicator through two proxies because the indicator itself has no computed row. A future revisit — M5.5's or otherwise — should have the real row to read.
+  > **Update ([D38](D38-board-going-unused-indicator.md), 2026-08-20):** `#233` is decided, and no such row is coming. R9's indicator is the Board's *usage* — §22 rows 15 and 16 — which is M5/M5.5 UI instrumentation and structurally unavailable to bot simulation. The revisit gets it from human play, not from a telemetry task; rows 8 and 19, read above, are the headless guardrail on this decision's own question and were the right rows for it.
 - **Reversible at low cost.** Nothing in `internal/rules`, `internal/game`, or the GDD's rules changes here; revisiting this decision after human data means re-running a sweep whose recipe is written down above, not unwinding a merged change.

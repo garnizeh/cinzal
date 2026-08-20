@@ -48,7 +48,12 @@
 // the failure mode GDD §22's own framing warns against: row 15 (attribution
 // queries) and row 18 (loitering flags from legitimate play) are M5.5 human
 // questions; row 16 (Heat Map opens) is M5 UI instrumentation on a feature
-// that does not exist yet. Row 13 (RP swing traceable to [O] cards) is
+// that does not exist yet. Rows 15 and 16 together are R9's own leading
+// indicator — "watch for the Board going unused" (GDD §20, §7.5) — which is
+// why no amount of bot simulation will ever produce it: a bot opens no Heat
+// Map, so this is a fact about the player rather than about the match
+// (docs/decisions/D38-board-going-unused-indicator.md). The headless
+// guardrail on R9's remedy is rows 8 and 19 instead, both computed here. Row 13 (RP swing traceable to [O] cards) is
 // different again: it is an M2 row, but D33 found no precise event or
 // state source for it in this milestone's first pass, and recommended
 // shipping without one rather than a proxy number that looks exact but

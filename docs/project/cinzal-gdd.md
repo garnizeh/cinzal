@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.27 (scope-locked for prototype)
+## Game Design Document — v2.28 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -201,6 +201,12 @@
 > - **v2.25's entry above states that 32 nodes "is the most this package's map generator can produce."** It is not. `gen.Params.validate()` bounds `Nodes` only from below, `sectorSizes()` has no cap, and D8's 3-8 range is asserted only in tests — 33-36 nodes generate valid graphs today. The real ceiling is **36**; at 37, the first 10-node sector overruns [D10](../decisions/D10-map-layout.md)'s fixed 9-cell layout lattice and the generator panics rather than failing validation ([#239](https://github.com/garnizeh/cinzal/issues/239)). D8's stated 3-8 range is unchanged and still correct as a *rule*; what was wrong was the claim that anything enforces it.
 > - **R9's 5-player threshold does clear by node count — at 46 nodes — and D37 declines to buy it.** Swept 28 → 52 nodes at 5 players (Drifter, 10,000 matches per configuration, two root seeds), confrontations per match fall from 19.10 to 10.3, crossing `> 12` between 44 (12.08 / 12.15) and 46 (11.59 / 11.62). But by 46 nodes §22's "share of map under sight in the final third" has fallen out of its 30-55% band (0.281) and "Heat Map entries at low confidence" has risen out of its `< 40%` target (0.445) — the two nearest proxies for the "Board goes unused" leading indicator R9's own text (§20) names as the thing to watch. Reaching 46 nodes would also mean reopening D8's per-sector ceiling (8 → 12) and D10's layout lattice (9 → 16 cells, cutting minimum separation from 175/150 units to 130/110).
 > - **No rule changes.** §6.1's table, constraint 3's 3-8 range, §6.2's four named sectors and §22's 4-12 band are all exactly as before. R9's 5-player row closes as measured-and-deferred to M5.5, the same disposition [D36](../decisions/D36-lease-rate-chokepoint-gate.md) gave the lease rate. Companion RFC moves to r33 (pointer only — the node/edge table and the R9 band are GDD-owned data).
+>
+> **Changelog v2.27 → v2.28** — R9's leading indicator was never missing; the pointer to it was (issue [#233](https://github.com/garnizeh/cinzal/issues/233), [D38](../decisions/D38-board-going-unused-indicator.md))
+> - **"Watch for the Board going unused (§22)" now says which rows: 15 and 16.** The Board is §7.5's deduction UI, not the map — attribution queries and Heat Map opens are what "unused" measures, and the roadmap's own P6 risk already named them as *"the check that it is being used."* Both are UI instrumentation (M5.5 and M5), so **R9's leading indicator is structurally unavailable to M2's bot simulation**: a bot opens no Heat Map. Every other §22 row M2 owes is a fact about the match; this one is a fact about the player.
+> - **§22 rows 8 and 19 are named as the headless guardrail on R9's *remedy*.** One phrase covered two opposite failures: a map too small makes the Board *unnecessary* (rows 15/16), and a map raised too far makes it *unusable* (rows 8/19 — row 19's own failing text already read "observation coverage too thin for the tool to be usable"). D37 read rows 8 and 19 while raising node count and called them proxies; they are not proxies for the question it was asking, they are that question's own rows.
+> - **§22's per-match table gains a row-number column.** D33's audit, `internal/telemetry`'s field comments and four decision documents all cite "§22 row N" against a table that never printed N. The numbers are D33's, unchanged, and they are **append-only** from here — inserting a row would silently move every existing citation.
+> - **No new metric, and no numbers move.** D38 rejects defining "share of unused nodes" as a §22 row on measurement as well as on naming: at D35 rigor it falls monotonically as the map shrinks — reading healthiest exactly when R9 is worst — and ranks the accepted 4-player map as more unused than the 5-player map that trips R9. §22's twenty rows, every band, every threshold and §20's R9 threshold are unchanged; this entry adds cross-references only. Companion RFC moves to r34 (pointer only).
 
 ---
 
@@ -1506,7 +1512,7 @@ Watch for Tier IV contracts being accepted and then abandoned. If nobody volunta
 
 **R8 — The 2-contract slot cap barely binds.** With one contract per offer and cooldowns of 3–4 rounds, a Nobody or a Known can almost never hold two at once — the cap only bites at Feared and Legend, where offers arrive every 1–2 rounds. It functions as a safety rail at the top of the ladder rather than a constraint players feel, and the document should stop presenting it as a general limit. Harmless as written; worth knowing it does less than it looks like it does.
 
-**R9 — Encounters may be far too frequent at 4–5 players.** If you collide with someone twenty times in fifteen rounds, you never need to read the trail — you just walk. That kills the deduction layer as thoroughly as sparsity would, but from the other direction, and it is much harder to notice because the match *feels* eventful. **Threshold: above 12 confrontations per match, raise node count before touching anything else.** Watch for the Board going unused (§22) as the leading indicator.
+**R9 — Encounters may be far too frequent at 4–5 players.** If you collide with someone twenty times in fifteen rounds, you never need to read the trail — you just walk. That kills the deduction layer as thoroughly as sparsity would, but from the other direction, and it is much harder to notice because the match *feels* eventful. **Threshold: above 12 confrontations per match, raise node count before touching anything else.** Watch for the Board (§7.5) going unused as the leading indicator: **§22 rows 15 and 16** — attribution queries, and Heat Map opens per player per match. Both are UI instrumentation, deferred to M5.5 and M5, and **no bot simulation can produce either** — a bot opens no Heat Map, so this indicator is a fact about the player rather than about the match ([D38](../decisions/D38-board-going-unused-indicator.md)). The guardrail on the *remedy* is a different pair and is headless: raising node count far enough thins observation coverage until the Board stops being usable, which **§22 rows 8 and 19** measure directly.
 
 **R10 — Deck expansion may have diluted the memorable cards.** Going from 12 global cards to 24 halves the chance of seeing any given one. Cards that swing a match are what players talk about afterwards; cards nobody remembers are reading time. If post-match recall of "what happened" drops, cut the deck back toward 18 and keep the loudest cards.
 
@@ -1597,28 +1603,30 @@ Rows marked *(M5)* or *(M5.5)* below have no headless statistic to reduce and si
 
 ### Per match
 
-| Metric | Target band | Fails if |
-|---|---|---|
-| Routes cancelled mid-route *(M2)* | < 15% of submitted routes | **> 15%** → confrontation too punishing (R1) |
-| Deliveries per player *(M2)* | 4–6 | < 3 → cooldown too long or map too large |
-| Winner's RP lead over last place *(M2)* | < 40% | > 40% → comeback mechanisms insufficient |
-| Matches where a player reached Infamy 9 *(M2)* | > 20% | **< 10%** → step gradient too steep (R7) |
-| Matches where a player stayed at Infamy ≤ 2 to the end *(M2)* | < 25% | > 40% → anonymity still dominant (R3) |
-| Sector incidents actually hitting a player *(M2)* | 30–60% of incidents | < 20% → players route around trivially; > 70% → unavoidable, feels unfair (R6) |
-| Live leases at final scoring, per player *(M2)* | 2–4 | < 1 → lease rate too high (§10.4) |
-| Share of map under sight in the final third *(M2)* | 30–55% | **> 65%** → post sight still too generous (§7.2) |
-| Confrontations won against an Evasive loser *(M2)* | 20–40% of all confrontations | > 55% → Evasive is still the default insurance (§9.3) |
-| Confrontations per match, 4–5 players *(M2)* | 4–12 | **> 12** → map too small (R9); Board goes unused as leading indicator |
-| Confrontations per match, 2 players *(M2)* | 4–12 | < 4 → rotating borders (§6.3) not converging hard enough |
-| Players ending a route in a flagged unstable sector *(M2)* | 25–50% of player-rounds | **< 15%** → boon share too low, the flag is still just "stay out" (§14.3) |
-| Share of RP swing traceable to [O] cards *(M2, open — no precise answer in the first pass, see D33)* | < 15% | > 25% → boons are paying in cash where they should pay in tempo (§14.0) |
-| Convergence [C] cards that produced a confrontation *(M2, loose reading — "a confrontation occurred in a [C]-card round," see D33)* | > 40% | < 20% → the convergence tag is decorative |
-| Attribution queries that ruled out at least one player *(M5.5 — human question over a UI that doesn't exist yet)* | > 50% | **< 30%** → the one-round horizon is still too generous; the tool is theatre (§7.5) |
-| Heat Map opened per player per match *(M5 — UI instrumentation, not a headless fact)* | > 5 | < 2 → pattern-reading isn't landing; check whether corridors actually exist on generated maps |
-| Rounds flagged as Loitering *(M2)* | < 8% of player-rounds | > 15% → camping is outcompeting contracts, revisit R11 |
-| Loitering flags triggered by legitimate short-haul play *(M5.5 — no operational definition exists to compute against)* | < 10% of flags | > 20% → the 1-step radius is too wide, or the action exemption too narrow |
-| Heat Map entries at low confidence (< 3 observations) *(M2)* | < 40% | > 60% → observation coverage too thin for the tool to be usable |
-| Confrontations occurring in the final 3 rounds *(M2)* | < 30% of all confrontations | > 45% → endgame farming is real (R11) |
+*The row numbers are the identifiers [D33](../decisions/D33-telemetry-event-stream-coverage.md)'s audit, `internal/telemetry`, and the decision log already cite as "§22 row N" — printed here so a citation can be checked against the table. **They are append-only**: a new metric goes on the end, never inserted, or every citation in the code and the decision log silently moves.*
+
+| # | Metric | Target band | Fails if |
+|---|---|---|---|
+| 1 | Routes cancelled mid-route *(M2)* | < 15% of submitted routes | **> 15%** → confrontation too punishing (R1) |
+| 2 | Deliveries per player *(M2)* | 4–6 | < 3 → cooldown too long or map too large |
+| 3 | Winner's RP lead over last place *(M2)* | < 40% | > 40% → comeback mechanisms insufficient |
+| 4 | Matches where a player reached Infamy 9 *(M2)* | > 20% | **< 10%** → step gradient too steep (R7) |
+| 5 | Matches where a player stayed at Infamy ≤ 2 to the end *(M2)* | < 25% | > 40% → anonymity still dominant (R3) |
+| 6 | Sector incidents actually hitting a player *(M2)* | 30–60% of incidents | < 20% → players route around trivially; > 70% → unavoidable, feels unfair (R6) |
+| 7 | Live leases at final scoring, per player *(M2)* | 2–4 | < 1 → lease rate too high (§10.4) |
+| 8 | Share of map under sight in the final third *(M2; with row 19, the headless guardrail on R9's remedy — D38)* | 30–55% | **> 65%** → post sight still too generous (§7.2) |
+| 9 | Confrontations won against an Evasive loser *(M2)* | 20–40% of all confrontations | > 55% → Evasive is still the default insurance (§9.3) |
+| 10 | Confrontations per match, 4–5 players *(M2)* | 4–12 | **> 12** → map too small (R9); the Board (§7.5) going unused is the leading indicator — rows 15 and 16, not a headless row (D38) |
+| 11 | Confrontations per match, 2 players *(M2)* | 4–12 | < 4 → rotating borders (§6.3) not converging hard enough |
+| 12 | Players ending a route in a flagged unstable sector *(M2)* | 25–50% of player-rounds | **< 15%** → boon share too low, the flag is still just "stay out" (§14.3) |
+| 13 | Share of RP swing traceable to [O] cards *(M2, open — no precise answer in the first pass, see D33)* | < 15% | > 25% → boons are paying in cash where they should pay in tempo (§14.0) |
+| 14 | Convergence [C] cards that produced a confrontation *(M2, loose reading — "a confrontation occurred in a [C]-card round," see D33)* | > 40% | < 20% → the convergence tag is decorative |
+| 15 | Attribution queries that ruled out at least one player *(M5.5 — human question over a UI that doesn't exist yet; with row 16, this is R9's leading indicator — D38)* | > 50% | **< 30%** → the one-round horizon is still too generous; the tool is theatre (§7.5) |
+| 16 | Heat Map opened per player per match *(M5 — UI instrumentation, not a headless fact; with row 15, this is R9's leading indicator — D38)* | > 5 | < 2 → pattern-reading isn't landing; check whether corridors actually exist on generated maps, **or whether collisions have made deduction unnecessary (R9)** |
+| 17 | Rounds flagged as Loitering *(M2)* | < 8% of player-rounds | > 15% → camping is outcompeting contracts, revisit R11 |
+| 18 | Loitering flags triggered by legitimate short-haul play *(M5.5 — no operational definition exists to compute against)* | < 10% of flags | > 20% → the 1-step radius is too wide, or the action exemption too narrow |
+| 19 | Heat Map entries at low confidence (< 3 observations) *(M2; with row 8, the headless guardrail on R9's remedy — D38)* | < 40% | > 60% → observation coverage too thin for the tool to be usable |
+| 20 | Confrontations occurring in the final 3 rounds *(M2)* | < 30% of all confrontations | > 45% → endgame farming is real (R11) |
 
 ### Per round
 - Median and 90th-percentile time to submit an order, by round number. **Target: median under the timer by round 3.** If players are still timing out at round 6, the order form is too complex.
