@@ -43,7 +43,9 @@ simulate --matches 10000 --players 4 --bots drifter \
 
 `MapByPlayers[5]` stays at `{Nodes: 28, MinEdges: 40, MaxEdges: 45}` — [#203](203-confrontation-load.md) measured 19.10 / 19.12 confrontations per match here, over threshold by a wider margin than the 4-player row was. Raising node count, the same lever that fixed 4 players, does not close this gap.
 
-[D8](../decisions/D08-sector-size-constraint.md) fixes the map generator at exactly four sectors, each holding 3-8 nodes (`sectorSizes()`, `internal/rules/gen/sector.go`). That arithmetic caps the generator at **32 nodes**: at 33, the split always produces at least one 9-node sector, which `Params.validate()` rejects. 32 is therefore the highest node count `MapByPlayers[5]` could ever be raised to under the current generator, without reopening D8.
+[D8](../decisions/D08-sector-size-constraint.md) fixes the map generator at exactly four sectors, each holding 3-8 nodes (`sectorSizes()`, `internal/rules/gen/sector.go`). That arithmetic puts the design ceiling at **32 nodes**: at 33, the split produces a 9-node sector, outside D8's stated range. 32 is therefore the highest node count `MapByPlayers[5]` can be raised to without reopening D8.
+
+> **Correction ([D37](../decisions/D37-five-player-confrontation-load.md)):** the paragraph above originally added that 33 nodes is "rejected by `Params.validate()`." It is not. `validate()` bounds `Nodes` only from below, `sectorSizes()` has no cap, and D8's `[3, 8]` range is asserted only in tests — 33-36 nodes generate valid graphs today. The generator's real ceiling is **36**; at 37, the first 10-node sector overruns [D10](../decisions/D10-map-layout.md)'s fixed 9-cell layout lattice and `computeLayout` panics rather than failing validation ([#239](https://github.com/garnizeh/cinzal/issues/239)). This changes nothing about the measurement below — 32 remains the last node count inside D8's documented range, which is the number this section was choosing — only about what enforces it.
 
 Measured at that ceiling (Drifter, 10,000 matches, both root seeds, `Nodes: 32, MinEdges: 46, MaxEdges: 51` — average degree 2.88-3.19, the same band the shipped rows use):
 
@@ -52,15 +54,17 @@ Measured at that ceiling (Drifter, 10,000 matches, both root seeds, `Nodes: 32, 
 | 1 | 16.54 [16.45, 16.62] |
 | 2 | 16.57 [16.49, 16.66] |
 
-**Verdict: raising node count cannot close the 5-player gap.** Even at the generator's maximum, the rate stays far above 12.
+**Verdict: raising node count cannot close the 5-player gap within D8's stated range.** At the largest map that range allows, the rate stays far above 12.
+
+> **Follow-up ([D37](../decisions/D37-five-player-confrontation-load.md)):** continuing the curve *past* that range — which needs D8's per-sector ceiling and D10's layout lattice both raised — the threshold does eventually clear, at **46 nodes** (11.59 / 11.62, both intervals below 12). D37 declines to pay for it: by 46 nodes, §22's share-of-map-under-sight row has fallen out of its 30-55% band (0.281) and its Heat-Map-low-confidence row has risen out of its `< 40%` target (0.445), which is the "Board goes unused" leading indicator this document's next section is about. The 5-player row is deferred to M5.5.
 
 A smaller-scale check (3,000 matches, single seed) also tried edge density outside the shipped ~2.8-3.2 average-degree band at 32 nodes, in both directions — sparser (~2.0) and denser (~4.0). Both made match generation pathologically slow: constraint 4's chokepoint band (3-5 edges between adjacent sectors) and constraint 2's degree cap (2-4) leave very little slack outside the documented band, which is consistent with why the shipped table never strayed from it. Edge-density tuning is not a lever this generator has room for either.
 
-Closing the 5-player gap needs an architecture-level decision, not a `Config` edit — filed as [D37](https://github.com/garnizeh/cinzal/issues/232) rather than folded into this task, per this repository's own task-vs-decision discipline (CLAUDE.md: *"A task that can't cite a GDD/RFC section is really a decision — file it as one"*).
+Closing the 5-player gap needs an architecture-level decision, not a `Config` edit — filed as [#232](https://github.com/garnizeh/cinzal/issues/232) rather than folded into this task, per this repository's own task-vs-decision discipline (CLAUDE.md: *"A task that can't cite a GDD/RFC section is really a decision — file it as one"*). That issue was later decided as [D37](../decisions/D37-five-player-confrontation-load.md).
 
 ## A gap in the leading indicator
 
-R9's own GDD text (§20) and §22's confrontations-per-match row both name "the Board going unused" as the leading indicator to watch as node count rises — the failure mode where a bigger map clears the confrontation threshold by making most of it irrelevant rather than by giving players room to actually avoid each other. Checked against `internal/telemetry`'s current metric set while doing this task's own scope bullet ("check... before adding a new one"): no such row exists, in §22's table or in the code. This sweep did not read it, because there is nothing yet to read. Filed separately as [#233](https://github.com/garnizeh/cinzal/issues/233) rather than defined ad hoc here.
+R9's own GDD text (§20) and §22's confrontations-per-match row both name "the Board going unused" as the leading indicator to watch as node count rises — the failure mode where a bigger map clears the confrontation threshold by making most of it irrelevant rather than by giving players room to actually avoid each other. Checked against `internal/telemetry`'s current metric set while doing this task's own scope bullet ("check... before adding a new one"): no such row exists, in §22's table or in the code. This sweep did not read it, because there is nothing yet to read. Filed separately as [#233](https://github.com/garnizeh/cinzal/issues/233) rather than defined ad hoc here. ([D37](../decisions/D37-five-player-confrontation-load.md) later had to read it through the two nearest existing §22 rows — share of map under sight, and Heat Map entries at low confidence — which is a workaround for the missing row, not a substitute for it.)
 
 ## Standing caveat
 

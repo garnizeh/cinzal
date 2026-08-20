@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r32 · **Companion doc:** `cinzal-gdd.md` **v2.26**
+**Status:** draft for review · **Revision:** r33 · **Companion doc:** `cinzal-gdd.md` **v2.27**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -180,6 +180,10 @@
 >
 > **Changelog r31 → r32** — companion pointer only (issue #230)
 > - GDD §6.3's two-player narrative claim ("9-12 band") is corrected to the measured figure (4.5, [#203](https://github.com/garnizeh/cinzal/blob/main/docs/exit-demos/203-confrontation-load.md)). §6.3's confrontation-rate figure is GDD-owned data, not an architecture concern this RFC states — no section here changes. Companion doc moves to GDD v2.26.
+>
+> **Changelog r32 → r33** — companion pointer, and one §6.4 caveat (issue #232, [D37](../decisions/D37-five-player-confrontation-load.md))
+> - GDD's v2.25 changelog claim that the map generator caps at 32 nodes is corrected: nothing enforces [D8](../decisions/D08-sector-size-constraint.md)'s 3-8 per-sector range in production code, and the real ceiling is 36 — at 37, the first 10-node sector runs §6.4's `gen.layout` row out of lattice. **§6.4's layout row and §11.2's canvas are unchanged and still correct as specifications** — the 9-point lattice, the exactly-`n`-draws cost, and the constant `viewBox` all hold. What is *not* true is this RFC's supporting remark that "there is no truncation case for §16.2's invariant test to cover": the case exists, is unguarded, and panics ([#239](https://github.com/garnizeh/cinzal/issues/239)). It is unreachable through any shipped `MapByPlayers` row, so no §16.2 test changes here; the fix belongs to that issue.
+> - GDD's 5-player R9 exit-criteria row is decided as measured-and-deferred to M5.5. §6.1's node/edge table and §22's bands are GDD-owned data, not an architecture concern this RFC states. Companion doc moves to GDD v2.27.
 
 ---
 
