@@ -20,11 +20,14 @@ func fullShuffle[T any](rand Rand, purpose string, items []T) {
 // elements uniformly without replacement into items[:k], consuming exactly
 // k draws under purpose (RFC-001 §6.4's mandated partial-shuffle shape,
 // docs/decisions/D10-map-layout.md). Unlike fullShuffle, it never skips the
-// last iteration: callers that pass k == len(items) pay one extra
-// single-choice draw on the final index, which fullShuffle's own loop bound
-// exists specifically to avoid — this package's only current caller
-// (computeLayout) always calls with k < len(items), since D8 caps every
-// sector at 8 nodes against a 9-cell lattice.
+// last iteration: k == len(items) is legal and costs one extra single-choice
+// draw on the final index, which fullShuffle's own loop bound exists
+// specifically to avoid. This package's only current caller (computeLayout)
+// never pays it — Params.validate's maxSupportedNodes ceiling keeps every
+// sector strictly inside the lattice it shuffles, so k < len(items) always.
+// That headroom used to be argued from D8's cap alone and was not actually
+// checked anywhere; a 9-node sector reached k == len(items) and a 10-node
+// one panicked here on rand(purpose, 0) (#239).
 func partialShuffle[T any](rand Rand, purpose string, items []T, k int) {
 	for i := 0; i < k; i++ {
 		j := i + rand(purpose, len(items)-i)
