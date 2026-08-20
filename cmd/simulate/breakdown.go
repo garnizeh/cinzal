@@ -69,11 +69,20 @@ type Breakdown struct {
 	// two routes — resolveOneDelivery (deliveries.go) and expireContract
 	// (upkeep.go) — so a Tier IV instance that vanished in a round with no
 	// matching game.EventDelivered missed its deadline, which is precisely
-	// what §20 means by abandoned. Accepted is not the sum of the other
-	// two: a contract still held at final scoring is neither.
-	Tier4Accepted  int
-	Tier4Delivered int
-	Tier4Abandoned int
+	// what §20 means by abandoned.
+	//
+	// Tier4Unresolved is the rest, and it is not a rounding error: a Tier
+	// IV contract's deadline is 6 rounds (Config.Contracts[3].Deadline),
+	// so anything accepted from round 10 onward reaches final scoring
+	// having neither been delivered nor missed its deadline. Reporting an
+	// abandonment rate without it would divide by a population most of
+	// whose members were never given the chance to fail. The four fields
+	// satisfy Accepted == Delivered + Abandoned + Unresolved by
+	// construction; breakdown_test.go asserts it rather than assuming it.
+	Tier4Accepted   int
+	Tier4Delivered  int
+	Tier4Abandoned  int
+	Tier4Unresolved int
 
 	// AnyPlayerEverReachedInfamy9 is row 4's "reached" read literally, as
 	// against telemetry.MatchSummary.AnyPlayerReachedInfamy9's final-state
@@ -304,7 +313,11 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 	for _, p := range s.Players {
 		if p.Infamy >= 9 {
 			b.AnyPlayerFinallyReachedInfamy9 = true
-			break
+		}
+		for _, c := range p.Contracts {
+			if c.Tier == tier4Index {
+				b.Tier4Unresolved++
+			}
 		}
 	}
 

@@ -167,7 +167,9 @@ func aggregateBreakdowns(bs []Breakdown, cfg game.Config) []breakdownStat {
 	accepted := newAccum("r7_tier4", "accepted", "Tier IV contracts accepted", n)
 	deliveredT4 := newAccum("r7_tier4", "delivered", "Tier IV contracts delivered", n)
 	abandoned := newAccum("r7_tier4", "abandoned", "Tier IV contracts accepted and then missed", n)
+	unresolved := newAccum("r7_tier4", "unresolved", "Tier IV contracts still held at final scoring", n)
 	abandonRate := newAccum("r7_tier4", "abandon_rate", "abandoned / accepted", n)
+	settledAbandonRate := newAccum("r7_tier4", "abandon_rate_settled", "abandoned / (delivered + abandoned)", n)
 	crossTotal := newAccum("r7_crossing", "total", "transitions from below Infamy 9 to 9+", n)
 	crossDelivery := newAccum("r7_crossing", "with_delivery", "crossings whose round held a delivery", n)
 	crossStake := newAccum("r7_crossing", "with_stake", "crossings whose round held a post stake", n)
@@ -182,7 +184,9 @@ func aggregateBreakdowns(bs []Breakdown, cfg game.Config) []breakdownStat {
 		accepted.count(b.Tier4Accepted)
 		deliveredT4.count(b.Tier4Delivered)
 		abandoned.count(b.Tier4Abandoned)
+		unresolved.count(b.Tier4Unresolved)
 		abandonRate.ratio(b.Tier4Abandoned, b.Tier4Accepted)
+		settledAbandonRate.ratio(b.Tier4Abandoned, b.Tier4Delivered+b.Tier4Abandoned)
 		crossTotal.count(b.Crossings.Total)
 		crossDelivery.count(b.Crossings.WithDelivery)
 		crossStake.count(b.Crossings.WithStake)
@@ -193,7 +197,8 @@ func aggregateBreakdowns(bs []Breakdown, cfg game.Config) []breakdownStat {
 
 	stats = append(stats,
 		finalInfamy9.stat(), everInfamy9.stat(),
-		offered.stat(), accepted.stat(), deliveredT4.stat(), abandoned.stat(), abandonRate.stat(),
+		offered.stat(), accepted.stat(), deliveredT4.stat(), abandoned.stat(), unresolved.stat(),
+		abandonRate.stat(), settledAbandonRate.stat(),
 		crossTotal.stat(), crossDelivery.stat(), crossStake.stat(), crossWin.stat(),
 		crossWinOnly.stat(), crossNone.stat(),
 	)

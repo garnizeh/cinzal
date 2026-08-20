@@ -97,8 +97,9 @@ func TestBreakdownTier4AccountingBalances(t *testing.T) {
 		if b.Tier4Accepted > 0 {
 			sawAccept = true
 		}
-		if b.Tier4Delivered+b.Tier4Abandoned > b.Tier4Accepted {
-			t.Errorf("match %d: %d delivered + %d abandoned exceeds %d accepted", i, b.Tier4Delivered, b.Tier4Abandoned, b.Tier4Accepted)
+		if got := b.Tier4Delivered + b.Tier4Abandoned + b.Tier4Unresolved; got != b.Tier4Accepted {
+			t.Errorf("match %d: %d delivered + %d abandoned + %d unresolved = %d, want %d accepted",
+				i, b.Tier4Delivered, b.Tier4Abandoned, b.Tier4Unresolved, got, b.Tier4Accepted)
 		}
 
 		streamDeliveries := 0
