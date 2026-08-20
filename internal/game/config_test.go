@@ -114,7 +114,7 @@ func TestDefaultConfigMatchesGDDMapTable(t *testing.T) {
 	want := map[int]MapSpec{
 		2: {Nodes: 15, MinEdges: 21, MaxEdges: 23},
 		3: {Nodes: 22, MinEdges: 31, MaxEdges: 35},
-		4: {Nodes: 25, MinEdges: 36, MaxEdges: 40},
+		4: {Nodes: 28, MinEdges: 41, MaxEdges: 45},
 		5: {Nodes: 28, MinEdges: 40, MaxEdges: 45},
 	}
 

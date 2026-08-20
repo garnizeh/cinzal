@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.24 (scope-locked for prototype)
+## Game Design Document — v2.25 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -186,6 +186,11 @@
 > - **§22 gains a "Reading these bands" subsection.** Every band in §22 is a point estimate with an action attached and no stated precision — a sweep returning 12.3 against R9's *"> 12"* was either a rule change or nothing, and nothing in either document said which. [D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md)'s four parts now sit where the bands are read: 10,000 matches per configuration, the match as the sampling unit with one interval formula for every row shape, action only when the interval clears the band, and a per-band tier baseline (Drifter for the two map-geometry questions, Operator for the five that depend on a player who is trying).
 > - **§20's R2 entry gains a pointer to that rule**, so its 3,000-match precedent is not read as the standing sample size — D35 explicitly declines to carry it forward.
 > - No rule change and no band moves. D35's own Consequences section assigned this edit to [#202](https://github.com/garnizeh/cinzal/issues/202), which closed covering D32–D34 only; this closes the gap it left. Companion RFC moves to r30.
+>
+> **Changelog v2.24 → v2.25** — R9 measured clear of §22's threshold at 4-5 players (issue #229)
+> - **§6.1's 4-player row raises to 28 nodes, 41-45 edges** (from 25 nodes, 36-40 edges). [#203](https://github.com/garnizeh/cinzal/blob/main/docs/exit-demos/203-confrontation-load.md)'s exit demonstration measured 13.35-13.38 confrontations per match at the old 25-node map (Drifter, both root seeds) — clearing R9's `> 12` action threshold. The roadmap's own action table names raising node count as the first lever to pull; re-measured at 28 nodes, the rate drops to 11.7-11.9, back inside the 4-12 target band.
+> - **The 5-player row is unchanged.** The same measurement found 19.10-19.12 confrontations per match at the shipped 28-node map — also over threshold, and by a wider margin. Raising node count cannot close this one: 32 nodes is the most this package's map generator can produce under [D8](../decisions/D08-sector-size-constraint.md)'s four-sector, 3-8-nodes-per-sector split, and even there the measured rate (16.8) stays well above 12. Closing the 5-player gap needs a decision this changelog entry does not make — see `docs/exit-demos/229-node-count-raise.md` for the full measurement and the follow-up decision it opened.
+> - No other rule changes. Companion RFC is unaffected — §6.1's table is GDD-owned data, not an RFC-level architecture concern.
 
 ---
 
@@ -349,7 +354,7 @@ Undirected graph, generated procedurally per match from a recorded seed (needed 
 |---|---|---|---|
 | 2 | **15** (see §6.3) | 21–23 | 2.8–3.0 |
 | 3 | 22 | 31–35 | 2.8–3.2 |
-| 4 | 25 | 36–40 | 2.9–3.2 |
+| 4 | **28** (see §20, R9) | 41–45 | 2.9–3.2 |
 | 5 | 28 | 40–45 | 2.9–3.2 |
 
 *(v1.0 quoted "~1.9 edges per node", which implies an average degree of 3.8 — incompatible with the max-degree-4 constraint below, and a far denser map than intended. Corrected.)*

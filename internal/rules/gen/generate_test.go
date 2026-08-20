@@ -541,15 +541,15 @@ func withOpeningDistances(p Params, lo, hi int) Params {
 
 // TestGenerateExhaustsAndNamesFailedConstraint is issue #59's acceptance
 // criterion: "Exhausted retries return an error naming the constraint that
-// failed most often, not a partial graph." Players=25 on a 25-node graph
-// can never place 25 mutually->=4-apart starting positions — constraint 5
+// failed most often, not a partial graph." Players=28 on a 28-node graph
+// can never place 28 mutually->=4-apart starting positions — constraint 5
 // alone is unsatisfiable on any connected graph with minimum degree 2,
 // regardless of topology — while the graph's own structure (GDD §6.1's
-// real 25-node, 36-40-edge table row) succeeds often enough that most
+// real 28-node, 41-45-edge table row) succeeds often enough that most
 // attempts reach and fail constraint 5 specifically, rather than an earlier
 // structural check.
 func TestGenerateExhaustsAndNamesFailedConstraint(t *testing.T) {
-	p := Params{Nodes: 25, MinEdges: 36, MaxEdges: 40, Players: 25, MaxAttempts: 50, OpeningMinDistance: 3, OpeningMaxDistance: 4}
+	p := Params{Nodes: 28, MinEdges: 41, MaxEdges: 45, Players: 28, MaxAttempts: 50, OpeningMinDistance: 3, OpeningMaxDistance: 4}
 
 	g, err := Generate(newTestRand(0), p)
 	if err == nil {

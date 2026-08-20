@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r30 · **Companion doc:** `cinzal-gdd.md` **v2.24**
+**Status:** draft for review · **Revision:** r31 · **Companion doc:** `cinzal-gdd.md` **v2.25**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -174,6 +174,9 @@
 > - **§16.1 gains M2's two test layers**: bot-populated determinism and index accounting including the Autopilot handover ([#201](https://github.com/garnizeh/cinzal/issues/201)), and the type-level `internal/bots` gate ([#195](https://github.com/garnizeh/cinzal/issues/195)) — which §5's import-graph check structurally cannot express, since `bots` legitimately imports `rules` for `BotRNG`. §21's milestone-2 row is updated to name `internal/telemetry` and `BotRNG` alongside the tiers.
 > - **r29's own closing bullet said `internal/rules` where it meant `internal/bots`** — `internal/rules` has been fully implemented since M1 closed. Corrected in place rather than left standing, since the sentence's whole job is to say which packages are still empty.
 > - No behaviour change: `internal/bots` is still `doc.go` only, `cmd/simulate` is a `doc.go` plus an empty `main`, and `internal/telemetry` has no directory at all yet. Every correction here is the document catching up to D01, D34 and D35, not the reverse.
+>
+> **Changelog r30 → r31** — companion pointer only (issue #229)
+> - GDD §6.1's 4-player node/edge row moved (25→28 nodes) to clear R9's confrontation-load threshold, measured in [#203](https://github.com/garnizeh/cinzal/blob/main/docs/exit-demos/203-confrontation-load.md) and re-measured in `docs/exit-demos/229-node-count-raise.md`. §6.1's table is GDD-owned data (per-player-count node/edge counts), not an architecture concern this RFC states — no section here changes. Companion doc moves to GDD v2.25.
 
 ---
 
