@@ -6,7 +6,7 @@
 
 ## Headline result
 
-**No point in the tested space comes anywhere close to the 2–4/player target band, at any player count, on either bot tier, even at the most economically favorable configuration tested.** The single highest value found anywhere in this sweep is 0.066 leases/player (Drifter, 2 players, `LeaseCostPerBlock=1, LeaseBlockRounds=15`) — 15× below GDD §22's `< 1` failing floor, and 30–60× below the target band itself. Every measured Operator point is below 0.003.
+**No point in the tested space comes anywhere close to the 2–4/player target band, at any player count, on either bot tier, even at the most economically favorable configuration tested.** The single highest value found anywhere in this sweep is 0.0666 leases/player (Drifter, 4 players, `LeaseCostPerBlock=1, LeaseBlockRounds=15`) — 15× below GDD §22's `< 1` failing floor, and 30–60× below the target band itself. Every measured Operator point is at or below 0.0031.
 
 This is not a "the dial needs retuning" result — it's **the dial the sweep was asked to turn is not the binding constraint.** §Root cause below identifies the actual bottleneck, which sits in `internal/bots`, outside `game.Config` and outside what `--sweep` can reach.
 
@@ -20,7 +20,7 @@ This is not a "the dial needs retuning" result — it's **the dial the sweep was
 | Matches per configuration | 10,000 |
 | Player counts | 2, 3, 4, 5 |
 | Bot tiers | Operator (D35's read tier for this row) and Drifter, both reported |
-| Total configurations run | 106 (every row below has `status=ok`, `matches_completed=10000`) |
+| Total configurations run | 103 (every row below has `status=ok`, `matches_completed=10000`) |
 
 Every point below is a single-seed run — per D35, a swept metric's "verdict" is a range read in dial order across points, not a pooled accept/reject at one configuration, so the second-seed re-run D35 reserves for a straddling *baseline* check doesn't apply here. No re-run was needed regardless: every point sits so far outside the band that no interval anywhere is close to straddling a line.
 
@@ -98,7 +98,7 @@ All figures `mean [95% interval]`.
 
 **`LeaseBlockRounds=1` gives exactly 0.0000 for Operator at every player count — a precise, reproducible mechanism, not noise.** `internal/bots/operator.go:508` always funds a fresh stake with `const blocks = 1`. At `LeaseBlockRounds=1`, that stake has `RoundsRemaining=1` the moment it's placed; by the next round's `Decide`, upkeep has already expired and removed it from `v.You.Posts`. `internal/bots/runner.go:471-494`'s `maybeRenewLease` (the renewal heuristic Operator shares with Runner) only renews a post that's still *in* `v.You.Posts` with `RoundsRemaining <= 2` — it never sees the post again once it's gone, so Operator can never catch a one-round-duration lease before it lapses. This isn't cost-sensitive: the grid below shows the same exact-zero at `rounds=1` for `cost∈{1,3,6}`.
 
-**Operator's rounds curve is nearly flat (0.0016–0.0027 across the whole tested range) — pushing duration up does not close the gap.** Drifter's curve keeps climbing (0.003→0.031 at 2p from rounds 1→6) because it has no renewal-timing dependency, but even its best value in this sweep is 30× below the failing floor.
+**Operator's rounds curve is nearly flat (0.0011–0.0027 across the whole tested range) — pushing duration up does not close the gap.** Drifter's curve keeps climbing (0.003→0.031 at 2p from rounds 1→6) because it has no renewal-timing dependency, but even its best value in this sweep is 30× below the failing floor.
 
 ### Practical ceiling and true collapse-to-zero (supplementary points, 4p)
 
@@ -108,9 +108,9 @@ All figures `mean [95% interval]`.
 | `LeaseCostPerBlock=1, LeaseBlockRounds=15` (cheapest realistic cost × longest possible duration — the single most favorable point in the entire economic space) | 0.0026 [.0021,.0030] | 0.0666 [.0639,.0693] |
 | `LeaseCostPerBlock=20` (roughly 1.7× `StartingBalance`) | 0.00028 [.00011,.00044] | 0.00005 [−0.00002,.00012] |
 
-Pushing `LeaseBlockRounds` to 15 — a single lease that, once staked, would need no renewal for the rest of the match — moves Operator from 0.0018 (default) to 0.0021: essentially flat, confirming duration was never the constraint for Operator. Even stacking the single cheapest cost with the maximum duration only reaches 0.0026 (Operator) / 0.0666 (Drifter) — the best-case point in the whole space, still 15–380× below `< 1`. At the high end, `LeaseCostPerBlock=20` drives both tiers to Drifter's interval touching zero — this is the genuine collapse-to-zero the issue asked to locate, reached by cost alone with no interaction with duration.
+Pushing `LeaseBlockRounds` to 15 — a single lease that, once staked, would need no renewal for the rest of the match — moves Operator from 0.0018 (default) to 0.0021: essentially flat, confirming duration was never the constraint for Operator. Even stacking the single cheapest cost with the maximum duration only reaches 0.0026 (Operator) / 0.0666 (Drifter) — the best-case point in the whole space, still 15–380× below `< 1`. At the high end, `LeaseCostPerBlock=20` drives both tiers down to their lowest measured values, Drifter's interval reaching down to touch zero — but the sweep has no points between 10 and 20, so this is the first tested near-zero observation, not a located collapse threshold.
 
-**The two named ends, as the issue requested:** the cost at which leasing collapses to zero is **~20** (roughly 1.7× `StartingBalance`, i.e. more than a fresh player can ever afford for one block). The cost at which players hold the post cap **is not reached anywhere in this sweep** — not because the sweep didn't look, but because §Root cause identifies a gate upstream of the economic dial entirely that neither `LeaseCostPerBlock` nor `LeaseBlockRounds` can move past.
+**The two named ends, as the issue requested:** `LeaseCostPerBlock=20` is the first tested near-zero point (roughly 1.7× `StartingBalance`, i.e. more than a fresh player can ever afford for one block) — narrowing exactly where between 10 and 20 the curve reaches zero would need intermediate points this sweep didn't run. The cost at which players hold the post cap **is not reached anywhere in this sweep** — not because the sweep didn't look, but because §Root cause identifies a gate upstream of the economic dial entirely that neither `LeaseCostPerBlock` nor `LeaseBlockRounds` can move past.
 
 ## 2D grid — does cost/rounds collapse to one effective dial? (4p, Operator)
 
@@ -130,7 +130,7 @@ Pushing `LeaseBlockRounds` to 15 — a single lease that, once staked, would nee
 
 ## Root cause
 
-**The bottleneck is not `LeaseCostPerBlock` or `LeaseBlockRounds` — it's `OperatorOptions.ChokepointTrafficRate` (0.98) and `ChokepointMinObserved` (9), a bots-package tuning pair outside `game.Config` and outside anything `--sweep` can reach.** Operator only ever *attempts* a fresh stake when `findChokepoint` (`internal/bots/operator.go:209-231`) identifies a node clearing 98% observed traffic rate over at least 9 observed rounds — a bar high enough that, per that function's own documented rationale:
+**The bottleneck is not `LeaseCostPerBlock` or `LeaseBlockRounds` — it's `OperatorOptions.ChokepointTrafficRate` (0.98) and `ChokepointMinObserved` (9), a bots-package tuning pair outside `game.Config` and outside anything `--sweep` can reach.** Operator only ever *attempts* a fresh stake when `findChokepoint` (`internal/bots/operator.go:231-272`) identifies a node clearing 98% observed traffic rate over at least 9 observed rounds — a bar high enough that, per that function's own documented rationale:
 
 > "The bar sits high enough that only a corridor near certainty ... clears it, so the behaviour fires rarely against real Heat Map data while remaining fully implemented" (`operator.go:85-88`)
 
@@ -138,7 +138,7 @@ That tuning was **already a deliberate, measured trade-off**, made before this i
 
 ## Verdict
 
-**GDD §22's lease-rate exit criterion cannot be met by a `game.Config` edit.** The issue's own expected result — "a stated range of `LeaseCostPerBlock` × `LeaseBlockRounds` values that put live leases at scoring inside 2–4 per player ... with the shipped default either inside that range or changed to be" — presupposes a range exists inside the tested Config space. It does not: every one of the 106 configurations measured here, spanning cost 0–20 and duration 1–15 (the full sensible range — 15 is the whole match), stays at least an order of magnitude below even the `< 1` failing floor. No `Config` PR is being opened alongside this document, because none would be honest: changing `LeaseCostPerBlock` or `LeaseBlockRounds` to any value in the tested (or plausible untested) range does not move Operator's lease rate meaningfully, because the rate is gated upstream by `OperatorOptions`, not by `Config`.
+**GDD §22's lease-rate exit criterion cannot be met by a `game.Config` edit.** The issue's own expected result — "a stated range of `LeaseCostPerBlock` × `LeaseBlockRounds` values that put live leases at scoring inside 2–4 per player ... with the shipped default either inside that range or changed to be" — presupposes a range exists inside the tested Config space. It does not: every one of the 103 configurations measured here, spanning cost 0–20 and duration 1–15 (the full sensible range — 15 is the whole match), stays at least an order of magnitude below even the `< 1` failing floor. No `Config` PR is being opened alongside this document, because none would be honest: changing `LeaseCostPerBlock` or `LeaseBlockRounds` to any value in the tested (or plausible untested) range does not move Operator's lease rate meaningfully, because the rate is gated upstream by `OperatorOptions`, not by `Config`.
 
 This is the sweep finding its own shape, per D35's own framing for the "no point fully inside the band" case: *"reported as 'out of band across the tested range,' not as a missing breakpoint ... an instruction to extend the sweep further in that direction."* Here that direction is not further along `LeaseCostPerBlock`/`LeaseBlockRounds` — the practical ceiling and collapse-to-zero points above already bound that axis — it's outside `game.Config` entirely, in `internal/bots`'s own tuning.
 
