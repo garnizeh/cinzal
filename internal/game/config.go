@@ -194,10 +194,23 @@ func DefaultConfig() Config {
 			{InfamyRequired: 6, MinDistance: 5, MaxDistance: 8, Payment: 20, RP: 5, Deadline: 5, Penalty: 8, PenaltyInfamy: 0, OfferWeight: 1},
 			{InfamyRequired: 9, MinDistance: 6, MaxDistance: 0, Payment: 30, RP: 8, Deadline: 6, Penalty: 12, PenaltyInfamy: 2, OfferWeight: 1},
 		},
+		// 4's Nodes/MinEdges/MaxEdges were raised from {25, 36, 40} by
+		// issue #229: #203's exit demonstration measured confrontations
+		// per match at 13.35-13.38 (Drifter, both root seeds), clearing
+		// R9/§22's ">12" action threshold. 28 nodes brings it back to
+		// 11.7-11.9, comfortably inside the 4-12 target band — see
+		// docs/exit-demos/229-node-count-raise.md.
+		//
+		// 5's confrontation rate (19.1, same measurement) does not have a
+		// matching fix here: raising Nodes to 32, the maximum this
+		// package's generator can produce under D8's four-sector/3-8-per-
+		// sector split, only brings it down to ~16.5 — still far over the
+		// threshold. That gap is open, tracked separately (see the exit
+		// demo doc), not silently left unaddressed.
 		MapByPlayers: map[int]MapSpec{
 			2: {Nodes: 15, MinEdges: 21, MaxEdges: 23},
 			3: {Nodes: 22, MinEdges: 31, MaxEdges: 35},
-			4: {Nodes: 25, MinEdges: 36, MaxEdges: 40},
+			4: {Nodes: 28, MinEdges: 41, MaxEdges: 45},
 			5: {Nodes: 28, MinEdges: 40, MaxEdges: 45},
 		},
 		MaxGenAttempts: 1000,
