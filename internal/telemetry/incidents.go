@@ -6,20 +6,22 @@ import (
 )
 
 // liveIncidentRounds returns every round in 1..cfg.Rounds with a live
-// sector incident card, re-derived from deck's own length rather than a new
+// sector incident card, re-derived from the deck rather than from a new
 // event — GDD §14.3's incident deck runs "From round 3 onward," one card
-// per round, deck[round-3], the same non-consuming peek
-// incidentCardThisRound (internal/rules/incidents.go) already uses inside
-// Resolve. Duplicated here rather than exported from internal/rules because
-// it is pure arithmetic over already-exported fields (MatchState.Graph.
-// IncidentDeck, cfg.Rounds) — no RNG, no rules-internal state — the same
-// "seed-derivable, re-derivable exactly" move D33 uses for row 14's event
-// card identity.
-func liveIncidentRounds(cfg game.Config, deckLen int) []game.RoundNumber {
+// per round, the same non-consuming peek incidentCardThisRound
+// (internal/rules/incidents.go) uses inside Resolve, reached here through
+// its exported form. That is the "seed-derivable, re-derivable exactly"
+// move D33 uses for row 14's event card identity.
+//
+// This function once carried its own copy of the deck[round-3] arithmetic,
+// on the argument that it is pure over already-exported fields
+// (MatchState.Graph.IncidentDeck, cfg.Rounds) and so safe to duplicate. The
+// argument held right up until cmd/simulate needed a third copy for #205's
+// per-card R6 breakdown — see rules.IncidentCardForRound's own comment.
+func liveIncidentRounds(cfg game.Config, deck []rules.IncidentCardID) []game.RoundNumber {
 	var rounds []game.RoundNumber
 	for r := 1; r <= cfg.Rounds; r++ {
-		idx := r - 3
-		if idx >= 0 && idx < deckLen {
+		if _, live := rules.IncidentCardForRound(game.RoundNumber(r), deck); live {
 			rounds = append(rounds, game.RoundNumber(r))
 		}
 	}
@@ -29,7 +31,7 @@ func liveIncidentRounds(cfg game.Config, deckLen int) []game.RoundNumber {
 // sectorIncidentsHittingAPlayer computes
 // MatchSummary.SectorIncidentsHittingAPlayer.
 func sectorIncidentsHittingAPlayer(s rules.MatchState, cfg game.Config, events []game.Event) Rate {
-	rounds := liveIncidentRounds(cfg, len(s.Graph.IncidentDeck))
+	rounds := liveIncidentRounds(cfg, s.Graph.IncidentDeck)
 	if len(rounds) == 0 {
 		return Rate{}
 	}

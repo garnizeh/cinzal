@@ -216,6 +216,11 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 		cfgDigest := sha256.Sum256(cfgJSON)
 		breakdownFixed["config_sha256"] = hex.EncodeToString(cfgDigest[:])
 
+		// nil means "this configuration measured nothing" — the error row,
+		// distinct from a configuration that ran and produced zero rows,
+		// which aggregateBreakdowns never returns.
+		var breakdownStats []breakdownStat
+
 		results, runErr := runMatches(seeds, p.cfg, *players, bot, *workers)
 		if runErr != nil {
 			// Fails closed (issue #200's own acceptance criterion): a
@@ -232,12 +237,6 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 			breakdownFixed["matches_completed"] = "0"
 			anyErr = true
 			logLine(stderr, "[%d/%d] %s: ERROR: %v", i+1, len(points), label, runErr)
-			if breakdown != nil {
-				if err := breakdown.writeErrorRow(breakdownFixed); err != nil {
-					logLine(stderr, "cmd/simulate: write breakdown row: %v", err)
-					return 1
-				}
-			}
 		} else {
 			row["status"] = "ok"
 			row["matches_completed"] = strconv.Itoa(len(results))
@@ -261,17 +260,32 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 				for k, res := range results {
 					breakdowns[k] = res.Breakdown
 				}
-				if err := breakdown.writeRows(breakdownFixed, aggregateBreakdowns(breakdowns, p.cfg)); err != nil {
-					logLine(stderr, "cmd/simulate: write breakdown row: %v", err)
-					return 1
-				}
+				breakdownStats = aggregateBreakdowns(breakdowns, p.cfg)
 			}
 			logLine(stderr, "[%d/%d] %s: done", i+1, len(points), label)
 		}
 
+		// The --out row lands first, unconditionally, and a --breakdown
+		// failure below can no longer skip it. --out is the authoritative
+		// file (issue #200: "the CSV is a document, not a debug dump") and
+		// --breakdown is a second view of the same run, so a configuration
+		// present in the breakdown and absent from the sweep is the one
+		// disagreement between the two files that must not be reachable.
 		if err := report.writeRow(row); err != nil {
 			logLine(stderr, "cmd/simulate: write row: %v", err)
 			return 1
+		}
+		if breakdown != nil {
+			var err error
+			if breakdownStats == nil {
+				err = breakdown.writeErrorRow(breakdownFixed)
+			} else {
+				err = breakdown.writeRows(breakdownFixed, breakdownStats)
+			}
+			if err != nil {
+				logLine(stderr, "cmd/simulate: write breakdown row: %v", err)
+				return 1
+			}
 		}
 	}
 

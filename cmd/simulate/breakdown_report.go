@@ -109,7 +109,21 @@ func aggregateBreakdowns(bs []Breakdown, cfg game.Config) []breakdownStat {
 		byRound[i] = newAccum("r1_round", strconv.Itoa(i+1), "halted / submitted, this round only", n)
 	}
 
-	for _, b := range bs {
+	for k, b := range bs {
+		// Every Breakdown here was produced by breakdownTracker.finish
+		// under the same cfg, so all three lengths agree by construction.
+		// Checked anyway, and loudly: this is a package-level function
+		// taking any slice, and the two silent alternatives are both worse
+		// than a named panic. Indexing past byRound panics with nothing but
+		// an offset to go on, and truncating to the shorter of the two
+		// writes a per-round table that is quietly missing rounds — the
+		// exact shape of "a gate that passes when it can't run" (CLAUDE.md)
+		// applied to a document nobody would re-derive.
+		if len(b.RoutesSubmittedByRound) != cfg.Rounds || len(b.RoutesHaltedByRound) != cfg.Rounds {
+			panic(fmt.Sprintf("cmd/simulate: aggregateBreakdowns: match %d has %d submitted / %d halted per-round entries, want %d each (cfg.Rounds)",
+				k, len(b.RoutesSubmittedByRound), len(b.RoutesHaltedByRound), cfg.Rounds))
+		}
+
 		submitted, halted := 0, 0
 		for i := range b.RoutesSubmittedByRound {
 			byRound[i].ratio(b.RoutesHaltedByRound[i], b.RoutesSubmittedByRound[i])
@@ -241,16 +255,28 @@ func openBreakdownReport(path string, prov provenance, header []string) (*breakd
 	if err != nil {
 		return nil, fmt.Errorf("cmd/simulate: create breakdown %s: %w", path, err)
 	}
+
+	// Every failure below has to close f and remove the file it just
+	// created. Leaving it behind is worse here than the leaked descriptor:
+	// O_EXCL is what makes this writer refuse to splice two sweeps into one
+	// file, so an empty, header-less file left on disk blocks the retry that
+	// the error is telling the operator to run.
+	fail := func(err error) (*breakdownReport, error) {
+		_ = f.Close()
+		_ = os.Remove(path)
+		return nil, err
+	}
+
 	if _, err := fmt.Fprintln(f, prov.breakdownLine()); err != nil {
-		return nil, fmt.Errorf("cmd/simulate: write breakdown provenance line: %w", err)
+		return fail(fmt.Errorf("cmd/simulate: write breakdown provenance line: %w", err))
 	}
 	w := csv.NewWriter(f)
 	if err := w.Write(header); err != nil {
-		return nil, fmt.Errorf("cmd/simulate: write breakdown header: %w", err)
+		return fail(fmt.Errorf("cmd/simulate: write breakdown header: %w", err))
 	}
 	w.Flush()
 	if err := w.Error(); err != nil {
-		return nil, fmt.Errorf("cmd/simulate: write breakdown header: %w", err)
+		return fail(fmt.Errorf("cmd/simulate: write breakdown header: %w", err))
 	}
 	return &breakdownReport{f: f, w: w, header: header}, nil
 }

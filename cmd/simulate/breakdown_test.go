@@ -13,6 +13,7 @@ import (
 	"github.com/garnizeh/cinzal/internal/bots"
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/rules"
+	"github.com/garnizeh/cinzal/internal/telemetry"
 )
 
 // breakdownMatches runs a handful of real matches, the same way a sweep
@@ -68,6 +69,56 @@ func TestBreakdownAgreesWithTelemetry(t *testing.T) {
 		if got, want := b.AnyPlayerFinallyReachedInfamy9, res.Summary.AnyPlayerReachedInfamy9; got != want {
 			t.Errorf("match %d: AnyPlayerFinallyReachedInfamy9 = %v, telemetry row 4 = %v", i, got, want)
 		}
+	}
+}
+
+// TestAggregateBreakdownsReproducesTheTelemetryRowsItSplits is the
+// assertion the exit demonstration's own provenance section leans on. The
+// per-match check above proves the raw counts agree; this proves the whole
+// pipeline agrees — the same matches, reduced by the same D35 interval
+// routine, must produce identical numbers whether they arrive through
+// telemetry.MatchSummary and metricSpecs or through Breakdown and
+// aggregateBreakdowns. The three rows compared are exactly the three the
+// write-up quotes as headline figures.
+func TestAggregateBreakdownsReproducesTheTelemetryRowsItSplits(t *testing.T) {
+	results, cfg := breakdownMatches(t, 4, bots.Operator, 60)
+
+	summaries := make([]telemetry.MatchSummary, len(results))
+	breakdowns := make([]Breakdown, len(results))
+	for i, res := range results {
+		summaries[i] = res.Summary
+		breakdowns[i] = res.Breakdown
+	}
+
+	metrics := map[string]metricResult{}
+	for i, m := range computeMetrics(summaries) {
+		metrics[metricSpecs[i].name] = m
+	}
+	stats := map[string]breakdownStat{}
+	for _, s := range aggregateBreakdowns(breakdowns, cfg) {
+		stats[s.block+"/"+s.key] = s
+	}
+
+	for _, tt := range []struct{ row, metric string }{
+		{"r1_overall/all", "RoutesCancelledMidRoute"},
+		{"r6_overall/all", "SectorIncidentsHittingAPlayer"},
+		{"r7_infamy9/final", "AnyPlayerReachedInfamy9"},
+	} {
+		t.Run(tt.row, func(t *testing.T) {
+			got, ok := stats[tt.row]
+			if !ok {
+				t.Fatalf("aggregateBreakdowns produced no %q row", tt.row)
+			}
+			want := metrics[tt.metric]
+			if got.ok != want.ok || got.n != want.n || got.excluded != want.excluded {
+				t.Errorf("%s = (ok %v, n %d, excluded %d), telemetry %s = (ok %v, n %d, excluded %d)",
+					tt.row, got.ok, got.n, got.excluded, tt.metric, want.ok, want.n, want.excluded)
+			}
+			if got.mean != want.mean || got.halfWidth != want.halfWidth {
+				t.Errorf("%s = %g ± %g, telemetry %s = %g ± %g",
+					tt.row, got.mean, got.halfWidth, tt.metric, want.mean, want.halfWidth)
+			}
+		})
 	}
 }
 
@@ -209,6 +260,38 @@ func TestAggregateBreakdownsExcludesEmptyDenominators(t *testing.T) {
 	accepted := stats["r7_tier4/accepted"]
 	if accepted.n != 2 || accepted.excluded != 0 || accepted.numerator != 1 || accepted.denominator != 2 {
 		t.Errorf("r7_tier4/accepted = %+v, want n 2, excluded 0, pooled 1/2", accepted)
+	}
+}
+
+// TestAggregateBreakdownsRejectsAMismatchedRoundVector pins the loud half
+// of the per-round indexing rule. Truncating to the shorter of the two
+// vectors would write a per-round table quietly missing rounds, which is
+// the same failure as a gate reporting green having inspected nothing —
+// so a mismatch names itself instead.
+func TestAggregateBreakdownsRejectsAMismatchedRoundVector(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Rounds = 3
+
+	for _, tt := range []struct {
+		name string
+		b    Breakdown
+	}{
+		{"too long", Breakdown{RoutesSubmittedByRound: []int{1, 1, 1, 1}, RoutesHaltedByRound: []int{0, 0, 0, 0}}},
+		{"too short", Breakdown{RoutesSubmittedByRound: []int{1, 1}, RoutesHaltedByRound: []int{0, 0}}},
+		{"halted disagrees with submitted", Breakdown{RoutesSubmittedByRound: []int{1, 1, 1}, RoutesHaltedByRound: []int{0, 0}}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			defer func() {
+				r := recover()
+				if r == nil {
+					t.Fatal("aggregateBreakdowns returned normally on a mismatched per-round vector")
+				}
+				if msg, _ := r.(string); !strings.Contains(msg, "cfg.Rounds") {
+					t.Errorf("panic message does not name the problem: %v", r)
+				}
+			}()
+			aggregateBreakdowns([]Breakdown{tt.b}, cfg)
+		})
 	}
 }
 

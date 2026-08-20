@@ -155,6 +155,17 @@ type contractKey struct {
 // last band, the one R7 is entirely about.
 const tier4Index = 3
 
+// legendInfamy is GDD §11's Legend band floor, and GDD §22 row 4's own
+// "reached Infamy 9". Deliberately a constant here and not read from
+// Config.Contracts[tier4Index].InfamyRequired, which also happens to be 9:
+// those are two different facts that coincide. One is where the Infamy
+// ladder's top tier starts, which is a rule; the other is what Tier IV
+// contracts ask of you, which is a dial a scenario Config may move (D11).
+// Reading the ladder off the contract table would silently redefine row 4
+// the first time a scenario changed the contract. internal/telemetry's own
+// row-4 read spells the same 9 out for the same reason.
+const legendInfamy = 9
+
 // breakdownTracker accumulates the facts that are only visible between
 // rounds. R1's and R6's splits are recoverable at the end from the order
 // log, the event stream and the final MatchState (finish, below); R7's are
@@ -219,9 +230,9 @@ func (t *breakdownTracker) observe(s rules.MatchState, roundEvents []game.Event)
 		}
 		t.prevContracts[seat] = held
 
-		if p.Infamy >= 9 {
+		if p.Infamy >= legendInfamy {
 			t.b.AnyPlayerEverReachedInfamy9 = true
-			if t.prevInfamy[seat] < 9 {
+			if t.prevInfamy[seat] < legendInfamy {
 				t.b.Crossings.record(acts[seat])
 			}
 		}
@@ -311,7 +322,7 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 	b := t.b
 
 	for _, p := range s.Players {
-		if p.Infamy >= 9 {
+		if p.Infamy >= legendInfamy {
 			b.AnyPlayerFinallyReachedInfamy9 = true
 		}
 		for _, c := range p.Contracts {
@@ -347,21 +358,21 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 		}
 	}
 
-	// GDD §14.3's incident deck runs from round 3 onward, one card per
-	// round, deck[round-3] — the same non-consuming peek
-	// incidentCardThisRound (internal/rules/incidents.go) uses inside
-	// Resolve and internal/telemetry's liveIncidentRounds re-derives for
-	// row 6. The deck is never popped, so the final state still holds it
-	// whole.
+	// Which card was live in which round comes from rules.IncidentCardForRound
+	// — the one exported form of the peek Resolve itself uses, which
+	// internal/telemetry's row-6 liveness also calls. Three readers of GDD
+	// §14.3's "from round 3 onward" rule, one implementation: this file's
+	// whole R6 claim is that summing per card reproduces telemetry's own
+	// row 6, and a second copy of the round-to-card rule is the one way
+	// that could quietly stop being true. The deck is peeked and never
+	// popped, so the final state still holds it whole.
 	b.IncidentLive = map[rules.IncidentCardID]bool{}
 	b.IncidentHit = map[rules.IncidentCardID]bool{}
-	deck := s.Graph.IncidentDeck
 	for round := 1; round <= cfg.Rounds; round++ {
-		idx := round - 3
-		if idx < 0 || idx >= len(deck) {
+		card, live := rules.IncidentCardForRound(game.RoundNumber(round), s.Graph.IncidentDeck)
+		if !live {
 			continue
 		}
-		card := deck[idx]
 		b.IncidentLive[card] = true
 		if hitRounds[game.RoundNumber(round)] {
 			b.IncidentHit[card] = true
