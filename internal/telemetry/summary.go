@@ -115,7 +115,12 @@ type MatchSummary struct {
 	LiveLeasesAtFinalScoring float64
 
 	// ShareOfMapUnderSightFinalThird is row 8: target 30-55%, fails if >
-	// 65% ("post sight still too generous", §7.2). A final-state,
+	// 65% ("post sight still too generous", §7.2). With row 19 it is also
+	// the headless guardrail on R9's remedy — see that field's comment and
+	// D38. Note the asymmetry a reader of this row needs: its only stated
+	// action is on the high side, so a map raised far enough to push this
+	// below 30% leaves the target band without tripping anything (D37 read
+	// 0.281 at 46 nodes and had to say so explicitly). A final-state,
 	// fog-private read (D33 row 8): each seat's own SeatArchive.Sight,
 	// aggregated across every seat — something no Project/PlayerView call
 	// ever hands out together, which is exactly why this row needs the
@@ -177,8 +182,16 @@ type MatchSummary struct {
 	RoundsFlaggedLoitering Rate
 
 	// HeatMapLowConfidenceEntries is row 19: target < 40%, fails if > 60%
-	// ("observation coverage too thin for the tool to be usable"). A
-	// final-state, fog-private read, the same shape as row 8 (D33 row 19):
+	// ("observation coverage too thin for the tool to be usable"). With
+	// row 8 (ShareOfMapUnderSightFinalThird) this is the headless guardrail
+	// on R9's remedy: R9 says to raise node count when confrontations run
+	// hot, and a map raised far enough leaves the Board's own data too thin
+	// to deduce from — "the tool" in that failing text is §7.5's Heat Map
+	// (D38). R9's own leading indicator, whether players still open the
+	// Board at all, is rows 15/16 and has no field here; see this package's
+	// doc comment.
+	//
+	// A final-state, fog-private read, the same shape as row 8 (D33 row 19):
 	// game.NodeStats.ObservedRounds — Sight[node].Count(), by that type's
 	// own definition — read from every seat's own SeatArchive, pooled
 	// across every (seat, node) pair this match ever produced a genuine

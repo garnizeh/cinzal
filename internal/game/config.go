@@ -205,10 +205,15 @@ func DefaultConfig() Config {
 		// matching fix here. D37 swept node count from 28 to 52 at 5
 		// players and found R9's threshold does clear — at 46 nodes — but
 		// only well past the point where §22's two observation-coverage
-		// rows have left their own target bands, which is the "Board goes
-		// unused" failure R9 names as the thing to watch. The row is
-		// deferred to M5.5 rather than bought at that price; see
-		// docs/decisions/D37-five-player-confrontation-load.md.
+		// rows (8 and 19) have left their own target bands: a map raised
+		// that far leaves the Board's own data too thin to deduce from,
+		// which is the guardrail on R9's remedy (D38). R9's own leading
+		// indicator is a different pair — §22 rows 15 and 16, whether
+		// players still open the Board at all — and no bot sweep can
+		// produce it. The row is deferred to M5.5 rather than bought at
+		// that price; see
+		// docs/decisions/D37-five-player-confrontation-load.md and
+		// docs/decisions/D38-board-going-unused-indicator.md.
 		MapByPlayers: map[int]MapSpec{
 			2: {Nodes: 15, MinEdges: 21, MaxEdges: 23},
 			3: {Nodes: 22, MinEdges: 31, MaxEdges: 35},

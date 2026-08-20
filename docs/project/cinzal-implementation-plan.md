@@ -287,7 +287,7 @@ The milestone is done when the following have numbers attached, from sweeps at 2
 
 | Question | GDD ref | Threshold that forces action | Read against |
 |---|---|---|---|
-| Confrontations per match | R9 / §22 | > 12 → raise node count before touching anything else | **Drifter** — a map-shape question |
+| Confrontations per match | R9 / §22 | > 12 → raise node count before touching anything else, and read §22 rows 8 and 19 as the guardrail on how far ([D38](../decisions/D38-board-going-unused-indicator.md)) | **Drifter** — a map-shape question |
 | Two-player encounter rate under rotating borders | §6.3 | < 4 per match | **Drifter** — whether the mechanic geometrically forces encounters |
 | Routes cancelled mid-route | R1 | > 15% → soften the confrontation rule | **Operator** — about a player who is trying |
 | Incidents actually hitting a player | R6 | < 20% or > 70% | **Operator** — the question is whether they land against active avoidance |
