@@ -14,6 +14,7 @@ import (
 
 	"github.com/garnizeh/cinzal/internal/bots"
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/telemetry"
 )
 
 // fakeGitSHA stands in for the real `git rev-parse HEAD` call in every
@@ -96,6 +97,46 @@ func TestRunHappyPath(t *testing.T) {
 		}
 		if row["config_json"] == "" {
 			t.Error("config_json is empty")
+		}
+	}
+}
+
+// TestRunZeroWidthIntervalOmitsHalfWidth is issue #249: a metric that comes
+// back identical across every match in a configuration — here,
+// DeliveriesPerPlayer, a floatMetric that is never excluded — must not
+// write a "_half_width" that reads as a measurement of zero uncertainty.
+// The mean is still worth keeping (it is the constant value itself), so it
+// travels while its half-width sibling stays empty.
+func TestRunZeroWidthIntervalOmitsHalfWidth(t *testing.T) {
+	out := filepath.Join(t.TempDir(), "sweep.csv")
+	var stderr bytes.Buffer
+
+	fake := func(seeds [][32]byte, cfg game.Config, players int, bot bots.Bot, workers int) ([]MatchResult, error) {
+		results := make([]MatchResult, len(seeds))
+		for i := range results {
+			results[i] = MatchResult{
+				Seed:    seeds[i],
+				Players: players,
+				Summary: telemetry.MatchSummary{DeliveriesPerPlayer: 2.5},
+			}
+		}
+		return results, nil
+	}
+
+	code := runWithDeps(realArgs(out), &stderr, fake, fakeGitSHA)
+	if code != 0 {
+		t.Fatalf("run() = %d, want 0; stderr:\n%s", code, stderr.String())
+	}
+
+	for _, row := range readDataRows(t, out) {
+		if got := row["DeliveriesPerPlayer_mean"]; got != "2.500000" {
+			t.Errorf("DeliveriesPerPlayer_mean = %q, want 2.500000 (the constant value, kept per #249)", got)
+		}
+		if got := row["DeliveriesPerPlayer_half_width"]; got != "" {
+			t.Errorf("DeliveriesPerPlayer_half_width = %q, want empty (zero-width interval is not a measurement)", got)
+		}
+		if got := row["DeliveriesPerPlayer_n"]; got != "6" {
+			t.Errorf("DeliveriesPerPlayer_n = %q, want 6", got)
 		}
 	}
 }

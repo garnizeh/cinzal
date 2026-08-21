@@ -227,6 +227,10 @@ func aggregateBreakdowns(bs []Breakdown, cfg game.Config) []breakdownStat {
 // bury the numbers the file exists to carry. The digest still pins the
 // configuration exactly: it is the SHA-256 of the identical config_json
 // string the paired --out CSV writes for the same row.
+//
+// per_match_mean can appear with per_match_half_width empty — a zero-width
+// interval, kept as the constant fact it is rather than dropped (issue
+// #249); see buildHeader's own comment for the sweep CSV's identical rule.
 func breakdownHeader(dims []sweepDim) []string {
 	header := []string{"status", "error"}
 	for _, d := range dims {
@@ -296,9 +300,16 @@ func (r *breakdownReport) writeRows(fixed map[string]string, stats []breakdownSt
 		if s.denominator > 0 {
 			row["pooled_rate"] = strconv.FormatFloat(float64(s.numerator)/float64(s.denominator), 'f', 6, 64)
 		}
-		if s.ok {
+		switch {
+		case s.ok:
 			row["per_match_mean"] = strconv.FormatFloat(s.mean, 'f', 6, 64)
 			row["per_match_half_width"] = strconv.FormatFloat(s.halfWidth, 'f', 6, 64)
+		case s.n >= 2:
+			// Zero-width interval: per_match_mean is the constant value
+			// every included match agreed on, kept per issue #249;
+			// per_match_half_width stays empty so it never reads as a
+			// measurement — pooled_rate already carries the same fact.
+			row["per_match_mean"] = strconv.FormatFloat(s.mean, 'f', 6, 64)
 		}
 		row["per_match_n"] = strconv.Itoa(s.n)
 		row["per_match_excluded"] = strconv.Itoa(s.excluded)

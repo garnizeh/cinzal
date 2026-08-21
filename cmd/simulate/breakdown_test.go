@@ -263,6 +263,56 @@ func TestAggregateBreakdownsExcludesEmptyDenominators(t *testing.T) {
 	}
 }
 
+// TestAggregateBreakdownsZeroWidthIntervalOmitsHalfWidth is issue #249
+// applied to the --breakdown path: a count-shaped row where every match
+// agrees (here, both matches accept exactly 2 Tier IV contracts) has zero
+// variance, so per_match_half_width must be omitted from the written CSV
+// even though the mean — the constant value itself — is kept.
+func TestAggregateBreakdownsZeroWidthIntervalOmitsHalfWidth(t *testing.T) {
+	cfg := game.DefaultConfig()
+	cfg.Rounds = 1
+	a := Breakdown{RoutesSubmittedByRound: []int{0}, RoutesHaltedByRound: []int{0}, Tier4Accepted: 2}
+	b := Breakdown{RoutesSubmittedByRound: []int{0}, RoutesHaltedByRound: []int{0}, Tier4Accepted: 2}
+
+	var accepted breakdownStat
+	for _, s := range aggregateBreakdowns([]Breakdown{a, b}, cfg) {
+		if s.block == "r7_tier4" && s.key == "accepted" {
+			accepted = s
+		}
+	}
+	if accepted.ok {
+		t.Fatalf("r7_tier4/accepted ok = true, want false (zero-width interval: both matches accepted exactly 2)")
+	}
+	if accepted.mean != 2 || accepted.n != 2 {
+		t.Fatalf("r7_tier4/accepted = (mean %v, n %d), want (2, 2)", accepted.mean, accepted.n)
+	}
+
+	dir := t.TempDir()
+	path := filepath.Join(dir, "breakdown.csv")
+	header := breakdownHeader(nil)
+	report, err := openBreakdownReport(path, provenance{}, header)
+	if err != nil {
+		t.Fatalf("openBreakdownReport: %v", err)
+	}
+	if err := report.writeRows(map[string]string{"status": "ok"}, []breakdownStat{accepted}); err != nil {
+		t.Fatalf("writeRows: %v", err)
+	}
+	if err := report.close(); err != nil {
+		t.Fatalf("close: %v", err)
+	}
+
+	rows := readDataRows(t, path)
+	if len(rows) != 1 {
+		t.Fatalf("len(rows) = %d, want 1", len(rows))
+	}
+	if got := rows[0]["per_match_mean"]; got != "2.000000" {
+		t.Errorf("per_match_mean = %q, want 2.000000 (the constant value, kept per #249)", got)
+	}
+	if got := rows[0]["per_match_half_width"]; got != "" {
+		t.Errorf("per_match_half_width = %q, want empty (zero-width interval is not a measurement)", got)
+	}
+}
+
 // TestAggregateBreakdownsRejectsAMismatchedRoundVector pins the loud half
 // of the per-round indexing rule. Truncating to the shorter of the two
 // vectors would write a per-round table quietly missing rounds, which is
