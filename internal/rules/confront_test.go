@@ -455,7 +455,7 @@ func TestResolveConfrontationsDecisiveOneOnOne(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	events := resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	events := resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	if want := ApplyInfamyDelta(9, InfamyGainConfrontationWin); s.Players[0].Infamy != want {
 		t.Errorf("winner Infamy = %d, want %d", s.Players[0].Infamy, want)
@@ -485,6 +485,9 @@ func TestResolveConfrontationsDecisiveOneOnOne(t *testing.T) {
 	if halt := events[0]; halt.Kind != game.EventRouteHalted || halt.Seat != 1 || halt.Node != 12 {
 		t.Errorf("halt event = %+v, want Kind RouteHalted, Seat 1 (the loser), Node 12", halt)
 	}
+	if halt := events[0]; halt.HaltCause != game.HaltCauseDecisiveLoser || halt.HaltStepsUnspent != 0 {
+		t.Errorf("halt event = %+v, want HaltCause DecisiveLoser, HaltStepsUnspent 0 (no route declared)", halt)
+	}
 	ev := events[1]
 	if ev.Kind != game.EventConfrontation || ev.Seat != 0 || ev.Target != 1 || ev.Node != 12 {
 		t.Errorf("event = %+v, want Kind Confrontation, Seat 0, Target 1, Node 12", ev)
@@ -513,7 +516,7 @@ func TestResolveConfrontationsBrokeEvasiveLoserNoDebt(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	if s.Players[1].Balance != 0 {
 		t.Errorf("loser Balance = %d, want 0 (paid what little it had, floored)", s.Players[1].Balance)
@@ -547,7 +550,7 @@ func TestResolveConfrontationsEvasivePaysShakedownKeepsCargo(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	if s.Players[1].Cargo == nil {
 		t.Error("loser lost its cargo, want kept — the shakedown was paid in full")
@@ -574,7 +577,7 @@ func TestResolveConfrontationsFullSlotLeavesCargoBound(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	if s.Players[1].Cargo != nil {
 		t.Error("loser still carrying cargo, want dropped (winner's slot was full)")
@@ -602,7 +605,7 @@ func TestResolveConfrontationsDeadlinePauseFiresOncePerContract(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	if got := s.Players[1].Contracts[0]; got.ExpiresRound != 10 || !got.DeadlinePauseUsed {
 		t.Errorf("contract = %+v, want ExpiresRound unchanged at 10, DeadlinePauseUsed still true", got)
@@ -623,7 +626,7 @@ func TestResolveConfrontationsDeadlinePauseAppliesOnFirstLoss(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	if got := s.Players[1].Contracts[0]; got.ExpiresRound != 11 || !got.DeadlinePauseUsed {
 		t.Errorf("contract = %+v, want ExpiresRound 11, DeadlinePauseUsed true", got)
@@ -665,7 +668,7 @@ func TestResolveConfrontationsTieRevertsWithNoPenalty(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(seed, 6)
 
-	events := resolveConfrontations(&s, []confrontation{{Node: 2, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	events := resolveConfrontations(&s, []confrontation{{Node: 2, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	if s.Players[0].Position != 1 {
 		t.Errorf("seat 0 Position = %d, want 1 (the node it came from)", s.Players[0].Position)
@@ -690,6 +693,9 @@ func TestResolveConfrontationsTieRevertsWithNoPenalty(t *testing.T) {
 	for i, seat := range []game.SeatID{0, 1} {
 		if h := events[i]; h.Kind != game.EventRouteHalted || h.Seat != seat {
 			t.Errorf("halt event %d = %+v, want Kind RouteHalted, Seat %d", i, h, seat)
+		}
+		if h := events[i]; h.HaltCause != game.HaltCauseTie {
+			t.Errorf("halt event %d HaltCause = %v, want HaltCauseTie", i, h.HaltCause)
 		}
 	}
 	ev := events[2]
@@ -735,7 +741,7 @@ func TestResolveConfrontationsMuscleLossOnDecisiveLoss(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	found0 := false
 	for _, it := range s.Players[0].Items {
@@ -763,7 +769,7 @@ func TestResolveConfrontationsTieNeverLosesMuscle(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(seed, 6)
 
-	resolveConfrontations(&s, []confrontation{{Node: 2, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	resolveConfrontations(&s, []confrontation{{Node: 2, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	for _, seat := range []game.SeatID{0, 1} {
 		hasIt := false
@@ -796,7 +802,7 @@ func TestResolveConfrontationsMeleeLosersDrawPushbackInSeatOrder(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	events := resolveConfrontations(&s, []confrontation{{Node: 5, Seats: []game.SeatID{0, 1, 2, 3}}}, validated, walks, cfg, r)
+	events := resolveConfrontations(&s, []confrontation{{Node: 5, Seats: []game.SeatID{0, 1, 2, 3}}}, validated, walks, 1, cfg, r)
 
 	if got := r.Consumed(PurposeConfrontD6); got != 4 {
 		t.Errorf("confront.d6 consumed = %d, want 4 (one per participant)", got)
@@ -810,6 +816,9 @@ func TestResolveConfrontationsMeleeLosersDrawPushbackInSeatOrder(t *testing.T) {
 	for i, seat := range []game.SeatID{1, 2, 3} {
 		if h := events[i]; h.Kind != game.EventRouteHalted || h.Seat != seat {
 			t.Errorf("halt event %d = %+v, want Kind RouteHalted, Seat %d", i, h, seat)
+		}
+		if h := events[i]; h.HaltCause != game.HaltCauseDecisiveLoser {
+			t.Errorf("halt event %d HaltCause = %v, want HaltCauseDecisiveLoser", i, h.HaltCause)
 		}
 	}
 	for i, ev := range events[3:] {
@@ -868,7 +877,7 @@ func TestResolveConfrontationsMeleeTwoStationaryEvasiveLosersPushbackHopInSeatOr
 
 	s, walks := build()
 	r := NewRNG(seed, round)
-	events := resolveConfrontations(&s, []confrontation{c}, validated, walks, cfg, r)
+	events := resolveConfrontations(&s, []confrontation{c}, validated, walks, 1, cfg, r)
 
 	if got := r.Consumed(PurposeConfrontD6); got != 3 {
 		t.Errorf("confront.d6 consumed = %d, want 3 (one per participant)", got)
@@ -906,7 +915,7 @@ func TestResolveConfrontationsCrossingSnapsBothToTheSameNode(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	events := resolveConfrontations(&s, []confrontation{{Node: 0, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	events := resolveConfrontations(&s, []confrontation{{Node: 0, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	if s.Players[0].Position != 0 {
 		t.Errorf("winner Position = %d, want 0 (the fight's own node, corrected back from its raw destination 1)", s.Players[0].Position)
@@ -920,8 +929,14 @@ func TestResolveConfrontationsCrossingSnapsBothToTheSameNode(t *testing.T) {
 	if h := events[0]; h.Kind != game.EventRouteHalted || h.Seat != 0 || h.Node != 0 {
 		t.Errorf("halt event = %+v, want Kind RouteHalted, Seat 0 (the corrected winner), Node 0", h)
 	}
+	if h := events[0]; h.HaltCause != game.HaltCauseCorrectedWinner || h.HaltStepsUnspent != 1 {
+		t.Errorf("halt event = %+v, want HaltCause CorrectedWinner, HaltStepsUnspent 1 (route [1,2]: step 1 consumed node 1, node 2 still unspent)", h)
+	}
 	if h := events[1]; h.Kind != game.EventRouteHalted || h.Seat != 1 || h.Node != 0 {
 		t.Errorf("halt event = %+v, want Kind RouteHalted, Seat 1 (the loser), Node 0", h)
+	}
+	if h := events[1]; h.HaltCause != game.HaltCauseDecisiveLoser || h.HaltStepsUnspent != 0 {
+		t.Errorf("halt event = %+v, want HaltCause DecisiveLoser, HaltStepsUnspent 0 (no route declared)", h)
 	}
 }
 
@@ -942,7 +957,7 @@ func TestResolveConfrontationsPushbackIntoOccupiedNodeTriggersNoSecondFight(t *t
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(1), int(s.Round))
 
-	events := resolveConfrontations(&s, []confrontation{{Node: 3, Seats: []game.SeatID{0, 1}}}, validated, walks, cfg, r)
+	events := resolveConfrontations(&s, []confrontation{{Node: 3, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
 
 	if len(events) != 2 {
 		t.Fatalf("events = %v, want exactly 1 EventRouteHalted + 1 EventConfrontation — pushback must not trigger a second confrontation on its own", events)

@@ -85,7 +85,7 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 		crossings := detectCrossings(transitions, seats, validated)
 		collisions := detectCollisions(next, seats)
 		pending := mergeConfrontations(next, crossings, collisions)
-		events = append(events, resolveConfrontations(&next, pending, validated, walks, cfg, r)...)
+		events = append(events, resolveConfrontations(&next, pending, validated, walks, step, cfg, r)...)
 	}
 
 	actionEvents, vanishReducedInfamy := resolveActions(&next, validated, seats, cfg, ctx, r)

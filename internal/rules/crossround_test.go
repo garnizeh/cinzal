@@ -250,12 +250,12 @@ func TestCrossRoundEvasiveStepPenaltyDoesNotStack(t *testing.T) {
 	cfg := legalTestConfig()
 	r := NewRNG(testSeed(0x79), int(s.Round))
 
-	resolveLoser(&s, c, 1, validated, walks, cfg, r)
+	resolveLoser(&s, c, 1, validated, walks, 1, cfg, r)
 	if !s.Players[1].EvasiveStepPenalty {
 		t.Fatal("EvasiveStepPenalty = false after one Evasive loss, want true")
 	}
 
-	resolveLoser(&s, c, 1, validated, walks, cfg, r)
+	resolveLoser(&s, c, 1, validated, walks, 1, cfg, r)
 	if !s.Players[1].EvasiveStepPenalty {
 		t.Fatal("EvasiveStepPenalty = false after a second Evasive loss, want still true")
 	}

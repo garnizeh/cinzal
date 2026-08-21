@@ -160,9 +160,13 @@ const (
 	// EventRouteHalted fires wherever a confrontation clears a seat's
 	// remaining route and action (GDD §15: "loses the remainder of their
 	// route and their action") — a tie participant, a decisive loser, or
-	// the rare crossing-corrected winner. GDD §22's "routes cancelled
-	// mid-route" numerator; the denominator ("of submitted routes") is
-	// order-log-shaped, not an event (D33 row 1).
+	// the rare crossing-corrected winner; HaltCause says which. GDD §22
+	// row 1's numerator is not len(EventRouteHalted) — it is distinct
+	// (round, seat) pairs that submitted a non-empty route and whose
+	// first halt that round left at least one step of their declared
+	// plan unspent (D39), which HaltStepsUnspent answers per event; the
+	// denominator ("of submitted routes") is order-log-shaped, not an
+	// event.
 	EventRouteHalted
 
 	// EventIncidentHit fires when a sector incident actually affects a
@@ -281,4 +285,18 @@ type Event struct {
 	// — required alongside Stance so a tie's identically-shaped
 	// EventConfrontation can't be miscounted as a win (D33 row 9).
 	Decisive bool
+
+	// HaltCause identifies which of EventRouteHalted's three call sites
+	// produced this event — a tie participant, a decisive loser, or the
+	// rare crossing-corrected winner (D39). Populated only for
+	// EventRouteHalted.
+	HaltCause HaltCause
+
+	// HaltStepsUnspent is how many steps of the halted seat's declared
+	// plan — Route and Pushing On combined — were still unspent at the
+	// moment of the halt: 0 means the halt cancelled nothing (the plan
+	// had already run its course by this step), > 0 means a genuine
+	// cut-short. GDD §22 row 1's numerator needs this to tell the two
+	// apart (D39). Populated only for EventRouteHalted.
+	HaltStepsUnspent int
 }
