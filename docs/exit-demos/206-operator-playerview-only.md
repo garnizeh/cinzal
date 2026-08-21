@@ -16,7 +16,7 @@
 
 ## Positive half — Operator beats Runner over 1,000 matches at 4 players
 
-```
+```console
 $ go test ./internal/rules/... -run TestOperatorBeatsRunnerOverAThousandMatches -v
     bots_operator_golden_external_test.go:138: Operator mean RP = 1.903, Runner mean RP = 1.855, margin = 0.049 (1000 matches per cohort)
 --- PASS: TestOperatorBeatsRunnerOverAThousandMatches (63.57s)
@@ -38,7 +38,7 @@ RFC-001 §14.3 packs Operator's whole spec into one six-clause sentence. Each cl
 | "Buys items when a confrontation looks likely" | `v.Others[i].Infamy`, `v.Archive.Trail[i].{Kind,Round}`, `v.Nodes[id].{Fog,Type,Market}` | `TestOperatorBuysItemsUnderThreat` | PASS |
 | "Uses the Ledger when a rival's band jumps" | `v.Anchors[i].{Kind,Round,Actor,Tier}`, `v.You.Balance`, `v.Round`, `cfg.{Rounds,LedgerCost}` | `TestOperatorBuysLedgerOnRivalBandJump` | PASS |
 
-```
+```console
 $ go test ./internal/bots/... -run 'TestOperatorLeasesChokepoint|TestOperatorAvoidsUnstableSectorWeightedByDeck|TestOperatorTimesInfamyAgainstCooldown|TestOperatorBuysItemsUnderThreat|TestOperatorBuysLedgerOnRivalBandJump|TestBotHasNoCrossRoundState' -v
 --- PASS: TestBotHasNoCrossRoundState (0.01s)
 --- PASS: TestOperatorLeasesChokepoint (0.00s)
@@ -57,7 +57,7 @@ The scope the issue names is #191 (`internal/bots/legalspace.go` — the shared 
 
 | Found while writing | What | Resolution |
 |---|---|---|
-| #191 | `SelfState.StepAllowance`/`RoundsToNextOffer` read as zero from `rules.Project` alone | **Not an M1 defect.** [D27](../decisions/D27-project-config-parameter.md) deliberately kept `Project` free of `game.Config` — Config feeds formulas, not visibility — and named the fill-in the caller's job. #191 flagged it as a real pothole for M2 specifically because `internal/match` (D27's intended caller) does not exist yet; #199 closed the gap at the harness level instead, promoting the fill into one exported `rules.ProjectView(s, seat, cfg)` (`internal/rules/fog.go:55-60`) that both `cmd/simulate` and every bot-driving test call, backed by `TestProjectViewStepAllowanceNeverZero` (`internal/rules/projectview_external_test.go`) asserting it non-zero for every seat, every round, at every player count. This is break-on-purpose #3 below. |
+| #191 | `SelfState.StepAllowance`/`RoundsToNextOffer` read as zero from `rules.Project` alone | **Not an M1 defect.** [D27](../decisions/D27-project-config-parameter.md) deliberately kept `Project` free of `game.Config` — Config feeds formulas, not visibility — and named the fill-in the caller's job. #191 flagged it as a real pothole for M2 specifically because `internal/match` (D27's intended caller) does not exist yet; #199 closed the gap at the harness level instead, promoting the fill into one exported `rules.ProjectView(s, seat, cfg)` (`internal/rules/fog.go:55-60`), backed by `TestProjectViewStepAllowanceNeverZero` (`internal/rules/projectview_external_test.go`) asserting it non-zero for every seat, every round, at every player count. `cmd/simulate` and the paired-cohort/determinism tests call `ProjectView` directly; `operator_test.go`'s `TestOperatorNeverIllegalOverGoldenCorpus` instead calls `rules.Project` and fills `v.You.StepAllowance` inline itself (predating #199's shared helper) — a duplication worth collapsing onto `ProjectView`, but not itself a fog gap, since the value it fills is identical. `legalspace_test.go`'s own golden-corpus test calls `rules.Project` with no fill at all, which is fine there: `Sample`'s route search reads `Affordances`' `StepsRemaining` (`cfg`-derived), never `v.You.StepAllowance` directly. This is break-on-purpose #3 below. |
 | #191 | "The order space is large" (uniform sampling without materialising every order) | Not a projection gap — an algorithmic concern about `Sample`'s own design, resolved by the stage-wise generator `legalspace.go` ships, not by anything `rules` needed to expose. |
 | #194 | (six-clause behaviour review, PR #219) | **None.** `v.NodeStats` (Heat Map), `v.Headline`/`v.Deck` (sector incidents), `v.You.RoundsToNextOffer` (Contact Cooldown, already filled in per D27/#199), `v.Others`/`v.Archive.Trail` (threat), and `v.Anchors` (band-jump inference) already carried what Operator needed. No M1 issue was filed against #191 or #194 (confirmed against both issues' cross-reference timelines) — an absence consistent with, not merely asserted by, this audit. |
 
@@ -74,7 +74,7 @@ Three deliberate violations, each pushed to a temporary, throwaway PR against `m
 - Branch/PR: [`exit-demo/206-break1-matchstate-param`, PR #252](https://github.com/garnizeh/cinzal/pull/252)
 - Expected gate: `check-bots-isolation` (issue #195), via `scripts/check-bots-isolation.go`
 - CI run: [`check` job, run 32478098305](https://github.com/garnizeh/cinzal/actions/runs/32478098305/job/96758535699) — **FAILED**, as expected:
-  ```
+  ```console
   check-bots-isolation: internal/bots may not name MatchState, the graph, or the seed.
     internal/bots/operator.go:165:88: rules.MatchState is not on the isolation allow-list (scripts/bots-isolation-allowlist.txt)
     internal/bots/operator.go:208:63: rules.MatchState is not on the isolation allow-list (scripts/bots-isolation-allowlist.txt)
@@ -89,7 +89,7 @@ Three deliberate violations, each pushed to a temporary, throwaway PR against `m
 - Branch/PR: [`exit-demo/206-break2-hidden-node`, PR #253](https://github.com/garnizeh/cinzal/pull/253)
 - Expected gate: `check-bots-isolation` (issue #195)
 - Confirmed locally before pushing:
-  ```
+  ```console
   $ go run scripts/check-bots-isolation.go
   check-bots-isolation: internal/bots may not name MatchState, the graph, or the seed.
                          RFC-001 §14.5. Offending references:
@@ -104,13 +104,13 @@ Three deliberate violations, each pushed to a temporary, throwaway PR against `m
 - Branch/PR: [`exit-demo/206-break3-stepallowance`, PR #254](https://github.com/garnizeh/cinzal/pull/254)
 - Expected assertion: `TestProjectViewStepAllowanceNeverZero` (issue #199, `internal/rules/projectview_external_test.go`)
 - Confirmed locally before pushing:
-  ```
+  ```console
   $ go test ./internal/rules/... -run TestProjectViewStepAllowanceNeverZero -v
   projectview_external_test.go:41: players=2 round=1 seat=0: ProjectView returned StepAllowance == 0
   --- FAIL: TestProjectViewStepAllowanceNeverZero (0.00s)
   ```
 - CI run: [`check` job, run 32478212580](https://github.com/garnizeh/cinzal/actions/runs/32478212580/job/96758870170) — **FAILED**, as expected, identical failure line to the local run above. The `replay` jobs (which run `go test -race ./internal/rules/...`, a superset of the plain suite) caught the same regression independently — **two separately-configured CI jobs, same assertion, same failure**:
-  ```
+  ```console
   --- FAIL: TestProjectViewStepAllowanceNeverZero (0.00s)
       projectview_external_test.go:41: players=2 round=1 seat=0: ProjectView returned StepAllowance == 0
   ```
@@ -119,14 +119,14 @@ All three were reverted (never merged) — `main` at the SHA above carries none 
 
 ## Fails closed
 
-The issue's own condition: *"the break-on-purpose runs assert the gate ran and inspected a non-empty package."* `check-bots-isolation.go` reports its inspected file count on every run, pass or fail — a directory holding nothing but `doc.go` exits `VACUOUS` rather than reporting a pass (`scripts/check-bots-isolation.go:145-162`). On the clean `main` SHA above:
+The issue's own condition: *"the break-on-purpose runs assert the gate ran and inspected a non-empty package."* `check-bots-isolation.go`'s success message reports its inspected file count — a directory holding nothing but `doc.go` exits `VACUOUS` rather than reporting that pass on zero (`scripts/check-bots-isolation.go:145-162`). On the clean `main` SHA above:
 
-```
+```console
 $ go run scripts/check-bots-isolation.go
 check-bots-isolation: OK - 6 production file(s) in internal/bots, no reference outside scripts/bots-isolation-allowlist.txt's allow-list
 ```
 
-Six production files inspected — not a VACUOUS pass on zero. Break #2's own failure output above names its offending file and line rather than reporting a bare exit code, which is the same non-silent-failure property. Break #3 is a `testing.T` assertion, not a script, and Go's own test runner cannot silently skip a test that exists and is not marked `Skip` — `TestProjectViewStepAllowanceNeverZero` ran and failed loudly, per the transcript above.
+Six production files inspected — not a VACUOUS pass on zero. The gate's *failure* path (breaks #1 and #2, above) does not repeat that count, but is non-silent on its own terms: it names every offending file and line rather than exiting with a bare non-zero status. Break #3 is a `testing.T` assertion, not a script, and Go's own test runner cannot silently skip a test that exists and is not marked `Skip` — the transcripts above show `TestProjectViewStepAllowanceNeverZero` actually ran, in two independently-configured CI jobs, and failed loudly in both.
 
 ## Result
 
