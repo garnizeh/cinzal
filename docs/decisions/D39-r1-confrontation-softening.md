@@ -144,7 +144,7 @@ The "arithmetic" columns are `#245`'s own reasoning carried out exactly — subt
 | E — D, ties too | 2.73% [2.69%, 2.78%] | 4.25% [4.21%, 4.30%] | 4.97% [4.93%, 5.01%] | 6.41% [6.37%, 6.46%] |
 | E+ — E, crossing-corrected winner too | 1.65% [1.62%, 1.69%] | 2.85% [2.81%, 2.88%] | 3.51% [3.47%, 3.54%] | 4.75% [4.71%, 4.78%] |
 
-**Drifter**, reported per D35 — not the verdict tier, and every option lands in the same order it does under Operator:
+**Drifter**, reported per D35 — not the verdict tier, and it separates the options in the same order Operator does, with one pair it does not separate at all:
 
 | Option | metric | 2p | 3p | 4p | 5p |
 |---|---|---|---|---|---|
@@ -160,6 +160,8 @@ The "arithmetic" columns are `#245`'s own reasoning carried out exactly — subt
 | E — D, ties too | cut mid-route | 2.10% [2.06%, 2.14%] | 3.09% [3.05%, 3.13%] | 3.64% [3.61%, 3.68%] | 5.39% [5.35%, 5.43%] |
 | E+ — E, crossing-corrected winner too | as instrumented | 6.28% [6.21%, 6.36%] | 8.42% [8.35%, 8.49%] | 9.67% [9.61%, 9.74%] | 13.68% [13.61%, 13.75%] |
 | E+ — E, crossing-corrected winner too | cut mid-route | 0.99% [0.96%, 1.02%] | 1.71% [1.68%, 1.74%] | 2.16% [2.14%, 2.19%] | 3.46% [3.43%, 3.49%] |
+
+**The pair is A and A′**, which differ only in whether the loser keeps their action. Operator ranks them 8.38% and 8.37%; Drifter ranks them 5.38% and 5.39% — opposite orders, both gaps an order of magnitude inside either interval. That is not an inversion to explain, it is the same finding stated twice: whether the action survives is not the lever, and neither tier can tell the two apart. Every pair this decision actually distinguishes orders identically on both.
 
 Drifter's own verdicts differ from Operator's in exactly one place, and it is worth stating rather than burying: on the corrected count the **shipped** rule already passes at 2 players under Drifter (12.51%) and fails at 3, 4 and 5. R1 is read against Operator ([D35](D35-simulation-sample-size-and-verdict-rule.md) §3.3), so this changes no verdict — but it is the tier difference D35 asks to be reported, and it is the expected direction: a bot with no plan has less plan to lose.
 
@@ -375,7 +377,13 @@ That necessity is exactly what a continuation rule dissolves: once the remaining
 
 1. **`EventRouteHalted` gains a cause field** ([#257](https://github.com/garnizeh/cinzal/issues/257)) — `#245`'s own first step. Needed now for the re-specified row 1 (a halt with no step left must not count) and for any future audit of this numerator; the probe's version carried the cause plus the unspent-step count, and the real one needs at least enough to answer both.
 2. **`internal/telemetry` row 1 is recomputed against the new definition** ([#258](https://github.com/garnizeh/cinzal/issues/258), blocked by `#257`), per (round, seat) rather than per event, with `internal/telemetry/summary.go`'s `RoutesCancelledMidRoute` doc comment rewritten — it currently states the superseded definition and defends it.
-3. **`internal/rules` implements the §15 change** ([#259](https://github.com/garnizeh/cinzal/issues/259)) — all three of `haltMovement`'s confrontation call sites (`resolveLoser`, `resolveTie`, and `resolveDecisive`'s corrected winner) clear the declared route and the action but convert the round's remaining allowance into `PushingOn` steps from wherever the seat now stands, with `seatWalk.Previous` pointed at the confrontation node so §9.1's ladder does the exclusion. The corrected winner needs no exclusion — they are standing on that node. `haltMovement` itself keeps its other callers unchanged.
+3. **`internal/rules` implements the §15 change** ([#259](https://github.com/garnizeh/cinzal/issues/259)) — all three of `haltMovement`'s confrontation call sites clear the declared route and the action but convert the round's remaining allowance into `PushingOn` steps from wherever the seat now stands. **The three do not initialise the blind walk the same way**, and conflating them is the one mistake that would silently break the no-re-entry rule:
+
+    - `resolveLoser` — stands at the pushback destination, `seatWalk.Previous` points at the confrontation node, 0-2 `pushback.hop` draws as today.
+    - `resolveTie` — stands at the node they came from, `seatWalk.Previous` points at the confrontation node, no hop drawn.
+    - `resolveDecisive`'s corrected winner — stands **on the confrontation node itself**, `seatWalk.Previous` untouched, no hop drawn.
+
+    Only the first two need the exclusion, because only they are somewhere else and could walk back in; §9.1's ladder level 5 then supplies it with no new clause. The winner is already standing on that node, so there is nothing to exclude and no hop to draw. `haltMovement` itself keeps its other callers unchanged.
 4. **Golden replays and RNG index accounting regenerate** — inside `#259`'s own commit, not after it, or the tree is broken in between. The rule changes what a match is, so every golden fixture moves; `internal/rules/determinism_test.go` and the two bot golden fixtures are regenerated with this decision as the stated PR reason, which their own comments require.
 5. **`#205`'s R1 sweep is re-run against the changed rule** ([#260](https://github.com/garnizeh/cinzal/issues/260), blocked by `#258` and `#259`). The harness invocation is recorded verbatim in `docs/exit-demos/205-r1-r6-r7.md`, so this is a re-run rather than a re-derivation, and it is what turns the numbers below from a probe's into the demonstration's.
 
