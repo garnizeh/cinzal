@@ -25,6 +25,8 @@ GDD §20's R1 carries the only threshold in M2's exit criteria that both tripped
 
 D35's rigor throughout: **10,000 matches per configuration**, `mean ± 1.96·s/√n` over the per-match vector, **two independently drawn root seeds** — `#205`'s own two — pooled into one 20,000-match interval before any verdict is read. `game.DefaultConfig()`, unmodified, at 2/3/4/5 players. R1's verdict tier is **Operator**; Drifter is reported alongside, per D35.
 
+**112 configurations in total**: every option below against Operator (8 × 4 player counts × 2 seeds), and the shipped rule plus A, A′, D, E and E+ against Drifter (6 × 4 × 2). B, B′ and C are Operator-only — they are rejected on Operator's own numbers before Drifter could break the tie, and neither is the adopted rule; the adopted one and the two it is measured against are reported on both tiers.
+
 Git SHA `1d3948c`, plus a temporary probe that is **not** part of this decision's diff: a cause field and a remaining-steps pair on `EventRouteHalted`, the movement step index threaded into `resolveConfrontations`, and each candidate rule behind a switch — built, run, and reverted, the shape [D37](D37-five-player-confrontation-load.md) and [D38](D38-board-going-unused-indicator.md) established for a decision that has to measure a rule it has not yet decided to ship.
 
 **The probe reproduces `#205` exactly.** At 4 players, Operator, root seed 1, with every candidate rule switched off, it returns `RoutesCancelledMidRoute` = `0.455350 ± 0.002572`, `ConfrontationsPerMatch` = `17.952400`, and `ConfrontationsWonAgainstEvasiveLoser` = `0.455799` — the same figures to six decimal places as `docs/exit-demos/205/p4-operator-seed1.csv`. That is the check that this decision measured the same matches the demonstration measured.
@@ -142,7 +144,7 @@ The "arithmetic" columns are `#245`'s own reasoning carried out exactly — subt
 | E — D, ties too | 2.73% [2.69%, 2.78%] | 4.25% [4.21%, 4.30%] | 4.97% [4.93%, 5.01%] | 6.41% [6.37%, 6.46%] |
 | E+ — E, crossing-corrected winner too | 1.65% [1.62%, 1.69%] | 2.85% [2.81%, 2.88%] | 3.51% [3.47%, 3.54%] | 4.75% [4.71%, 4.78%] |
 
-**Drifter**, reported per D35 — not the verdict tier, and it agrees with Operator on every option's direction:
+**Drifter**, reported per D35 — not the verdict tier, and every option lands in the same order it does under Operator:
 
 | Option | metric | 2p | 3p | 4p | 5p |
 |---|---|---|---|---|---|
@@ -150,10 +152,16 @@ The "arithmetic" columns are `#245`'s own reasoning carried out exactly — subt
 | shipped GDD §15 | cut mid-route | 12.51% [12.40%, 12.62%] | 15.66% [15.56%, 15.76%] | 16.88% [16.79%, 16.97%] | 22.30% [22.22%, 22.39%] |
 | A — loser resumes, keeps the action | as instrumented | 15.19% [15.06%, 15.33%] | 20.23% [20.10%, 20.36%] | 22.40% [22.27%, 22.52%] | 30.51% [30.39%, 30.64%] |
 | A — loser resumes, keeps the action | cut mid-route | 5.38% [5.31%, 5.46%] | 6.96% [6.89%, 7.03%] | 7.64% [7.58%, 7.70%] | 10.03% [9.97%, 10.09%] |
+| A′ — A, action still forfeit | as instrumented | 15.23% [15.09%, 15.37%] | 20.18% [20.05%, 20.31%] | 22.36% [22.23%, 22.48%] | 30.47% [30.34%, 30.59%] |
+| A′ — A, action still forfeit | cut mid-route | 5.39% [5.32%, 5.46%] | 6.95% [6.88%, 7.01%] | 7.61% [7.55%, 7.67%] | 10.04% [9.98%, 10.10%] |
 | D — blind continuation, no re-entry | as instrumented | 9.63% [9.53%, 9.73%] | 12.77% [12.67%, 12.86%] | 14.46% [14.37%, 14.55%] | 20.03% [19.94%, 20.13%] |
 | D — blind continuation, no re-entry | cut mid-route | 4.35% [4.29%, 4.42%] | 5.86% [5.80%, 5.92%] | 6.65% [6.59%, 6.71%] | 9.28% [9.22%, 9.34%] |
-| E — D, ties too | as instrumented | — | — | — | — |
-| E — D, ties too | cut mid-route | — | — | — | — |
+| E — D, ties too | as instrumented | 7.38% [7.30%, 7.46%] | 9.84% [9.76%, 9.92%] | 11.27% [11.20%, 11.35%] | 15.83% [15.75%, 15.91%] |
+| E — D, ties too | cut mid-route | 2.10% [2.06%, 2.14%] | 3.09% [3.05%, 3.13%] | 3.64% [3.61%, 3.68%] | 5.39% [5.35%, 5.43%] |
+| E+ — E, crossing-corrected winner too | as instrumented | 6.28% [6.21%, 6.36%] | 8.42% [8.35%, 8.49%] | 9.67% [9.61%, 9.74%] | 13.68% [13.61%, 13.75%] |
+| E+ — E, crossing-corrected winner too | cut mid-route | 0.99% [0.96%, 1.02%] | 1.71% [1.68%, 1.74%] | 2.16% [2.14%, 2.19%] | 3.46% [3.43%, 3.49%] |
+
+Drifter's own verdicts differ from Operator's in exactly one place, and it is worth stating rather than burying: on the corrected count the **shipped** rule already passes at 2 players under Drifter (12.51%) and fails at 3, 4 and 5. R1 is read against Operator ([D35](D35-simulation-sample-size-and-verdict-rule.md) §3.3), so this changes no verdict — but it is the tier difference D35 asks to be reported, and it is the expected direction: a bot with no plan has less plan to lose.
 
 **C is closed outright.** At half the remaining steps the corrected rate is 16.32% [16.23%, 16.41%] at 4 players and 19.20% [19.12%, 19.29%] at 5 — both intervals entirely above the line — and at 3 players it straddles it, 14.98% [14.88%, 15.08%], which under D35 is not even a pass. Halving the steps roughly halves the benefit, and the benefit was not large enough to halve.
 
@@ -382,4 +390,4 @@ The two things worth watching, neither of which bot simulation can settle:
 
 ### What does not change
 
-The 15% threshold, R1's verdict tier (Operator), D35's verdict rule, §22 row 1's denominator, the pushback table, the stake/cargo/Infamy/Deadline-Pause consequences of losing, and every other §22 band. Confrontations per match are unchanged at every player count, so nothing here is bought by having fewer fights.
+The 15% threshold, R1's verdict tier (Operator), D35's verdict rule, §22 row 1's denominator, the pushback table, the stake/cargo/Infamy/Deadline-Pause consequences of losing, and every other §22 band. Confrontations per match (rows 10 and 11) stay inside the same verdict as before — still above R9's `> 12` line at 4 and 5 players, still inside the 4–12 band at 2 and 3 — and E+ lands closer to the shipped rule than any other option measured (5.7465 against 6.5629 at 2 players, 11.6594 against 12.4927 at 3, 17.3502 against 18.0297 at 4, 26.1498 against 26.3099 at 5). The metric does move; no band or threshold verdict does, so nothing here is bought by having fewer fights.
