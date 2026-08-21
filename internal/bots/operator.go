@@ -159,8 +159,11 @@ func NewOperator(opts OperatorOptions) Bot {
 	return operatorBot{opts: opts}
 }
 
-func (b operatorBot) Decide(v game.PlayerView, cfg game.Config, r *rules.BotRNG) game.Order {
-	objective, haveObjective, wantStake := b.chooseObjective(v)
+// Issue #206 break-on-purpose (1/3): a rules.MatchState parameter, read
+// directly in pathfinding below. Expected to be rejected by the #195
+// isolation gate (scripts/check-bots-isolation.go) at CI. Never merged.
+func (b operatorBot) Decide(v game.PlayerView, cfg game.Config, r *rules.BotRNG, state rules.MatchState) game.Order {
+	objective, haveObjective, wantStake := b.chooseObjective(v, state)
 	route := b.chooseRoute(v, Routes(v, cfg), objective, haveObjective)
 	end := routeEndpoint(v, route.Nodes)
 
@@ -202,12 +205,16 @@ func (b operatorBot) Decide(v game.PlayerView, cfg game.Config, r *rules.BotRNG)
 // wantStake is true only in the chokepoint case — it tells chooseAction
 // this round's objective is a place to stake, not a place to deliver or
 // pick up from.
-func (b operatorBot) chooseObjective(v game.PlayerView) (game.NodeID, bool, bool) {
+func (b operatorBot) chooseObjective(v game.PlayerView, state rules.MatchState) (game.NodeID, bool, bool) {
 	if objective, ok := runnerObjective(v); ok {
 		return objective, true, false
 	}
-	if node, ok := findChokepoint(v, b.opts); ok {
-		return node, true, true
+	// Break-on-purpose: read the true graph instead of the fog-limited
+	// known subgraph — exactly what #195 exists to catch.
+	if len(state.Graph.Nodes) > 0 {
+		if node, ok := findChokepoint(v, b.opts); ok {
+			return node, true, true
+		}
 	}
 	return 0, false, false
 }
