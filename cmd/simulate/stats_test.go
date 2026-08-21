@@ -20,14 +20,19 @@ func TestIntervalTooFewValues(t *testing.T) {
 	}
 }
 
+// TestIntervalConstantVector is issue #249: a vector of two or more
+// identical values has zero variance, so its interval is degenerate — "not
+// a result" per the roadmap, same reasoning as n < 2. ok must be false, but
+// mean still comes back as the constant value itself: it is a fact worth
+// keeping, just not a measurement (see interval's own doc comment).
 func TestIntervalConstantVector(t *testing.T) {
 	values := []float64{4, 4, 4, 4}
 	mean, halfWidth, n, ok := interval(values)
-	if !ok {
-		t.Fatalf("interval(%v) ok = false, want true", values)
+	if ok {
+		t.Fatalf("interval(%v) ok = true, want false (zero-width interval is not a measurement)", values)
 	}
 	if mean != 4 {
-		t.Errorf("mean = %v, want 4", mean)
+		t.Errorf("mean = %v, want 4 (the constant value, kept even though ok = false)", mean)
 	}
 	if halfWidth != 0 {
 		t.Errorf("halfWidth = %v, want 0 (zero variance)", halfWidth)

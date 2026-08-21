@@ -246,9 +246,17 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 			}
 			for j, m := range computeMetrics(summaries) {
 				spec := metricSpecs[j]
-				if m.ok {
+				switch {
+				case m.ok:
 					row[spec.name+"_mean"] = strconv.FormatFloat(m.mean, 'f', 6, 64)
 					row[spec.name+"_half_width"] = strconv.FormatFloat(m.halfWidth, 'f', 6, 64)
+				case m.n >= 2:
+					// Zero-width interval: every included match agreed, so
+					// the mean is the constant value itself and worth
+					// keeping (issue #249), but half_width stays empty —
+					// its absence is what tells a reader this is not a
+					// measurement to read a threshold verdict off of.
+					row[spec.name+"_mean"] = strconv.FormatFloat(m.mean, 'f', 6, 64)
 				}
 				row[spec.name+"_n"] = strconv.Itoa(m.n)
 				row[spec.name+"_excluded"] = strconv.Itoa(m.excluded)

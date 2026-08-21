@@ -54,6 +54,15 @@ func (p provenance) breakdownLine() string {
 // the remaining provenance columns (root seed, git SHA, full Config)
 // folded in beside match_count, per the issue's separate "every row
 // carries" requirement.
+//
+// A "_mean" cell can appear with its "_half_width" sibling empty: that pair
+// is a zero-width interval, a constant vector kept as a fact rather than an
+// interval (issue #249) — read the mean, not a confidence bound, off it.
+// Both cells empty together still means "not a measurement," same as
+// before. CSVs written before #249 (docs/exit-demos/203, 204, 229, 205) use
+// the older rule and print a non-empty "_half_width=0.000000" for what was
+// actually a constant vector; they were not regenerated, since the
+// underlying numbers are unchanged.
 func buildHeader(dims []sweepDim) []string {
 	header := []string{"status", "error"}
 	for _, d := range dims {

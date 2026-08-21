@@ -10,10 +10,19 @@ import (
 // every §22 row, count or ratio or 0/1 indicator alike, so no per-row
 // branch on the metric's own shape ever has to exist (D35 §2: "one formula
 // for every row... so cmd/simulate implements one interval routine, not a
-// per-shape branch"). ok is false when len(values) < 2: RFC §16.4's own
-// addendum states s is undefined at n = 1 and the vector is empty at
-// n = 0, and both are "no measurement, no verdict," not a bare or
-// degenerate mean.
+// per-shape branch").
+//
+// ok is false in two cases the roadmap ties together with the same
+// reasoning: len(values) < 2 (RFC §16.4's own addendum states s is
+// undefined at n = 1 and the vector is empty at n = 0), and halfWidth == 0
+// (the roadmap's own "a zero-width interval is a degenerate sample, not a
+// result" — every value in the vector was identical, so the interval
+// trivially clears any threshold on the correct side of it). mean is still
+// returned in the second case: a constant vector's mean is the constant
+// value itself, a fact worth keeping even though it carries no interval —
+// callers distinguish the two !ok cases by n >= 2 and report the mean
+// alone when it holds (see buildHeader's and breakdownHeader's own
+// comments on the columns this produces).
 func interval(values []float64) (mean, halfWidth float64, n int, ok bool) {
 	n = len(values)
 	if n < 2 {
@@ -34,7 +43,7 @@ func interval(values []float64) (mean, halfWidth float64, n int, ok bool) {
 	s := math.Sqrt(sumSq / float64(n-1))
 
 	halfWidth = 1.96 * s / math.Sqrt(float64(n))
-	return mean, halfWidth, n, true
+	return mean, halfWidth, n, halfWidth > 0
 }
 
 // metricSpec is one telemetry.MatchSummary field's own D35 reduction: how
