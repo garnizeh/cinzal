@@ -1,7 +1,7 @@
 # D39 — R1 trips at every player count: how does GDD §15's confrontation rule get softened?
 
 **Status:** decided
-**Blocks:** the GDD §15/§22 and `internal/rules`/`internal/telemetry` tasks this hands forward
+**Blocks:** [#257](https://github.com/garnizeh/cinzal/issues/257), [#258](https://github.com/garnizeh/cinzal/issues/258), [#259](https://github.com/garnizeh/cinzal/issues/259), [#260](https://github.com/garnizeh/cinzal/issues/260) — the halt event's cause field, row 1's recount, the §15 rule, and `#205`'s re-run
 **Decided:** 2026-08-21
 **Issue:** [#245](https://github.com/garnizeh/cinzal/issues/245)
 
@@ -373,11 +373,11 @@ That necessity is exactly what a continuation rule dissolves: once the remaining
 
 ### What changes in the code, as tasks this hands forward
 
-1. **`EventRouteHalted` gains a cause field** — `#245`'s own first step. Needed now for the re-specified row 1 (a halt with no step left must not count) and for any future audit of this numerator; the probe's version carried the cause plus the unspent-step count, and the real one needs at least enough to answer both.
-2. **`internal/telemetry` row 1 is recomputed against the new definition**, per (round, seat) rather than per event, with `internal/telemetry/summary.go`'s `RoutesCancelledMidRoute` doc comment rewritten — it currently states the superseded definition and defends it.
-3. **`internal/rules` implements the §15 change** — all three of `haltMovement`'s confrontation call sites (`resolveLoser`, `resolveTie`, and `resolveDecisive`'s corrected winner) clear the declared route and the action but convert the round's remaining allowance into `PushingOn` steps from wherever the seat now stands, with `seatWalk.Previous` pointed at the confrontation node so §9.1's ladder does the exclusion. The corrected winner needs no exclusion — they are standing on that node. `haltMovement` itself keeps its other callers unchanged.
-4. **Golden replays and RNG index accounting regenerate.** The rule changes what a match is, so every golden fixture moves; `internal/rules/determinism_test.go` and the two bot golden fixtures are regenerated with this decision as the stated PR reason, which their own comments require.
-5. **`#205`'s R1 sweep is re-run against the changed rule.** The harness invocation is recorded verbatim in `docs/exit-demos/205-r1-r6-r7.md`, so this is a re-run rather than a re-derivation, and it is what turns the numbers below from a probe's into the demonstration's.
+1. **`EventRouteHalted` gains a cause field** ([#257](https://github.com/garnizeh/cinzal/issues/257)) — `#245`'s own first step. Needed now for the re-specified row 1 (a halt with no step left must not count) and for any future audit of this numerator; the probe's version carried the cause plus the unspent-step count, and the real one needs at least enough to answer both.
+2. **`internal/telemetry` row 1 is recomputed against the new definition** ([#258](https://github.com/garnizeh/cinzal/issues/258), blocked by `#257`), per (round, seat) rather than per event, with `internal/telemetry/summary.go`'s `RoutesCancelledMidRoute` doc comment rewritten — it currently states the superseded definition and defends it.
+3. **`internal/rules` implements the §15 change** ([#259](https://github.com/garnizeh/cinzal/issues/259)) — all three of `haltMovement`'s confrontation call sites (`resolveLoser`, `resolveTie`, and `resolveDecisive`'s corrected winner) clear the declared route and the action but convert the round's remaining allowance into `PushingOn` steps from wherever the seat now stands, with `seatWalk.Previous` pointed at the confrontation node so §9.1's ladder does the exclusion. The corrected winner needs no exclusion — they are standing on that node. `haltMovement` itself keeps its other callers unchanged.
+4. **Golden replays and RNG index accounting regenerate** — inside `#259`'s own commit, not after it, or the tree is broken in between. The rule changes what a match is, so every golden fixture moves; `internal/rules/determinism_test.go` and the two bot golden fixtures are regenerated with this decision as the stated PR reason, which their own comments require.
+5. **`#205`'s R1 sweep is re-run against the changed rule** ([#260](https://github.com/garnizeh/cinzal/issues/260), blocked by `#258` and `#259`). The harness invocation is recorded verbatim in `docs/exit-demos/205-r1-r6-r7.md`, so this is a re-run rather than a re-derivation, and it is what turns the numbers below from a probe's into the demonstration's.
 
 ### What this costs if it turns out wrong
 
