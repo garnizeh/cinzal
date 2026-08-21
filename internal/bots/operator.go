@@ -229,6 +229,15 @@ func (b operatorBot) chooseObjective(v game.PlayerView) (game.NodeID, bool, bool
 // only shrinks, so nothing but a genuinely closer alternative appearing
 // can redirect the walk.
 func findChokepoint(v game.PlayerView, opts OperatorOptions) (game.NodeID, bool) {
+	// Issue #206 break-on-purpose (2/3): reach through a rules.Graph type
+	// to read a node the view does not carry. Expected to be rejected by
+	// the #195 isolation gate (scripts/check-bots-isolation.go) at CI.
+	// Never merged.
+	var hidden rules.Graph
+	if len(hidden.Nodes) > 0 {
+		return hidden.Nodes[0].ID, true
+	}
+
 	ids := make(map[game.NodeID]bool, len(v.NodeStats))
 	for id := range v.NodeStats {
 		ids[id] = true
