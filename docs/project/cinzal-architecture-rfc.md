@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r34 · **Companion doc:** `cinzal-gdd.md` **v2.28**
+**Status:** draft for review · **Revision:** r35 · **Companion doc:** `cinzal-gdd.md` **v2.29**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -187,6 +187,10 @@
 >
 > **Changelog r33 → r34** — companion pointer only (issue [#233](https://github.com/garnizeh/cinzal/issues/233), [D38](../decisions/D38-board-going-unused-indicator.md))
 > - GDD §20's R9 pointer to "the Board going unused" now names §22 rows 15 and 16 (attribution queries, Heat Map opens) as the indicator, and rows 8 and 19 as the headless guardrail on R9's own remedy. Which §22 rows are headless is unchanged — §17's "one computation, three sinks" and §16.4's harness description both stand exactly as written, and no new row, event or `telemetry` field is created. Companion doc moves to GDD v2.28.
+>
+> **Changelog r34 → r35** — one §6.4 worked example, and a companion pointer (issue [#245](https://github.com/garnizeh/cinzal/issues/245), [D39](../decisions/D39-r1-confrontation-softening.md))
+> - GDD §15 now lets a confrontation loser — and every tie participant — spend the round's remaining steps as §9.1 blind steps from their fallback node instead of freezing. **§6.4's consumption table is unchanged**: no new purpose string, and `pushon.edge`/`scavenge.d6` already read "1 per blind step" and "1 per newly explored node". What changes is §6.4's second worked case, whose "a loser who moved consumes 0" line was true only while a loser stopped moving. The draws stay lazy, so §16.2's index-count invariant is asserted the same way against a different predicted count.
+> - §22 row 1's numerator is re-specified from halt events to routes, which moves a `telemetry.MatchSummary` computation and no RFC-stated structure: §17's "one computation, three sinks" and [D34](../decisions/D34-telemetry-package-placement.md)'s `Match` signature are untouched, and no new event kind is created — the halt event gains a field. Companion doc moves to GDD v2.29.
 
 ---
 
@@ -510,7 +514,7 @@ The invariant test in §16.2 asserts consumed indices against the predicted coun
 Two worked cases, because these are the ones that will be got wrong:
 
 - A route with **2 blind steps** onto two previously-Hidden nodes consumes **4** indices: `pushon.edge`, `scavenge.d6`, `pushon.edge`, `scavenge.d6` — interleaved in execution order, not batched by kind.
-- A **stationary Evasive loser** consumes **2** `pushback.hop` indices. A stationary Neutral loser consumes 1. A loser who moved consumes **0**, because their fallback walks a known route rather than drawing.
+- A **stationary Evasive loser** consumes **2** `pushback.hop` indices. A stationary Neutral loser consumes 1. A loser who moved consumes **0** *for the fallback itself*, because it walks a known route rather than drawing — but every loser and every tie participant then spends whatever the round's step allowance had left as blind steps from where they end up ([D39](../decisions/D39-r1-confrontation-softening.md), GDD §15), so the `pushon.edge`/`scavenge.d6` pair above fires once per those steps as well. No new purpose string: this is the existing blind-step consumer reached from a second place, and it stays lazy — a loser with no steps left draws nothing, and a boxed-in blind step draws nothing, exactly as §9.1's own walk does.
 
 The purpose string is recorded in the debug RNG trace (§15.3), so a divergent replay names the draw that went wrong rather than only the round.
 

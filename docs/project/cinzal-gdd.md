@@ -1,5 +1,5 @@
 # CINZAL
-## Game Design Document — v2.28 (scope-locked for prototype)
+## Game Design Document — v2.29 (scope-locked for prototype)
 
 > **Changelog from v0.9**
 > - Tolls **removed** (R4). Posts no longer generate income; money comes from contracts only.
@@ -207,6 +207,14 @@
 > - **§22 rows 8 and 19 are named as the headless guardrail on R9's *remedy*.** One phrase covered two opposite failures: a map too small makes the Board *unnecessary* (rows 15/16), and a map raised too far makes it *unusable* (rows 8/19 — row 19's own failing text already read "observation coverage too thin for the tool to be usable"). D37 read rows 8 and 19 while raising node count and called them proxies; they are not proxies for the question it was asking, they are that question's own rows.
 > - **§22's per-match table gains a row-number column.** D33's audit, `internal/telemetry`'s field comments and four decision documents all cite "§22 row N" against a table that never printed N. The numbers are D33's, unchanged, and they are **append-only** from here — inserting a row would silently move every existing citation.
 > - **No new metric, and no numbers move.** D38 rejects defining "share of unused nodes" as a §22 row on measurement as well as on naming: at D35 rigor it falls monotonically as the map shrinks — reading healthiest exactly when R9 is worst — and ranks the accepted 4-player map as more unused than the 5-player map that trips R9. §22's twenty rows, every band, every threshold and §20's R9 threshold are unchanged; this entry adds cross-references only. Companion RFC moves to r34 (pointer only).
+>
+> **Changelog v2.28 → v2.29** — R1 is answered, and §20's guessed remedy is not the one that ships (issue [#245](https://github.com/garnizeh/cinzal/issues/245), [D39](../decisions/D39-r1-confrontation-softening.md))
+> - **§15: a confrontation no longer freezes the loser.** The declared route and the action are still forfeit; the round's **remaining steps** are not. From the fallback node the loser Pushes On (§9.1) for as many steps as their allowance had left, with the confrontation node treated as the node they just came from — so §9.1's own ladder keeps the first step out of it, and §9.1's own "no action at the end of a blind walk" keeps the action forfeit standing.
+> - **§15: the crossing-corrected winner was losing a round the rules say they won.** The Winner bullet says *"Holds the node; their route continues"*, but a crossing resolves at the Aggressive party's origin (§15a), and for one of the two parties that is not where their own step was heading — so a winner snapped back there had their route halted anyway. They are 6.1%–6.8% of what row 1 was counting. They now continue from the node they hold, on the same terms as a loser.
+> - **§15: a tie was never supposed to cost a round, and now doesn't.** The tie paragraph said only that everyone falls back, nobody loses cargo and stakes are returned; the engine additionally halted every participant, as an admitted implementation necessity rather than a rule. Tie participants now continue on the same terms as a loser. Ties are 21%–24% of what §22 row 1 was counting.
+> - **§20's R1 remedy was a guess, and it was measurable.** *"Most likely by letting the loser continue their route from the fallback node"* cannot be executed without walking them back through the node they were just pushed out of — the C → D → C shape §15's own pushback clause calls *"worse than no rule"* — which happens to about nine in ten continued losers. Measured at D35 rigor it also leaves §22 rows 2, 3, 9 and 17 essentially where it found them, while the adopted rule improves all four.
+> - **§22 row 1 was not measuring a share of submitted routes.** Its numerator counted halt *events*: one per catch rather than one per route, including catches on seats that submitted no route and catches on a plan that had already run out. Roughly half of what it counted was not a route cut short. The row's unit is now stated in the row. The threshold, the band, the denominator and the verdict tier are unchanged — and under the corrected count the shipped rule still failed at every player count, which is what makes the correction safe to make here.
+> - **No other band moves.** Companion RFC moves to r35 (§6.4's worked example only).
 
 ---
 
@@ -1244,20 +1252,20 @@ TOTAL = D6
       + underestimated               (+1 if your Infamy is the LOWEST present)
 ```
 
-**Highest total wins.** On a **tie**, nobody wins: everyone falls back to the node they came from, nobody loses cargo, stakes are returned. Ties are anticlimactic by design — it makes speculative aggression a worse bet.
+**Highest total wins.** On a **tie**, nobody wins: everyone falls back to the node they came from, nobody loses cargo, stakes are returned. Their declared route and their action end there, and their **remaining steps carry on from that node as blind steps**, exactly as a loser's do below ([D39](../decisions/D39-r1-confrontation-softening.md)). Ties are anticlimactic by design — it makes speculative aggression a worse bet, and a tie that cost a player their whole round would be the least anticlimactic outcome in the game.
 
 **Winner**
 - **+2 Infamy**
 - Takes **half** of each loser's stake, rounded down
 - **May** take the **cargo** of one loser of their choice, unless that loser was Evasive and paid the shakedown. Taking is optional and requires an **empty cargo slot**; a winner already carrying something cannot take more. Refused or impossible, the crate **falls at the node**, still bound to its original origin/destination pair (§8.4) — it does not become a loose crate
 - A winner may take cargo they hold **no matching contract for**. They cannot deliver it, but the owner cannot either, which is frequently the point. The price is their own cargo slot
-- Holds the node; their route continues
+- Holds the node; their route continues. The one exception is a **crossing** (§15a), which resolves at the Aggressive party's origin: if that is not where the winner's own step was heading, their declared route no longer connects, and they continue from the node they hold on the same terms as a loser — remaining steps as blind steps, declared route and action forfeit ([D39](../decisions/D39-r1-confrontation-softening.md))
 
 **Loser**
 - Loses their stake
 - Loses their cargo — **unless Evasive and able to pay** the **Cr$ 4 shakedown** to the winner. The shakedown is **capped at their current balance** and **never triggers Debt** (§13); if they cannot pay the full Cr$ 4, the winner takes whatever was in their pockets **and the cargo is forfeit on the same terms as any other loss** — claimed by the winner if they want it and can carry it, otherwise dropped at the node
 - **−1 Infamy**
-- Falls back **one node** (**two** if Evasive) per the pushback rule below, and **loses the remainder of their route and their action**
+- Falls back **one node** (**two** if Evasive) per the pushback rule below, and **loses the remainder of their declared route and their action** — but **not the round's remaining steps** ([D39](../decisions/D39-r1-confrontation-softening.md)). From the fallback node they **Push On** (§9.1) for as many steps as their allowance had left, under the sector bias they declared or none; the confrontation node counts as the node they just came from, so the first of those steps may not re-enter it where an alternative exists. §9.1 already forbids an action at the end of a blind walk, which is why the action forfeit above stands unchanged
 - If Evasive: **−1 step next round**
 - **Deadline Pause**: if they were carrying cargo, the deadline on that contract extends by **1 round**. Once per contract, whether or not the cargo was kept.
 - **Keeps every post. Loses no credits beyond the stake and the shakedown.**
@@ -1489,7 +1497,9 @@ Resolved from v0.9: R3, R4, R5, Q1, Q2, Q3, Q4 — all folded into the rules abo
 
 Still open, and deliberately deferred to instrumentation rather than argument:
 
-**R1 — Cancelled routes may frustrate.** You plan four steps, take a confrontation on step one, and lose everything after it. If that's common, the game reads as a lottery. v1 ships the simple rule; §22 measures it. **Threshold: if more than 15% of submitted routes are cancelled mid-route, the confrontation rule gets softened** — most likely by letting the loser continue their route from the fallback node with remaining steps intact.
+**R1 — RESOLVED, and the guessed remedy was not the one adopted.** You plan four steps, take a confrontation on step one, and lose everything after it. If that's common, the game reads as a lottery. **Threshold: if more than 15% of submitted routes are cancelled mid-route, the confrontation rule gets softened** — this paragraph's guess was *"most likely by letting the loser continue their route from the fallback node with remaining steps intact."*
+
+Measured at M2 ([#205](https://github.com/garnizeh/cinzal/issues/205)), the row tripped at every player count, in every round from 3 to 15, on both bot tiers. [D39](../decisions/D39-r1-confrontation-softening.md) then found two things. Row 1 was counting halt *events* against a denominator of submitted *routes*, which is not the share this paragraph asks for; corrected to count routes, the shipped rule still failed everywhere (17.3%–29.1%, Operator). And the guessed remedy, made mechanical, has to walk the loser back through the node they were just pushed out of — the C → D → C shape §15's own pushback rule exists to forbid — which happens to about nine in ten continued losers and leaves §22 row 9 and the rest of the table barely moved. **What §15 now says instead** is that any participant whose declared route can no longer be walked from where they now stand keeps the round's remaining *steps* and spends them as §9.1 blind steps, losing the declared route and the action. That is one rule for all three cases the engine was halting: the loser, every participant in a tie — which §15 had never actually said forfeits a round at all — and the crossing-corrected winner, whom §15 says outright keeps their route.
 
 **R2 — RESOLVED, and it was wrong.** v1.0 and v1.1 both worried that confrontations would be too rare. Simulated under random movement across 3,000 matches per configuration, against the target band of 4–8 (M2 re-runs this and every other threshold at 10,000 per configuration, with an interval and a verdict rule — §22 and [D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md)):
 
@@ -1607,7 +1617,7 @@ Rows marked *(M5)* or *(M5.5)* below have no headless statistic to reduce and si
 
 | # | Metric | Target band | Fails if |
 |---|---|---|---|
-| 1 | Routes cancelled mid-route *(M2)* | < 15% of submitted routes | **> 15%** → confrontation too punishing (R1) |
+| 1 | Routes cancelled mid-route *(M2; one per **route**, never one per halt event — [D39](../decisions/D39-r1-confrontation-softening.md))* | < 15% of submitted routes | **> 15%** → confrontation too punishing (R1) |
 | 2 | Deliveries per player *(M2)* | 4–6 | < 3 → cooldown too long or map too large |
 | 3 | Winner's RP lead over last place *(M2)* | < 40% | > 40% → comeback mechanisms insufficient |
 | 4 | Matches where a player reached Infamy 9 *(M2)* | > 20% | **< 10%** → step gradient too steep (R7) |
