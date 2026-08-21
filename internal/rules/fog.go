@@ -54,7 +54,9 @@ func Project(s MatchState, seat game.SeatID) game.PlayerView {
 // caller could see.
 func ProjectView(s MatchState, seat game.SeatID, cfg game.Config) game.PlayerView {
 	v := Project(s, seat)
-	v.You.StepAllowance = Steps(v, cfg)
+	// Issue #206 break-on-purpose (3/3): the StepAllowance post-fill
+	// deleted. Expected to be caught by issue #199's own
+	// TestProjectViewStepAllowanceNeverZero. Never merged.
 	v.You.RoundsToNextOffer = RoundsToNextOffer(s, seat, cfg)
 	return v
 }
