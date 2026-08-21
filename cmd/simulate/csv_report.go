@@ -37,6 +37,16 @@ func (p provenance) line() string {
 		p.rootSeedHex, p.gitSHA, p.matches, p.players, p.bots, p.sweepSpec)
 }
 
+// breakdownLine is the same provenance under its own format marker. The two
+// files carry different columns and, for the breakdown, no resume path at
+// all, so a marker that told them apart only by column layout would let a
+// reader — or a later tool — mistake one for a truncated version of the
+// other.
+func (p provenance) breakdownLine() string {
+	return fmt.Sprintf("# cinzal-simulate-breakdown v1 seed=%s git_sha=%s matches=%d players=%d bots=%s sweep=%s",
+		p.rootSeedHex, p.gitSHA, p.matches, p.players, p.bots, p.sweepSpec)
+}
+
 // buildHeader lists every column this command writes, in the order issue
 // #200 states: "the swept parameters, the player count, the bot tier, the
 // match count, then every §22 field" — with status/error first (so a

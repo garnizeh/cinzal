@@ -77,6 +77,24 @@ func incidentCardThisRound(round game.RoundNumber, deck []IncidentCardID) (Incid
 	return deck[idx], true
 }
 
+// IncidentCardForRound is incidentCardThisRound for callers outside this
+// package: given a match's own MatchState.Graph.IncidentDeck, which round
+// r's card is, and whether one is live at all.
+//
+// It exists because the deck is never popped — Resolve peeks it — so "which
+// card was live in round r" stays reconstructible from the final MatchState
+// forever, which is what D33's seed-derivable-card-identity argument rests
+// on. internal/telemetry's row-6 liveness and cmd/simulate's per-card
+// breakdown both need exactly that, and both previously carried their own
+// copy of the deck[r-3] arithmetic and its bounds rule. Three copies of a
+// rule whose whole purpose is that two independent readers agree on it is
+// one copy too many: telemetry's own comment argued the duplication was
+// safe because the arithmetic is pure over exported fields, which is true
+// and is also an argument for exporting it once.
+func IncidentCardForRound(round game.RoundNumber, deck []IncidentCardID) (IncidentCardID, bool) {
+	return incidentCardThisRound(round, deck)
+}
+
 // incidentEligible returns, in seats order, every seat whose live Position
 // this round lies in sector and who did not declare Circulation Permit as a
 // Field-4 discard this round (GDD §12: "immune to this round's Sector
