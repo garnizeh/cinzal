@@ -60,8 +60,8 @@ func (p provenance) breakdownLine() string {
 // interval (issue #249) — read the mean, not a confidence bound, off it.
 // Both cells empty together still means "not a measurement," same as
 // before. CSVs written before #249 (docs/exit-demos/203, 204, 229, 205) use
-// the older rule and print a nonzero-looking "_half_width=0.000000" for
-// what was actually a constant vector; they were not regenerated, since the
+// the older rule and print a non-empty "_half_width=0.000000" for what was
+// actually a constant vector; they were not regenerated, since the
 // underlying numbers are unchanged.
 func buildHeader(dims []sweepDim) []string {
 	header := []string{"status", "error"}
