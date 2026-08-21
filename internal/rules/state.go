@@ -140,7 +140,8 @@ type Contract struct {
 	Tier int // indexes game.Config.Contracts, 0-3 (GDD §8.3)
 
 	// ExpiresRound is the absolute round this contract's deadline falls
-	// on, decremented by Upkeep step 1 (GDD "Upkeep").
+	// on. Upkeep step 1 (GDD "Upkeep") expires the contract once
+	// s.Round reaches it; GDD §8.4's Deadline Pause extends it by 1.
 	ExpiresRound game.RoundNumber
 
 	// DeadlinePauseUsed is GDD §8.4's once-per-contract flag: losing a
