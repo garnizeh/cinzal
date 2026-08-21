@@ -19,6 +19,7 @@ var (
 	_ stringer = EventKind(0)
 	_ stringer = CreditBand(0)
 	_ stringer = EventCategory(0)
+	_ stringer = HaltCause(0)
 )
 
 // TestZeroValueIsInvalid holds every enum in this package to the convention
@@ -41,6 +42,7 @@ func TestZeroValueIsInvalid(t *testing.T) {
 		{"EventKind", EventKind(0), "EventKind(0)"},
 		{"CreditBand", CreditBand(0), "CreditBand(0)"},
 		{"EventCategory", EventCategory(0), "EventCategory(0)"},
+		{"HaltCause", HaltCause(0), "HaltCause(0)"},
 	}
 
 	for _, c := range cases {
@@ -102,6 +104,27 @@ func TestCreditBandNamesMatchGDDSection5Point1(t *testing.T) {
 	for band, name := range want {
 		if got := band.String(); got != name {
 			t.Errorf("%v.String() = %q, want %q", band, got, name)
+		}
+	}
+}
+
+// TestHaltCauseNamesAreStable pins the String() output of every HaltCause
+// constant — D39's split of EventRouteHalted's three call sites, the value
+// GDD §22 row 1's numerator and any future audit of it both read.
+func TestHaltCauseNamesAreStable(t *testing.T) {
+	want := map[HaltCause]string{
+		HaltCauseTie:             "Tie",
+		HaltCauseDecisiveLoser:   "DecisiveLoser",
+		HaltCauseCorrectedWinner: "CorrectedWinner",
+	}
+
+	if len(want) != 3 {
+		t.Fatalf("test table itself is wrong: EventRouteHalted has 3 call sites, table has %d", len(want))
+	}
+
+	for cause, name := range want {
+		if got := cause.String(); got != name {
+			t.Errorf("%v.String() = %q, want %q", cause, got, name)
 		}
 	}
 }

@@ -18,11 +18,14 @@ import (
 // per-seat traversed-node history (seatWalk.Path, movement.go) and Shiv
 // usage (seatWalk.ShivFired) — both threaded through the whole movement
 // loop, never part of MatchState, exactly like Pushing On's own Previous
-// field.
-func resolveConfrontations(s *MatchState, pending []confrontation, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) []game.Event {
+// field. step is resolve.go's own movement loop index (1-based, advance's
+// same parameter) — carried through to haltStepsUnspent so every
+// EventRouteHalted this call produces can report how much of the halted
+// seat's declared plan was still outstanding (D39, GDD §22 row 1).
+func resolveConfrontations(s *MatchState, pending []confrontation, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, step int, cfg game.Config, r *RNG) []game.Event {
 	var events []game.Event
 	for _, c := range pending {
-		events = append(events, resolveOneConfrontation(s, c, validated, walks, cfg, r)...)
+		events = append(events, resolveOneConfrontation(s, c, validated, walks, step, cfg, r)...)
 	}
 	return events
 }
@@ -31,7 +34,7 @@ func resolveConfrontations(s *MatchState, pending []confrontation, validated map
 // crossing positions, roll and total every participant (seat order — RFC
 // §6.5: confrontation dice are an RNG batch, not a fairness-key selection),
 // then apply the tie or decisive outcome.
-func resolveOneConfrontation(s *MatchState, c confrontation, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) []game.Event {
+func resolveOneConfrontation(s *MatchState, c confrontation, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, step int, cfg game.Config, r *RNG) []game.Event {
 	corrected := correctCrossingPositions(s, c, walks)
 
 	infamy := make(map[game.SeatID]int, len(c.Seats))
@@ -47,13 +50,13 @@ func resolveOneConfrontation(s *MatchState, c confrontation, validated map[game.
 
 	winner, tie := determineOutcome(c.Seats, totals)
 	if tie {
-		haltEvents := resolveTie(s, c, validated, walks)
+		haltEvents := resolveTie(s, c, validated, walks, step)
 		applyMuscleLoss(s, c.Seats, nil, true)
 		return append(haltEvents, tieEvents(s.Round, c.Node, c.Seats, validated)...)
 	}
 
 	losers := orderLosersForPushback(*s, losersExcept(c.Seats, winner))
-	events := resolveDecisive(s, c, winner, corrected[winner], losers, validated, walks, cfg, r)
+	events := resolveDecisive(s, c, winner, corrected[winner], losers, validated, walks, step, cfg, r)
 	applyMuscleLoss(s, c.Seats, &winner, false)
 	return events
 }
@@ -215,16 +218,18 @@ func losersExcept(seats []game.SeatID, winner game.SeatID) []game.SeatID {
 // an implementation necessity — advance() (movement.go) trusts
 // Route[step-1] to be adjacent to the seat's actual current position, and
 // a reverted position generally invalidates whatever the rest of a
-// multi-step route assumed. Returns one EventRouteHalted per participant
-// (GDD §22's "routes cancelled mid-route" numerator, D33 row 1).
-func resolveTie(s *MatchState, c confrontation, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk) []game.Event {
+// multi-step route assumed. Returns one EventRouteHalted per participant,
+// HaltCauseTie and each one's own HaltStepsUnspent (D39; step is
+// resolve.go's movement loop index, the same parameter advance takes).
+func resolveTie(s *MatchState, c confrontation, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, step int) []game.Event {
 	events := make([]game.Event, 0, len(c.Seats))
 	for _, seat := range c.Seats {
 		dest := walks[seat].Previous
 		s.Players[seat].Position = dest
 		walks[seat].Path = []game.NodeID{dest}
+		unspent := haltStepsUnspent(validated[seat], step)
 		haltMovement(validated, seat)
-		events = append(events, game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: seat})
+		events = append(events, game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: seat, HaltCause: game.HaltCauseTie, HaltStepsUnspent: unspent})
 	}
 	return events
 }
@@ -259,18 +264,21 @@ func tieEvents(round game.RoundNumber, node game.NodeID, seats []game.SeatID, va
 // reach c.Node) — their remaining route no longer starts from where it
 // assumed, so it is halted exactly like a loser's despite winning; every
 // other case leaves it untouched, "route continues" exactly as written.
-func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerCorrected bool, losers []game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) []game.Event {
+// step is resolve.go's movement loop index, needed by haltStepsUnspent for
+// every EventRouteHalted this call (and resolveLoser's) produces (D39).
+func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerCorrected bool, losers []game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, step int, cfg game.Config, r *RNG) []game.Event {
 	s.Players[winner].Infamy = ApplyInfamyDelta(s.Players[winner].Infamy, InfamyGainConfrontationWin)
 	var haltEvents []game.Event
 	if winnerCorrected {
+		unspent := haltStepsUnspent(validated[winner], step)
 		haltMovement(validated, winner)
-		haltEvents = append(haltEvents, game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: winner})
+		haltEvents = append(haltEvents, game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: winner, HaltCause: game.HaltCauseCorrectedWinner, HaltStepsUnspent: unspent})
 	}
 
 	var eligible []game.SeatID
 	stakeCollected, shakedownCollected := 0, 0
 	for _, seat := range losers {
-		share, shaken, forfeit, haltEvent := resolveLoser(s, c, seat, validated, walks, cfg, r)
+		share, shaken, forfeit, haltEvent := resolveLoser(s, c, seat, validated, walks, step, cfg, r)
 		stakeCollected += share
 		shakedownCollected += shaken
 		haltEvents = append(haltEvents, haltEvent)
@@ -311,9 +319,9 @@ func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerC
 // shakedown to the winner", so the caller must credit it there too, exactly
 // like the stake share — whether this seat's cargo is forfeit and still
 // theirs to give — the caller decides whether the winner takes it or it
-// drops at the node — and this loser's own EventRouteHalted (GDD §22's
-// "routes cancelled mid-route" numerator, D33 row 1).
-func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, cfg game.Config, r *RNG) (stakeShare, shakedownPaid int, forfeitCargo bool, haltEvent game.Event) {
+// drops at the node — and this loser's own EventRouteHalted, HaltCauseDecisiveLoser
+// and its HaltStepsUnspent (D39; step is resolve.go's movement loop index).
+func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, step int, cfg game.Config, r *RNG) (stakeShare, shakedownPaid int, forfeitCargo bool, haltEvent game.Event) {
 	p := &s.Players[seat]
 	o := validated[seat]
 
@@ -347,8 +355,9 @@ func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated ma
 	p.Infamy = ApplyInfamyDelta(p.Infamy, InfamyLossConfrontationLoss)
 
 	pushback(s, c, seat, o.Stance.Stance == game.StanceEvasive, walks, r)
+	unspent := haltStepsUnspent(o, step)
 	haltMovement(validated, seat)
-	haltEvent = game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: seat}
+	haltEvent = game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: seat, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: unspent}
 
 	return staked / 2, shakedownPaid, forfeitCargo, haltEvent
 }
@@ -487,6 +496,24 @@ func haltMovement(validated map[game.SeatID]game.Order, seat game.SeatID) {
 	o.PushingOn = game.PushingOn{}
 	o.Action = game.ActionOrder{Kind: game.ActionNothing}
 	validated[seat] = o
+}
+
+// haltStepsUnspent returns how many steps of o's declared plan — Route and
+// Pushing On combined — were still unspent at movement step step (1-based,
+// resolve.go's own loop index, advance's same parameter): advance consumes
+// exactly one step of Route then Pushing On per loop iteration (movement.go),
+// so step steps of the combined len(o.Route)+o.PushingOn.Steps plan have
+// been used by the time this step's confrontations resolve, regardless of
+// whether this particular seat moved this step — GDD §15b's collision check
+// evaluates every seat's position "whether or not they moved." Floored at 0
+// for a seat whose plan had already run out before this step. Must be
+// called with o read before haltMovement clears it (D39, GDD §22 row 1's
+// "at least one step ... unspent" numerator).
+func haltStepsUnspent(o game.Order, step int) int {
+	if left := len(o.Route) + o.PushingOn.Steps - step; left > 0 {
+		return left
+	}
+	return 0
 }
 
 // applyMuscleLoss applies D14's ruling (MuscleLoss, items.go) to every

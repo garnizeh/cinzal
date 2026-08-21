@@ -265,3 +265,45 @@ func (c EventCategory) String() string {
 		return invalidEnumString("EventCategory", int(c))
 	}
 }
+
+// HaltCause identifies which of EventRouteHalted's three call sites
+// (internal/rules/confront.go) produced the event — D39's split of GDD §22
+// row 1's numerator, which `#205` could not compute without it: the
+// decisive-loser and crossing-corrected-winner causes are GDD §20's own
+// remedy target, while the tie cause is internal/rules' own addition —
+// GDD §15's tie paragraph never forfeits a round.
+type HaltCause uint8
+
+const (
+	_ HaltCause = iota
+
+	// HaltCauseTie is resolveTie's halt: every participant in a
+	// confrontation with no unique highest total (GDD §15: "on a tie,
+	// nobody wins").
+	HaltCauseTie
+
+	// HaltCauseDecisiveLoser is resolveLoser's halt: a confrontation's
+	// non-winner (GDD §15's Loser bullet).
+	HaltCauseDecisiveLoser
+
+	// HaltCauseCorrectedWinner is resolveDecisive's halt: the rare case
+	// where the crossing correction (confront.go's correctCrossingPositions)
+	// moved the winner's own position, invalidating the declared route's
+	// adjacency assumption despite GDD §15's "their route continues."
+	HaltCauseCorrectedWinner
+)
+
+// String returns the halt cause's name, or "HaltCause(n)" for an invalid
+// value.
+func (c HaltCause) String() string {
+	switch c {
+	case HaltCauseTie:
+		return "Tie"
+	case HaltCauseDecisiveLoser:
+		return "DecisiveLoser"
+	case HaltCauseCorrectedWinner:
+		return "CorrectedWinner"
+	default:
+		return invalidEnumString("HaltCause", int(c))
+	}
+}
