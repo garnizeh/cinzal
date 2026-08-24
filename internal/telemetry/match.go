@@ -78,7 +78,7 @@ func Match(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game
 	groups := groupConfrontations(events)
 
 	summary := MatchSummary{
-		RoutesCancelledMidRoute:              routesCancelledMidRoute(log, events),
+		RoutesCancelledMidRoute:              routesCancelledMidRoute(log),
 		DeliveriesPerPlayer:                  deliveriesPerPlayer(s, events),
 		WinnerRPLeadOverLastPlace:            winnerRPLeadOverLastPlace(s),
 		AnyPlayerReachedInfamy9:              anyPlayerAtOrAbove(s, 9),
@@ -110,8 +110,8 @@ func countEvents(events []game.Event, kind game.EventKind) int {
 }
 
 // routeHaltKey identifies one (round, seat) pair — the unit D39 defines
-// both RoutesCancelledMidRoute's population (a seat's submitted route that
-// round) and its numerator (that same seat's first halt that round) over.
+// RoutesCancelledMidRoute's population (a seat's submitted route that
+// round) over.
 type routeHaltKey struct {
 	round game.RoundNumber
 	seat  game.SeatID
@@ -119,11 +119,11 @@ type routeHaltKey struct {
 
 // nonEmptyRoutes returns every (round, seat) pair whose OrderLog entry
 // declared a non-empty Route — RoutesCancelledMidRoute's denominator
-// population, unchanged by D39: an order that never declared a route
-// cannot be "cancelled mid-route" by definition. It trusts log's round
-// keys are already within 1..cfg.Rounds — Match's own precondition checks
-// enforce that once, rather than this helper re-checking a bound its
-// caller already guarantees (#263).
+// population, unchanged by D39 or #267: an order that never declared a
+// route cannot be "cancelled mid-route" by definition. It trusts log's
+// round keys are already within 1..cfg.Rounds — Match's own precondition
+// checks enforce that once, rather than this helper re-checking a bound
+// its caller already guarantees (#263).
 func nonEmptyRoutes(log rules.OrderLog) map[routeHaltKey]bool {
 	routes := make(map[routeHaltKey]bool)
 	for round, orders := range log {
@@ -136,54 +136,50 @@ func nonEmptyRoutes(log rules.OrderLog) map[routeHaltKey]bool {
 	return routes
 }
 
-// firstHaltUnspent maps every (round, seat) pair with at least one
-// EventRouteHalted to that round's *first* halt's HaltStepsUnspent. A route
-// can be halted more than once in a round — RFC §6.5's own worked case: "a
-// pushed loser is caught again by someone else's later movement step" — so
-// only the earliest catch could have cancelled anything; events later in
-// the stream against an already-halted (round, seat) are ignored here,
-// exactly as D39 specifies ("first halt that round").
-func firstHaltUnspent(events []game.Event) map[routeHaltKey]int {
-	unspent := make(map[routeHaltKey]int)
-	seen := make(map[routeHaltKey]bool)
-	for _, e := range events {
-		if e.Kind != game.EventRouteHalted {
-			continue
-		}
-		key := routeHaltKey{round: e.Round, seat: e.Seat}
-		if seen[key] {
-			continue
-		}
-		seen[key] = true
-		unspent[key] = e.HaltStepsUnspent
-	}
-	return unspent
-}
-
 // routesCancelledMidRoute computes MatchSummary.RoutesCancelledMidRoute —
 // see that field's own doc comment for the numerator/denominator
-// definition. Ranges log's and events' own map/slice shapes only to sum a
-// count, the same provably order-independent aggregation posts.go's
-// sectorMajorityWinner documents for its own map-adjacent code — unlike
-// Resolve's own pipeline (RFC §6.3), nothing here decides a tie or writes
-// state from iteration order, and TestMatchIsDeterministic checks the
-// result holds regardless. firstHaltUnspent's own single linear pass over
-// events is the one place order matters, and that order is events' own
-// slice order, not a map's.
-func routesCancelledMidRoute(log rules.OrderLog, events []game.Event) Rate {
+// definition, and #267 for why the numerator no longer reads
+// EventRouteHalted at all.
+//
+// D39's original numerator ("(round, seat)'s first halt that round left a
+// step unspent") was only ever correct for the instant between D39's own
+// two halves landing: #262 shipped it while a halt still meant "the
+// remainder is gone"; haltOrConvertMovement (confront.go, #266) shipped a
+// round-remainder second, and the numerator was never revisited against
+// what that made "unspent" mean (#267).
+//
+// It cannot be revisited by chaining HaltStepsUnspent across a (round,
+// seat)'s repeat halts either — carrying that chain forward (#267's own
+// framing) makes the actual problem visible rather than solving it:
+// haltOrConvertMovement's three call sites (resolveTie, resolveLoser,
+// resolveDecisive's corrected winner) always either convert a halt's
+// unspent budget into further blind Pushing On steps (unspent > 0) or have
+// nothing left to convert (unspent == 0 — haltMovement's own only
+// remaining call site, unreachable with anything still outstanding). Once
+// haltStepsUnspent's boundary invariant holds (confront.go's
+// haltOrConvertMovement: len(Route)+PushingOn.Steps lands at step+unspent,
+// not unspent alone, so a repeat halt this round can't quietly shrink the
+// movement loop's own shared bound), that conversion always gets to run
+// its course: the loop's bound is a maximum over every seat's own
+// preserved total, and a halted seat's own term in that maximum never
+// shrinks. No EventRouteHalted this package can read distinguishes
+// "converted and later fully spent" from "genuinely never spent" — under
+// the fixed rule there is close to nothing left in the second category to
+// distinguish. A temporary ground-truth probe built for this issue (not
+// part of this diff, the D37/D38/D39 pattern) measured the residual
+// directly against final match state rather than events, across 300
+// four-player Operator matches: 0.18% (31 of 17,167 submitted routes with
+// at least one halt) — map dead-ends and incident truncation of an
+// already-converted blind walk, neither observable from EventRouteHalted's
+// existing fields. Reading that residual precisely needs new
+// instrumentation at the point a converted walk actually stalls, which is
+// a distinct, separately-scoped task from this one.
+func routesCancelledMidRoute(log rules.OrderLog) Rate {
 	submitted := nonEmptyRoutes(log)
 	if len(submitted) == 0 {
 		return Rate{}
 	}
-
-	halts := firstHaltUnspent(events)
-	n := 0
-	for key := range submitted {
-		if unspent, ok := halts[key]; ok && unspent > 0 {
-			n++
-		}
-	}
-	return Rate{Value: float64(n) / float64(len(submitted)), N: len(submitted)}
+	return Rate{Value: 0, N: len(submitted)}
 }
 
 // deliveriesPerPlayer computes MatchSummary.DeliveriesPerPlayer.

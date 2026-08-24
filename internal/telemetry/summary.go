@@ -55,25 +55,16 @@ type MatchSummary struct {
 	// submitted routes") is read here as submitted *non-empty* routes.
 	//
 	// The numerator is not len(EventRouteHalted): event count and
-	// submitted-route count are different units (D39, superseding D33 row
-	// 1's own len(EventRouteHalted) read). EventRouteHalted fires once per
-	// confrontation participant, so a stationary seat that submitted no
-	// route is still a valid target (GDD §15 evaluates every player's
-	// position after each step "whether or not they moved") and, at the
-	// other end, an already-halted route can be caught again by a later
-	// movement step this same round (RFC §6.5's own worked case) — both
-	// inflate the event count against a denominator that does not include
-	// them. A halt landing on the very last step of a plan also fires the
-	// event while cancelling nothing.
-	//
-	// The numerator here is instead the count of distinct (round, seat)
-	// pairs that submitted a non-empty route and whose *first* halt that
-	// round left at least one step of the declared plan — Route or
-	// Pushing On — unspent (HaltStepsUnspent > 0). A seat with no
-	// submitted route that round, or whose first halt already had nothing
-	// left to cancel, does not count; a second halt against an
-	// already-halted (round, seat) is ignored, since only the first catch
-	// could have cancelled anything.
+	// submitted-route count are different units (D33 row 1, superseded by
+	// D39, itself superseded by #267). D39 tried "distinct (round, seat)
+	// pairs whose first halt that round left a declared-plan step unspent"
+	// (HaltStepsUnspent > 0), but that reading only ever matched "genuinely
+	// cancelled" for the instant between D39's own two halves landing — see
+	// routesCancelledMidRoute's own doc comment (match.go) for why, once
+	// haltOrConvertMovement (confront.go) always converts a halt's unspent
+	// budget into further blind Pushing On steps instead of losing it,
+	// EventRouteHalted can no longer signal a genuine cut-short at all, and
+	// the numerator is 0 for every match under the shipped rule.
 	RoutesCancelledMidRoute Rate
 
 	// DeliveriesPerPlayer is row 2: target 4-6, fails if < 3 ("cooldown too
