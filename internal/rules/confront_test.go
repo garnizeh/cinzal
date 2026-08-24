@@ -1,6 +1,7 @@
 package rules
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -208,6 +209,81 @@ func TestHaltMovementClearsRouteAndAction(t *testing.T) {
 	o := validated[0]
 	if o.Route != nil || o.PushingOn.Steps != 0 || o.Action.Kind != game.ActionNothing {
 		t.Errorf("haltMovement() order = %+v, want Route nil, PushingOn zero, Action Nothing", o)
+	}
+}
+
+// TestHaltOrConvertMovementNoBudgetFullyHalts is haltOrConvertMovement's
+// budget<=0 branch, unit-tested directly: a plan already exhausted by step
+// gets exactly haltMovement's old behaviour and reports 0 unspent.
+func TestHaltOrConvertMovementNoBudgetFullyHalts(t *testing.T) {
+	validated := map[game.SeatID]game.Order{
+		0: {Route: []game.NodeID{1, 2}, Action: game.ActionOrder{Kind: game.ActionDeliver}},
+	}
+	if got := haltOrConvertMovement(validated, 0, 2); got != 0 {
+		t.Errorf("haltOrConvertMovement() = %d, want 0 (route [1,2] fully consumed by step 2)", got)
+	}
+	o := validated[0]
+	if o.Route != nil || o.PushingOn.Steps != 0 || o.Action.Kind != game.ActionNothing {
+		t.Errorf("order = %+v, want Route nil, PushingOn.Steps 0, Action Nothing", o)
+	}
+}
+
+// TestHaltOrConvertMovementMidRouteBudgetConvertsToBlindSteps is D39's core
+// case, unit-tested directly against a still-in-Route step: a 4-step route
+// caught on step 2 truncates to the 2 already-walked entries and hands the
+// remaining 2 steps to Pushing On, Bias untouched, Action forced to
+// Nothing.
+func TestHaltOrConvertMovementMidRouteBudgetConvertsToBlindSteps(t *testing.T) {
+	sector := game.Sector(1)
+	validated := map[game.SeatID]game.Order{
+		0: {
+			Route:     []game.NodeID{10, 11, 12, 13},
+			PushingOn: game.PushingOn{Bias: &sector},
+			Action:    game.ActionOrder{Kind: game.ActionDeliver},
+		},
+	}
+	if got := haltOrConvertMovement(validated, 0, 2); got != 2 {
+		t.Errorf("haltOrConvertMovement() = %d, want 2 (route [10,11,12,13]: step 2 consumed 2, 2 left)", got)
+	}
+	o := validated[0]
+	if want := []game.NodeID{10, 11}; !slices.Equal(o.Route, want) {
+		t.Errorf("Route = %v, want %v (the already-walked prefix)", o.Route, want)
+	}
+	if o.PushingOn.Steps != 2 {
+		t.Errorf("PushingOn.Steps = %d, want 2 (the converted budget)", o.PushingOn.Steps)
+	}
+	if o.PushingOn.Bias == nil || *o.PushingOn.Bias != sector {
+		t.Errorf("PushingOn.Bias = %v, want the declared sector preserved — D39 forfeits the route and action, not the bias", o.PushingOn.Bias)
+	}
+	if o.Action.Kind != game.ActionNothing {
+		t.Errorf("Action.Kind = %v, want Nothing", o.Action.Kind)
+	}
+}
+
+// TestHaltOrConvertMovementMidPushOnBudgetKeepsRouteConvertsRemainder covers
+// the case D39's own decision doc calls out separately: a seat already past
+// its declared Route and mid-blind-walk when caught. Route (already fully
+// walked) is left as-is rather than truncated further, and the budget
+// converts to exactly the Pushing On steps that had not yet been taken.
+func TestHaltOrConvertMovementMidPushOnBudgetKeepsRouteConvertsRemainder(t *testing.T) {
+	validated := map[game.SeatID]game.Order{
+		0: {
+			Route:     []game.NodeID{10, 11},
+			PushingOn: game.PushingOn{Steps: 3},
+			Action:    game.ActionOrder{Kind: game.ActionDeliver},
+		},
+	}
+	// step 3: route (2 steps) already exhausted, 1 of the 3 Pushing On steps
+	// already taken — 2 left.
+	if got := haltOrConvertMovement(validated, 0, 3); got != 2 {
+		t.Errorf("haltOrConvertMovement() = %d, want 2 (route+PushingOn totals 5, step 3 consumed 3, 2 left)", got)
+	}
+	o := validated[0]
+	if want := []game.NodeID{10, 11}; !slices.Equal(o.Route, want) {
+		t.Errorf("Route = %v, want %v unchanged — already fully walked, nothing left to truncate", o.Route, want)
+	}
+	if o.PushingOn.Steps != 2 {
+		t.Errorf("PushingOn.Steps = %d, want 2 (the unspent remainder)", o.PushingOn.Steps)
 	}
 }
 
@@ -500,6 +576,42 @@ func TestResolveConfrontationsDecisiveOneOnOne(t *testing.T) {
 	}
 }
 
+// TestResolveConfrontationsLoserWithUnspentStepsContinuesBlind is D39's core
+// case for resolveLoser: a loser whose declared route had budget left keeps
+// it as blind Pushing On steps from the pushback destination, not a full
+// halt — Route truncated to the walked prefix, PushingOn.Steps set to the
+// unspent count, Action forfeit, and walk.Previous pointed at the
+// confrontation node (not the pushback destination's own predecessor) so
+// the blind walk's own first step can't re-enter it.
+func TestResolveConfrontationsLoserWithUnspentStepsContinuesBlind(t *testing.T) {
+	s := confrontTestState(12, 12)
+	s.Players[0].Infamy = 9
+	s.Players[1].Balance = 10
+	o1 := game.Order{
+		Stance: game.StanceOrder{Stance: game.StanceNeutral, Stake: 3},
+		Route:  []game.NodeID{12, 13, 12}, // 3 steps declared; only step 1 has run
+	}
+	validated := map[game.SeatID]game.Order{0: dominantOrder(), 1: o1}
+	walks := confrontWalks(map[game.SeatID][]game.NodeID{0: {12}, 1: {13, 12}})
+	cfg := legalTestConfig()
+	r := NewRNG(testSeed(1), int(s.Round))
+
+	events := resolveConfrontations(&s, []confrontation{{Node: 12, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
+
+	if s.Players[1].Position != 13 {
+		t.Errorf("loser Position = %d, want 13 (falls back 1 node along its own route, unchanged by D39)", s.Players[1].Position)
+	}
+	if o := validated[1]; len(o.Route) != 1 || o.Route[0] != 12 || o.PushingOn.Steps != 2 || o.Action.Kind != game.ActionNothing {
+		t.Errorf("loser's order = %+v, want Route [12] (the already-walked prefix), PushingOn.Steps 2 (D39's continuation), Action Nothing", o)
+	}
+	if got, want := walks[1].Previous, game.NodeID(12); got != want {
+		t.Errorf("loser's walk.Previous = %d, want %d (the confrontation node) — the blind walk must not re-enter it", got, want)
+	}
+	if halt := events[0]; halt.Kind != game.EventRouteHalted || halt.Seat != 1 || halt.HaltCause != game.HaltCauseDecisiveLoser || halt.HaltStepsUnspent != 2 {
+		t.Errorf("halt event = %+v, want Kind RouteHalted, Seat 1, HaltCause DecisiveLoser, HaltStepsUnspent 2", halt)
+	}
+}
+
 // TestResolveConfrontationsBrokeEvasiveLoserNoDebt is the acceptance
 // criterion verbatim: "A broke Evasive loser: cargo forfeit, winner takes
 // the partial payment, no Debt, no lease surrendered, no flag."
@@ -710,6 +822,49 @@ func TestResolveConfrontationsTieRevertsWithNoPenalty(t *testing.T) {
 	}
 }
 
+// TestResolveConfrontationsTieWithUnspentStepsContinuesBlind is D39's core
+// case for resolveTie: seat 0 declared a route with budget still left when
+// the tie hit, seat 1 declared none — one continues as a blind walk from
+// the node it reverted to, the other gets the unchanged budget<=0 halt,
+// side by side in the same confrontation. Both seats' route is irrelevant
+// to confrontationTotal, so this doesn't disturb the guaranteed-tie seed.
+func TestResolveConfrontationsTieWithUnspentStepsContinuesBlind(t *testing.T) {
+	seed, _ := findEqualD6Seed(t, 6)
+
+	s := confrontTestState(2, 2)
+	s.Players[0].Infamy, s.Players[1].Infamy = 4, 4
+	o0 := game.Order{
+		Stance: game.StanceOrder{Stance: game.StanceAggressive, Stake: 3},
+		Route:  []game.NodeID{2, 1, 2}, // 3 steps declared; only step 1 has run
+	}
+	o1 := game.Order{Stance: game.StanceOrder{Stance: game.StanceAggressive, Stake: 3}}
+	validated := map[game.SeatID]game.Order{0: o0, 1: o1}
+	walks := confrontWalks(map[game.SeatID][]game.NodeID{0: {1, 2}, 1: {3, 2}})
+	cfg := legalTestConfig()
+	r := NewRNG(seed, 6)
+
+	events := resolveConfrontations(&s, []confrontation{{Node: 2, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
+
+	if s.Players[0].Position != 1 {
+		t.Errorf("seat 0 Position = %d, want 1 (the node it came from, unchanged by D39)", s.Players[0].Position)
+	}
+	if o := validated[0]; len(o.Route) != 1 || o.Route[0] != 2 || o.PushingOn.Steps != 2 || o.Action.Kind != game.ActionNothing {
+		t.Errorf("seat 0 order = %+v, want Route [2] (the already-walked prefix), PushingOn.Steps 2, Action Nothing", o)
+	}
+	if got, want := walks[0].Previous, game.NodeID(2); got != want {
+		t.Errorf("seat 0 walk.Previous = %d, want %d (the confrontation node) — the blind walk must not re-enter it", got, want)
+	}
+	if o := validated[1]; o.Route != nil || o.PushingOn.Steps != 0 || o.Action.Kind != game.ActionNothing {
+		t.Errorf("seat 1 order = %+v, want fully halted — no budget was declared to convert", o)
+	}
+	if h := events[0]; h.HaltCause != game.HaltCauseTie || h.HaltStepsUnspent != 2 {
+		t.Errorf("seat 0 halt event = %+v, want HaltCause Tie, HaltStepsUnspent 2", h)
+	}
+	if h := events[1]; h.HaltCause != game.HaltCauseTie || h.HaltStepsUnspent != 0 {
+		t.Errorf("seat 1 halt event = %+v, want HaltCause Tie, HaltStepsUnspent 0", h)
+	}
+}
+
 // findEqualD6Seed searches small integer seeds for one where two identical,
 // back-to-back PurposeConfrontD6 draws (the shape two identically-modified
 // participants produce) come out equal — the fixture two-seat tie tests
@@ -902,8 +1057,10 @@ func TestResolveConfrontationsMeleeTwoStationaryEvasiveLosersPushbackHopInSeatOr
 // dominant, Aggressive seat's own origin is where GDD §15a resolves the
 // fight; the weak seat's destination already was that node (the "through"
 // side), so only the dominant seat needs correcting — and, since it wins,
-// its remaining route is halted despite winning (the one case where "route
-// continues" doesn't literally hold).
+// its declared route and action are forfeit despite winning (the one case
+// where "route continues" doesn't literally hold), but since D39 its one
+// unspent step survives as a blind Pushing On step from c.Node — the node
+// it already stands on, so walk.Previous needs no exclusion write.
 func TestResolveConfrontationsCrossingSnapsBothToTheSameNode(t *testing.T) {
 	s := confrontTestState(1, 0) // advance() already moved seat 0: 0->1, seat 1: 1->0
 	s.Players[0].Infamy = 9
@@ -920,8 +1077,11 @@ func TestResolveConfrontationsCrossingSnapsBothToTheSameNode(t *testing.T) {
 	if s.Players[0].Position != 0 {
 		t.Errorf("winner Position = %d, want 0 (the fight's own node, corrected back from its raw destination 1)", s.Players[0].Position)
 	}
-	if o := validated[0]; o.Route != nil {
-		t.Errorf("winner's remaining route = %v, want halted — it no longer starts from the winner's corrected position", o.Route)
+	if o := validated[0]; len(o.Route) != 1 || o.Route[0] != 1 || o.PushingOn.Steps != 1 || o.Action.Kind != game.ActionNothing {
+		t.Errorf("winner's order = %+v, want Route [1] (the already-walked prefix), PushingOn.Steps 1 (D39's continuation), Action Nothing", o)
+	}
+	if got, want := walks[0].Previous, game.NodeID(0); got != want {
+		t.Errorf("winner's walk.Previous = %d, want %d unchanged — already standing on c.Node, nothing to exclude", got, want)
 	}
 	if len(events) != 3 {
 		t.Fatalf("events = %v, want 2 EventRouteHalted (corrected winner + loser) + 1 EventConfrontation", events)
@@ -937,6 +1097,31 @@ func TestResolveConfrontationsCrossingSnapsBothToTheSameNode(t *testing.T) {
 	}
 	if h := events[1]; h.HaltCause != game.HaltCauseDecisiveLoser || h.HaltStepsUnspent != 0 {
 		t.Errorf("halt event = %+v, want HaltCause DecisiveLoser, HaltStepsUnspent 0 (no route declared)", h)
+	}
+}
+
+// TestResolveConfrontationsCrossingCorrectedWinnerNoBudgetStaysHalted is the
+// budget<=0 half of the case above: a winner whose declared route was
+// exactly the one crossing step (nothing planned past it) has no budget
+// left to convert, so D39 changes nothing here — the winner's order is
+// cleared exactly as haltMovement always cleared it.
+func TestResolveConfrontationsCrossingCorrectedWinnerNoBudgetStaysHalted(t *testing.T) {
+	s := confrontTestState(1, 0)
+	s.Players[0].Infamy = 9
+	o0 := dominantOrder()
+	o0.Route = []game.NodeID{1} // nothing declared past the crossing step
+	validated := map[game.SeatID]game.Order{0: o0, 1: weakOrder()}
+	walks := confrontWalks(map[game.SeatID][]game.NodeID{0: {0, 1}, 1: {1, 0}})
+	cfg := legalTestConfig()
+	r := NewRNG(testSeed(1), int(s.Round))
+
+	events := resolveConfrontations(&s, []confrontation{{Node: 0, Seats: []game.SeatID{0, 1}}}, validated, walks, 1, cfg, r)
+
+	if o := validated[0]; o.Route != nil || o.PushingOn.Steps != 0 || o.Action.Kind != game.ActionNothing {
+		t.Errorf("winner's order = %+v, want fully halted (Route nil, PushingOn.Steps 0, Action Nothing) — nothing left to continue", o)
+	}
+	if h := events[0]; h.HaltCause != game.HaltCauseCorrectedWinner || h.HaltStepsUnspent != 0 {
+		t.Errorf("halt event = %+v, want HaltCause CorrectedWinner, HaltStepsUnspent 0 (route [1]: fully consumed by step 1)", h)
 	}
 }
 

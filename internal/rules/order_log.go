@@ -16,10 +16,10 @@ import "github.com/garnizeh/cinzal/internal/game"
 // — building and keeping this map, round by round, is the caller's job
 // (cmd/simulate today, internal/match's fold in M3). internal/telemetry
 // needs it specifically for GDD §22's "routes cancelled mid-route"
-// denominator: haltMovement (confront.go) clears a route from the
-// in-memory validated copy without ever having recorded that the route was
-// submitted in the first place (D33 row 1) — this is the only remaining
-// record of that fact once a round resolves.
+// denominator: haltOrConvertMovement (confront.go) clears or truncates a
+// route in the in-memory validated copy without ever having recorded that
+// the route was submitted in the first place (D33 row 1) — this is the only
+// remaining record of that fact once a round resolves.
 //
 // This is a new, separate production declaration — not an export of
 // determinism_test.go's own unexported orderLog/roundOrders shape, which

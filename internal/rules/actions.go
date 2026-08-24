@@ -17,12 +17,13 @@ import (
 //
 // Every seat still carrying a non-Nothing Action at this point has a live
 // Position equal to their route's true ending node: a confrontation loser's
-// Action was already nulled by haltMovement (confront.go), so nothing here
-// needs to re-derive "where did this seat actually end up" — s.Players
-// [seat].Position already is that answer. This is what makes resolving one
-// seat at a time, in fairness order, correct for the contended actions
-// (Pickup, Stake Post, Deal): each seat's turn sees exactly what every
-// earlier seat in this same order already did to s this round.
+// Action was already nulled by haltOrConvertMovement (confront.go), so
+// nothing here needs to re-derive "where did this seat actually end up" —
+// s.Players[seat].Position already is that answer. This is what makes
+// resolving one seat at a time, in fairness order, correct for the
+// contended actions (Pickup, Stake Post, Deal): each seat's turn sees
+// exactly what every earlier seat in this same order already did to s this
+// round.
 //
 // The second return value is GDD §9.1's Vanish-qualifies-for-Loitering-
 // exemption fact — "a Vanish qualifies only if it actually reduced your
