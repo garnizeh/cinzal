@@ -28,7 +28,7 @@ A temporary probe (`internal/rules/probe_d41_test.go`, reusing the existing file
 | `0xa0` (committed) | 10,000 | +0.00857 | [−0.00452, +0.02167] |
 | `0xb7` (second, independent) | 10,000 | −0.00492 | [−0.01802, +0.00817] |
 
-Both intervals straddle zero — D35's "watch," not "act," on either root alone. Pooling both into one 20,000-match paired-margin vector (exact combination from each root's own `n`, mean, and sample SD — both roots returned `s = 0.66824`, and the pooled sample SD comes to the same value to five decimals, which reads as this margin's population variance being a fairly stable property of the match/config, not of which root was drawn):
+Both intervals straddle zero — D35's "watch," not "act," on either root alone. Pooling both into one 20,000-match paired-margin vector (exact combination from each root's own `n`, mean, and sample SD — both roots returned `s = 0.66824`, and the pooled sample SD comes to `0.66826`, matching to four decimals, which reads as this margin's population variance being a fairly stable property of the match/config, not of which root was drawn):
 
 **Pooled margin: +0.0018 [−0.0074, +0.0111], n = 20,000.**
 
@@ -47,7 +47,7 @@ Reprised from #265, read against the measurement above:
 
 **Option 2, on the strength of Option 3's own measurement**, which is the D35 procedure applied directly: the pooled 20,000-match interval straddles zero, so D35's own rule says record "watch, unresolved" rather than act. `TestOperatorBeatsRunnerOverAThousandMatches` no longer asserts `margin <= 0` as a failure. It keeps its two existing fail-closed checks — both cohorts must reach round 15, and the two cohorts' mean RP must not compare exactly equal — and keeps logging the margin every run (the test's own existing doc comment: *"failing to report the margin is not"* a result worth having). What changes is the strict pass/fail line: it is removed, because the measurement now on record says the signal it was asserting does not reliably exist at any sample size this test practically runs.
 
-#194's stated acceptance criterion (*"Operator beats Runner over 1,000 matches... by mean RP"*) is retroactively unsupported as a strict signal: a single-1,000-match paired comparison has enough sampling noise, on this measured population SD, to land on either side by chance alone (±0.013 half-width against a true margin close to zero) — the criterion happened to read true on the committed seed pre-D39, not because the underlying edge was solid. D39 didn't break a working assertion; it moved a coin flip's outcome, on a margin that this decision's measurement shows was never far from zero to begin with.
+`#194`'s stated acceptance criterion (*"Operator beats Runner over 1,000 matches... by mean RP"*) is retroactively unsupported as a strict signal: a single-1,000-match paired comparison has enough sampling noise, on this measured population SD, to land on either side by chance alone (±0.041 half-width — `1.96·s/√1,000` at `s = 0.66824` — against a true margin close to zero) — the criterion happened to read true on the committed seed pre-D39, not because the underlying edge was solid. D39 didn't break a working assertion; it moved a coin flip's outcome, on a margin that this decision's measurement shows was never far from zero to begin with.
 
 ## Reasoning
 
