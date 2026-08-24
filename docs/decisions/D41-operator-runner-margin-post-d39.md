@@ -1,7 +1,7 @@
 # D41 — Does D39 leave Operator's edge over Runner (#194) too narrow to test?
 
 **Status:** decided
-**Blocks:** the follow-up task that softens `TestOperatorBeatsRunnerOverAThousandMatches`'s assertion
+**Blocks:** [#272](https://github.com/garnizeh/cinzal/issues/272) — the follow-up task that softens `TestOperatorBeatsRunnerOverAThousandMatches`'s assertion
 **Decided:** 2026-08-24
 **Issue:** [#265](https://github.com/garnizeh/cinzal/issues/265)
 
@@ -61,7 +61,7 @@ Reprised from #265, read against the measurement above:
 
 ## Consequences
 
-- **`TestOperatorBeatsRunnerOverAThousandMatches` loses its `margin <= 0` failure**, keeping its two fail-closed structural checks and its margin logging. This is a small, self-contained diff confined to `internal/rules/bots_operator_golden_external_test.go`'s existing assertions — filed as a follow-up task rather than included in this decision's own PR, matching D39's own precedent of a decision PR that carries no implementing diff.
+- **`TestOperatorBeatsRunnerOverAThousandMatches` loses its `margin <= 0` failure**, keeping its two fail-closed structural checks and its margin logging. This is a small, self-contained diff confined to `internal/rules/bots_operator_golden_external_test.go`'s existing assertions — filed as [#272](https://github.com/garnizeh/cinzal/issues/272) rather than included in this decision's own PR, matching D39's own precedent of a decision PR that carries no implementing diff.
 - **#194's acceptance criterion is superseded for this test by this decision.** #194 itself stays closed; nothing here reopens M2's already-shipped Operator tier.
 - **Option 4 is not closed by this decision.** Whether Operator's route-planning edge over Runner's simpler heuristic is *supposed* to still be measurable after D39 — a question about `internal/bots`' tier differentiation, not about this test — is real and unresolved. It is not filed as a new task here: D35's own pooled-and-straddling outcome is explicitly handed to M5.5's human playtesting (matching [D36](D36-lease-rate-chokepoint-gate.md)'s identical disposition for its own "not reachable by the tested lever, at the tested power" finding), and a bot-design task opened now would have nothing further to measure that this decision hasn't already measured.
 - **Reversible at low cost.** Nothing in `internal/rules` or `internal/bots` changes here — only a test assertion, in its own follow-up PR. A future decision (e.g., after M5.5 human data, or after a change to Operator's route planning) means re-running this same paired measurement, not unwinding shipped behavior.
