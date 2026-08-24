@@ -158,14 +158,6 @@ type contractKey struct {
 	origin, destination game.NodeID
 }
 
-// routeSeat identifies one (round, seat) pair — mirrors
-// internal/telemetry's own routeHaltKey (match.go), D39's unit for both
-// RoutesSubmittedByRound's population and RoutesHaltedByRound's numerator.
-type routeSeat struct {
-	round game.RoundNumber
-	seat  game.SeatID
-}
-
 // tier4Index is Config.Contracts' index for Tier IV — GDD §8.3's fourth and
 // last band, the one R7 is entirely about.
 const tier4Index = 3
@@ -365,18 +357,11 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 	b.RoutesSubmittedByRound = make([]int, cfg.Rounds)
 	b.RoutesHaltedByRound = make([]int, cfg.Rounds)
 
-	// submitted is the same (round, seat) population
-	// telemetry.MatchSummary.RoutesCancelledMidRoute's denominator counts
-	// — every non-empty submitted route — kept as a set here because the
-	// numerator below needs to test membership per (round, seat), not
-	// just sum a round's count.
-	submitted := map[routeSeat]bool{}
 	for round, orders := range log {
 		idx := int(round) - 1
-		for seat, o := range orders {
+		for _, o := range orders {
 			if len(o.Route) > 0 {
 				b.RoutesSubmittedByRound[idx]++
-				submitted[routeSeat{round: round, seat: seat}] = true
 			}
 		}
 	}
