@@ -25,8 +25,13 @@ func TestMatchAgainstHandComputedFixture(t *testing.T) {
 	}
 
 	want := MatchSummary{
-		// Row 1: 4 EventRouteHalted / 15 non-empty submitted routes.
-		RoutesCancelledMidRoute: Rate{Value: 4.0 / 15.0, N: 15},
+		// Row 1: D39's numerator counts distinct (round, seat) pairs, not
+		// raw events — of fixtureEvents' six EventRouteHalted, only
+		// (Round 2, Seat 1) and (Round 6, Seat 1) are a non-empty
+		// submitted route whose first halt left something unspent; see
+		// fixtureEvents' own comment for the other four's exclusions. 2 /
+		// 15 non-empty submitted routes.
+		RoutesCancelledMidRoute: Rate{Value: 2.0 / 15.0, N: 15},
 
 		// Row 2: 5 EventDelivered / 3 players.
 		DeliveriesPerPlayer: 5.0 / 3.0,
@@ -215,5 +220,85 @@ func TestFinalThirdStart(t *testing.T) {
 		if got := finalThirdStart(tc.rounds); got != tc.want {
 			t.Errorf("finalThirdStart(%d) = %d, want %d", tc.rounds, got, tc.want)
 		}
+	}
+}
+
+// TestRoutesCancelledMidRouteExclusions is D39's own acceptance criterion:
+// each of the three mechanics that inflated the old len(EventRouteHalted) /
+// N count gets its own minimal case here, isolated from the shared fixture,
+// each paired with the value the superseded definition would have produced
+// for the same input — so a regression back to raw event counting is
+// caught here even if it happened to cancel out in the larger fixture.
+func TestRoutesCancelledMidRouteExclusions(t *testing.T) {
+	tests := []struct {
+		name       string
+		log        rules.OrderLog
+		events     []game.Event
+		want       Rate
+		oldDefWant float64 // what len(EventRouteHalted) / N would have produced
+	}{
+		{
+			// GDD §15 evaluates every player's position after each step
+			// "whether or not they moved" — a stationary seat that
+			// submitted no route this round is still a confrontation
+			// participant, and fires EventRouteHalted, but it is not a
+			// member of "submitted routes" to begin with.
+			name: "halt on a seat that submitted no route",
+			log: rules.OrderLog{
+				1: {
+					0: game.Order{},                        // no route declared
+					1: game.Order{Route: []game.NodeID{5}}, // the match's only submitted route
+				},
+			},
+			events: []game.Event{
+				{Kind: game.EventRouteHalted, Round: 1, Seat: 0, HaltStepsUnspent: 3},
+			},
+			want:       Rate{Value: 0, N: 1},
+			oldDefWant: 1, // 1 event / 1 route
+		},
+		{
+			// RFC §6.5's own worked case: "a pushed loser is caught
+			// again by someone else's later movement step" — a second
+			// catch against an already-halted route fires another
+			// event. Only the first halt (nothing left unspent here)
+			// decides the pair; the second's own unspent count must not
+			// resurrect it.
+			name: "repeat halt against the same (round, seat)",
+			log: rules.OrderLog{
+				1: {0: game.Order{Route: []game.NodeID{5}}},
+			},
+			events: []game.Event{
+				{Kind: game.EventRouteHalted, Round: 1, Node: 1, Seat: 0, HaltStepsUnspent: 0},
+				{Kind: game.EventRouteHalted, Round: 1, Node: 2, Seat: 0, HaltStepsUnspent: 4},
+			},
+			want:       Rate{Value: 0, N: 1},
+			oldDefWant: 2, // 2 events / 1 route
+		},
+		{
+			// A halt on the plan's very last step cancels no remaining
+			// step (GDD §15: the penalty is position-independent), so
+			// HaltStepsUnspent == 0 and it must not count as a genuine
+			// cut-short even though it is this pair's only halt.
+			name: "halt with no step left to cancel",
+			log: rules.OrderLog{
+				1: {0: game.Order{Route: []game.NodeID{5}}},
+			},
+			events: []game.Event{
+				{Kind: game.EventRouteHalted, Round: 1, Seat: 0, HaltStepsUnspent: 0},
+			},
+			want:       Rate{Value: 0, N: 1},
+			oldDefWant: 1, // 1 event / 1 route
+		},
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			if got := routesCancelledMidRoute(tc.log, tc.events); got != tc.want {
+				t.Errorf("routesCancelledMidRoute() = %+v, want %+v", got, tc.want)
+			}
+			if tc.oldDefWant == tc.want.Value {
+				t.Fatalf("test case %q does not actually distinguish the new definition from the superseded len(EventRouteHalted)/N one", tc.name)
+			}
+		})
 	}
 }

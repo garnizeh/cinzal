@@ -151,6 +151,14 @@ type contractKey struct {
 	origin, destination game.NodeID
 }
 
+// routeSeat identifies one (round, seat) pair — mirrors
+// internal/telemetry's own routeHaltKey (match.go), D39's unit for both
+// RoutesSubmittedByRound's population and RoutesHaltedByRound's numerator.
+type routeSeat struct {
+	round game.RoundNumber
+	seat  game.SeatID
+}
+
 // tier4Index is Config.Contracts' index for Tier IV — GDD §8.3's fourth and
 // last band, the one R7 is entirely about.
 const tier4Index = 3
@@ -334,28 +342,57 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 
 	b.RoutesSubmittedByRound = make([]int, cfg.Rounds)
 	b.RoutesHaltedByRound = make([]int, cfg.Rounds)
+
+	// submitted is the same (round, seat) population
+	// telemetry.MatchSummary.RoutesCancelledMidRoute's denominator counts
+	// — every non-empty submitted route — kept as a set here because the
+	// numerator below needs to test membership per (round, seat), not
+	// just sum a round's count.
+	submitted := map[routeSeat]bool{}
 	for round, orders := range log {
 		idx := int(round) - 1
 		if idx < 0 || idx >= cfg.Rounds {
 			continue
 		}
-		for _, o := range orders {
+		for seat, o := range orders {
 			if len(o.Route) > 0 {
 				b.RoutesSubmittedByRound[idx]++
+				submitted[routeSeat{round: round, seat: seat}] = true
 			}
 		}
 	}
 
+	// firstHaltUnspent holds, per (round, seat) with at least one halt
+	// this round, the *first* halt's HaltStepsUnspent — mirrors
+	// telemetry's own firstHaltUnspent (match.go): a route can be halted
+	// more than once in a round (RFC §6.5: "a pushed loser is caught
+	// again by someone else's later movement step"), and only the first
+	// catch could have cancelled anything (D39).
+	firstHaltUnspent := map[routeSeat]int{}
+	seenHalt := map[routeSeat]bool{}
 	hitRounds := map[game.RoundNumber]bool{}
 	for _, e := range events {
 		switch e.Kind {
 		case game.EventRouteHalted:
-			if idx := int(e.Round) - 1; idx >= 0 && idx < cfg.Rounds {
-				b.RoutesHaltedByRound[idx]++
+			key := routeSeat{round: e.Round, seat: e.Seat}
+			if !seenHalt[key] {
+				seenHalt[key] = true
+				firstHaltUnspent[key] = e.HaltStepsUnspent
 			}
 		case game.EventIncidentHit:
 			hitRounds[e.Round] = true
 		}
+	}
+	for key := range submitted {
+		unspent, ok := firstHaltUnspent[key]
+		if !ok || unspent <= 0 {
+			continue
+		}
+		idx := int(key.round) - 1
+		if idx < 0 || idx >= cfg.Rounds {
+			continue
+		}
+		b.RoutesHaltedByRound[idx]++
 	}
 
 	// Which card was live in which round comes from rules.IncidentCardForRound
