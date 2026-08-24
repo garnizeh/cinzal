@@ -33,6 +33,38 @@ func breakdownMatches(t *testing.T, players int, tier bots.Tier, n int) ([]Match
 	return results, cfg
 }
 
+// TestMatchAndBreakdownRejectTheSameMalformedOrderLog is issue #263's own
+// acceptance criterion: a cfg.Rounds == 1 match whose OrderLog holds a
+// non-empty route at round 2 must not let telemetry.Match and Breakdown
+// disagree about row 1's population. Before the fix, Match counted the
+// stray entry into RoutesCancelledMidRoute.N — nonEmptyRoutes (match.go)
+// had no bound of its own — while this file's own finish() dropped it from
+// RoutesSubmittedByRound, one row with two different denominators from the
+// same log. TestBreakdownAgreesWithTelemetry (above) never caught this
+// because it only runs real matches, whose OrderLog never holds a round
+// outside 1..cfg.Rounds; this test builds that log directly instead.
+func TestMatchAndBreakdownRejectTheSameMalformedOrderLog(t *testing.T) {
+	s := rules.MatchState{
+		Round:   1,
+		Graph:   rules.Graph{Nodes: []rules.Node{{ID: 0, Sector: game.SectorOldDocks}}},
+		Players: []rules.Player{{Seat: 0}},
+	}
+	log := rules.OrderLog{
+		1: {0: {}},
+		2: {0: {Route: []game.NodeID{1}}},
+	}
+	events := []game.Event{{Kind: game.EventDelivered, Round: 1, Seat: 0}}
+	cfg := game.Config{Rounds: 1}
+
+	if _, err := telemetry.Match(s, log, events, cfg); err == nil {
+		t.Error("telemetry.Match() error = nil, want an error for a round outside 1..cfg.Rounds")
+	}
+
+	if _, err := newBreakdownTracker(1).finish(s, log, events, cfg); err == nil {
+		t.Error("finish() error = nil, want an error for a round outside 1..cfg.Rounds — Match and Breakdown must reject the same log")
+	}
+}
+
 // TestBreakdownAgreesWithTelemetry is the check that keeps this file
 // honest. Breakdown splits three GDD §22 rows that internal/telemetry also
 // computes whole, which means three definitions now exist twice. A split

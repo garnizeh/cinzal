@@ -187,6 +187,21 @@ func TestMatchFailsClosed(t *testing.T) {
 			events: fixtureEvents(),
 			cfg:    fixtureConfig(),
 		},
+		{
+			// #263: nonEmptyRoutes ranged log with no bound of its own, so
+			// a stray entry outside 1..cfg.Rounds inflated
+			// RoutesCancelledMidRoute.N against cmd/simulate's own
+			// per-round split, which was already bounded.
+			name:  "OrderLog has a round outside 1..cfg.Rounds",
+			state: fixtureState(),
+			log: func() rules.OrderLog {
+				log := fixtureOrderLog()
+				log[7] = map[game.SeatID]game.Order{0: {Route: []game.NodeID{1}}}
+				return log
+			}(),
+			events: fixtureEvents(),
+			cfg:    fixtureConfig(),
+		},
 	}
 
 	for _, tc := range tests {
