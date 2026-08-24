@@ -90,7 +90,7 @@ func mean(xs []float64) float64 {
 	return total / float64(len(xs))
 }
 
-// TestOperatorBeatsRunnerOverAThousandMatches is issue #194's own
+// TestOperatorBeatsRunnerOverAThousandMatches was issue #194's own
 // acceptance criterion: "Operator beats Runner over 1,000 matches at 4
 // players on the golden seed set, by mean RP, by a margin reported in the
 // test output." One shared 1,000-seed golden set drives both cohorts —
@@ -105,18 +105,20 @@ func mean(xs []float64) float64 {
 // failing to report the margin is not (hence t.Logf below regardless of
 // outcome).
 //
-// This currently fails on its own committed golden seed: D39
+// This is report-only, per D41
+// (docs/decisions/D41-operator-runner-margin-post-d39.md, issue #265): D39
 // (docs/decisions/D39-r1-confrontation-softening.md, issue #259) softened
-// what a confrontation loss costs, which narrows whatever edge Operator's
-// route planning bought over Runner's simpler heuristic — root 0xa0 below
-// now lands Operator at a mean RP a hair under Runner's (margin ~-0.005 out
-// of ~2.2), and a probe across three more seed roots found the sign is not
-// stable (some show Operator ahead by a comparable margin), i.e. the true
-// post-D39 margin is statistical noise for a single 1,000-match comparison,
-// not a code defect — both tiers resolve confrontations through the
-// identical, symmetric path. Left as-is, undisturbed, rather than folded
-// into #259's own scope or resolved unilaterally: issue #265 (D41) is
-// deciding what this test should assert going forward.
+// what a confrontation loss costs, narrowing whatever edge Operator's route
+// planning bought over Runner's simpler heuristic enough that this test's
+// own 1,000-match sample started landing on either side of zero by chance.
+// D41 re-measured the paired margin at D35 rigor — 10,000 matches per root,
+// two independent roots, pooled to 20,000 once the first pair straddled
+// zero — and found it statistically indistinguishable from zero (pooled
+// margin +0.0018 [-0.0074, +0.0111]), D35's own "watch, unresolved at
+// n = 20,000" terminal state. Both tiers resolve confrontations through the
+// identical, symmetric path D39 changed, so this is noise in the signal
+// this test can practically measure, not a code defect; the test no longer
+// asserts a margin sign, only reports it.
 //
 // Fails closed exactly as the acceptance criteria state: both cohorts must
 // have completed all 1,000 matches to round 15 (a cohort that silently
@@ -153,9 +155,5 @@ func TestOperatorBeatsRunnerOverAThousandMatches(t *testing.T) {
 
 	if math.Abs(margin) < 1e-9 {
 		t.Fatalf("Operator and Runner cohorts scored identically (mean RP %.3f both) — a zero spread is not a comparison", operatorMean)
-	}
-	if margin <= 0 {
-		t.Errorf("Operator mean RP %.3f did not beat Runner mean RP %.3f (margin %.3f) — a result worth having, not a test bug",
-			operatorMean, runnerMean, margin)
 	}
 }
