@@ -532,7 +532,7 @@ func TestAdvanceStationarySeatNeverMoves(t *testing.T) {
 	walks := newSeatWalks(s, seats)
 	rng := NewRNG(testSeed(1), 1)
 
-	tr := advance(&s, walks, validated, seats, 1, incidentContext{}, rng)
+	tr, _ := advance(&s, walks, validated, seats, 1, incidentContext{}, rng)
 	if s.Players[0].Position != 0 {
 		t.Fatalf("Position = %d, want 0 (stationary)", s.Players[0].Position)
 	}

@@ -56,10 +56,19 @@ func TestEventKindNamesAreStable(t *testing.T) {
 		EventRouteHalted:     "RouteHalted",
 		EventIncidentHit:     "IncidentHit",
 		EventIncidentExposed: "IncidentExposed",
+
+		// D40's own addition (issue #274): Gas Leak's truncation
+		// notification, discovered mid-movement rather than at Step 0, but
+		// documented and excluded from the writer table the same way the
+		// six Step 0 kinds above are — appended after the M2 telemetry
+		// group above rather than spliced into the Step 0 block, so its
+		// numeric value can't shift any pre-existing kind's own (event.go's
+		// own comment on this constant explains why that matters).
+		EventGasLeakTruncated: "GasLeakTruncated",
 	}
 
-	if len(want) != 25 {
-		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows plus Step 0's 6 plus #72's 2 announcements plus #73's 2 plus #196's 3 is 25, table has %d", len(want))
+	if len(want) != 26 {
+		t.Fatalf("test table itself is wrong: GDD §7.3's 8 trail archetypes plus RFC §9.1's 4 additional writer rows plus Step 0's 6 plus D40's 1 (issue #274) plus #72's 2 announcements plus #73's 2 plus #196's 3 is 26, table has %d", len(want))
 	}
 
 	for kind, name := range want {
