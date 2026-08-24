@@ -263,27 +263,65 @@ func TestHaltOrConvertMovementMidRouteBudgetConvertsToBlindSteps(t *testing.T) {
 // TestHaltOrConvertMovementMidPushOnBudgetKeepsRouteConvertsRemainder covers
 // the case D39's own decision doc calls out separately: a seat already past
 // its declared Route and mid-blind-walk when caught. Route (already fully
-// walked) is left as-is rather than truncated further, and the budget
-// converts to exactly the Pushing On steps that had not yet been taken.
+// walked) is left as-is rather than truncated further, and PushingOn.Steps
+// is set so len(Route)+PushingOn.Steps lands at step+unspent (4 here), not
+// at the unspent count alone — the boundary advance() and movementSteps
+// (resolve.go) both read, not "how many steps are left." PushingOn.Steps
+// is declared at 2, legalPushingOn's own cap (legal.go: "0-2") — the
+// reachable case, not an input the real pipeline could never produce.
 func TestHaltOrConvertMovementMidPushOnBudgetKeepsRouteConvertsRemainder(t *testing.T) {
 	validated := map[game.SeatID]game.Order{
 		0: {
 			Route:     []game.NodeID{10, 11},
-			PushingOn: game.PushingOn{Steps: 3},
+			PushingOn: game.PushingOn{Steps: 2},
 			Action:    game.ActionOrder{Kind: game.ActionDeliver},
 		},
 	}
-	// step 3: route (2 steps) already exhausted, 1 of the 3 Pushing On steps
-	// already taken — 2 left.
-	if got := haltOrConvertMovement(validated, 0, 3); got != 2 {
-		t.Errorf("haltOrConvertMovement() = %d, want 2 (route+PushingOn totals 5, step 3 consumed 3, 2 left)", got)
+	// step 3: route (2 steps) already exhausted, 1 of the 2 Pushing On steps
+	// already taken — 1 left.
+	if got := haltOrConvertMovement(validated, 0, 3); got != 1 {
+		t.Errorf("haltOrConvertMovement() = %d, want 1 (route+PushingOn totals 4, step 3 consumed 3, 1 left)", got)
 	}
 	o := validated[0]
 	if want := []game.NodeID{10, 11}; !slices.Equal(o.Route, want) {
 		t.Errorf("Route = %v, want %v unchanged — already fully walked, nothing left to truncate", o.Route, want)
 	}
 	if o.PushingOn.Steps != 2 {
-		t.Errorf("PushingOn.Steps = %d, want 2 (the unspent remainder)", o.PushingOn.Steps)
+		t.Errorf("PushingOn.Steps = %d, want 2 (step 3 - walked 2 + unspent 1)", o.PushingOn.Steps)
+	}
+	if boundary := len(o.Route) + o.PushingOn.Steps; boundary != 4 {
+		t.Errorf("len(Route)+PushingOn.Steps = %d, want 4 (step 3 + 1 unspent) — the absolute step advance() and movementSteps must keep walking this seat through", boundary)
+	}
+}
+
+// TestHaltOrConvertMovementSecondHaltPreservesBoundary is the repeat-halt
+// case RFC §6.5's own worked case names — "a pushed loser is caught again
+// by someone else's later movement step" — chained through
+// haltOrConvertMovement twice. The first halt at step 2 of a 4-step route
+// converts 2 unspent steps to a blind walk; the second halt at step 3
+// (mid that blind walk) must still report 1 step unspent (the original
+// 4-step total minus 3 consumed) and leave len(Route)+PushingOn.Steps at
+// 4 — not 3, which is what setting PushingOn.Steps to the bare unspent
+// count produces, silently costing the seat (and movementSteps' shared
+// bound with every other seat still moving that round) one real step.
+func TestHaltOrConvertMovementSecondHaltPreservesBoundary(t *testing.T) {
+	validated := map[game.SeatID]game.Order{
+		0: {
+			Route:  []game.NodeID{10, 11, 12, 13},
+			Action: game.ActionOrder{Kind: game.ActionDeliver},
+		},
+	}
+
+	if got := haltOrConvertMovement(validated, 0, 2); got != 2 {
+		t.Fatalf("1st haltOrConvertMovement() = %d, want 2", got)
+	}
+
+	if got := haltOrConvertMovement(validated, 0, 3); got != 1 {
+		t.Errorf("2nd haltOrConvertMovement() = %d, want 1 (original total 4, step 3 consumed 3)", got)
+	}
+	o := validated[0]
+	if boundary := len(o.Route) + o.PushingOn.Steps; boundary != 4 {
+		t.Errorf("len(Route)+PushingOn.Steps after 2nd halt = %d, want 4 (the original total, preserved across the chain)", boundary)
 	}
 }
 

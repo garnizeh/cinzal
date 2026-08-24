@@ -158,15 +158,15 @@ const (
 	// be routed through writeTrail/buildRoundAnchors into a PlayerView.
 
 	// EventRouteHalted fires wherever a confrontation clears a seat's
-	// remaining route and action (GDD §15: "loses the remainder of their
-	// route and their action") — a tie participant, a decisive loser, or
-	// the rare crossing-corrected winner; HaltCause says which. GDD §22
-	// row 1's numerator is not len(EventRouteHalted) — it is distinct
-	// (round, seat) pairs that submitted a non-empty route and whose
-	// first halt that round left at least one step of their declared
-	// plan unspent (D39), which HaltStepsUnspent answers per event; the
-	// denominator ("of submitted routes") is order-log-shaped, not an
-	// event.
+	// remaining declared route and action (GDD §15: "loses the remainder
+	// of their route and their action") — a tie participant, a decisive
+	// loser, or the rare crossing-corrected winner; HaltCause says which.
+	// Since D39, the round's remaining steps are not lost with it —
+	// haltOrConvertMovement (confront.go) converts any unspent budget
+	// into further blind Pushing On steps — so GDD §22 row 1's numerator
+	// is not, and cannot be made, a function of this event: see
+	// internal/telemetry/match.go's routesCancelledMidRoute for the full
+	// reasoning (#267).
 	EventRouteHalted
 
 	// EventIncidentHit fires when a sector incident actually affects a
@@ -294,9 +294,11 @@ type Event struct {
 
 	// HaltStepsUnspent is how many steps of the halted seat's declared
 	// plan — Route and Pushing On combined — were still unspent at the
-	// moment of the halt: 0 means the halt cancelled nothing (the plan
-	// had already run its course by this step), > 0 means a genuine
-	// cut-short. GDD §22 row 1's numerator needs this to tell the two
-	// apart (D39). Populated only for EventRouteHalted.
+	// moment of this halt: 0 means the halt cancelled nothing (the plan
+	// had already run its course by this step), > 0 means a step was cut
+	// short of its declared plan and (D39, haltOrConvertMovement,
+	// confront.go) converted into a further blind Pushing On walk from
+	// wherever the seat now stands, not lost. Populated only for
+	// EventRouteHalted.
 	HaltStepsUnspent int
 }

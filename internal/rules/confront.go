@@ -532,10 +532,24 @@ func haltMovement(validated map[game.SeatID]game.Order, seat game.SeatID) {
 // left unspent at movement step step, that budget is not thrown away: Route
 // is truncated to its already-walked prefix (so advance's own
 // `step <= len(o.Route)` check reads it as exhausted from the very next
-// step onward) and PushingOn.Steps is set to the unspent count, turning the
-// remainder into a fresh blind walk from wherever the seat now stands. A
-// seat with no budget left (unspent <= 0) gets exactly haltMovement's old
-// behaviour — there is nothing to continue.
+// step onward) and PushingOn.Steps is set so the combined
+// `len(Route)+PushingOn.Steps` boundary advance() checks against lands at
+// absolute step `step+unspent` — the same absolute step the seat's
+// original, unhalted plan would have run out at. A seat with no budget left
+// (unspent <= 0) gets exactly haltMovement's old behaviour — there is
+// nothing to continue.
+//
+// The boundary is not simply `unspent`: once a seat has already been
+// through one conversion this round (or was already mid-Pushing-On on its
+// own declared plan when first caught, GDD §9.1), o.Route no longer ends at
+// `step` — walked, computed below, can fall short of it — so
+// `len(Route)+PushingOn.Steps` needs the gap between walked and step added
+// back in, or a seat caught a second time this round (RFC §6.5's own
+// worked case) loses real steps the movement loop would otherwise have
+// given it, since movementSteps (resolve.go) re-reads this same sum every
+// iteration to decide how long the round's own movement loop runs — a
+// shrunk sum here can cut the loop short for every seat still moving that
+// round, not just this one.
 //
 // This does not set walk.Previous — the exclusion GDD §9.1's ladder level 5
 // needs to keep that blind walk's first step from re-entering the
@@ -544,10 +558,12 @@ func haltMovement(validated map[game.SeatID]game.Order, seat game.SeatID) {
 // while resolveDecisive's corrected winner stands on c.Node itself and
 // needs no exclusion at all (D39).
 //
-// Returns the same unspent count haltStepsUnspent already computed —
-// unchanged in meaning by this rule: still how many steps of the declared
-// plan were cut short, whether or not they now survive as blind ones (D39,
-// GDD §22 row 1's numerator) — for the caller's own EventRouteHalted.
+// Returns the same unspent count haltStepsUnspent already computed — still
+// how many steps of the declared plan were cut short at the moment of
+// *this* halt, whether or not they go on to be spent as blind ones. GDD §22
+// row 1's numerator is not this value alone; see
+// internal/telemetry/match.go's routesCancelledMidRoute for how the chain
+// of a (round, seat) pair's own halts this round decides it (D39, #267).
 func haltOrConvertMovement(validated map[game.SeatID]game.Order, seat game.SeatID, step int) int {
 	o := validated[seat]
 	unspent := haltStepsUnspent(o, step)
@@ -558,7 +574,7 @@ func haltOrConvertMovement(validated map[game.SeatID]game.Order, seat game.SeatI
 
 	walked := min(step, len(o.Route))
 	o.Route = o.Route[:walked]
-	o.PushingOn.Steps = unspent
+	o.PushingOn.Steps = step - walked + unspent
 	o.Action = game.ActionOrder{Kind: game.ActionNothing}
 	validated[seat] = o
 	return unspent

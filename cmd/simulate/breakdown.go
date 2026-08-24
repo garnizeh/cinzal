@@ -36,11 +36,16 @@ import (
 // MatchSummary would make the §22 metric set stop meaning "§22".
 type Breakdown struct {
 	// RoutesSubmittedByRound and RoutesHaltedByRound are row 1's own
-	// numerator and denominator, split by round instead of summed — index
+	// denominator and numerator, split by round instead of summed — index
 	// r-1 holds round r, both sized cfg.Rounds. The denominator is
 	// order-log-shaped and counts submitted *non-empty* routes, exactly as
 	// telemetry.MatchSummary.RoutesCancelledMidRoute defines it; summing
-	// either vector reproduces that field's own numerator or N.
+	// RoutesSubmittedByRound reproduces that field's own N. RoutesHaltedByRound
+	// stays all-zero — no EventRouteHalted signals a genuine cancellation any
+	// more (#267) — so summing it reproduces that field's own numerator (0)
+	// too; kept as its own per-round vector rather than dropped so a future
+	// rule change that reintroduces a real cancellation path has somewhere to
+	// land without another field added here.
 	RoutesSubmittedByRound []int
 	RoutesHaltedByRound    []int
 
@@ -151,14 +156,6 @@ type contractKey struct {
 	id                  game.ContractID
 	tier                int
 	origin, destination game.NodeID
-}
-
-// routeSeat identifies one (round, seat) pair — mirrors
-// internal/telemetry's own routeHaltKey (match.go), D39's unit for both
-// RoutesSubmittedByRound's population and RoutesHaltedByRound's numerator.
-type routeSeat struct {
-	round game.RoundNumber
-	seat  game.SeatID
 }
 
 // tier4Index is Config.Contracts' index for Tier IV — GDD §8.3's fourth and
@@ -360,50 +357,31 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 	b.RoutesSubmittedByRound = make([]int, cfg.Rounds)
 	b.RoutesHaltedByRound = make([]int, cfg.Rounds)
 
-	// submitted is the same (round, seat) population
-	// telemetry.MatchSummary.RoutesCancelledMidRoute's denominator counts
-	// — every non-empty submitted route — kept as a set here because the
-	// numerator below needs to test membership per (round, seat), not
-	// just sum a round's count.
-	submitted := map[routeSeat]bool{}
 	for round, orders := range log {
 		idx := int(round) - 1
-		for seat, o := range orders {
+		for _, o := range orders {
 			if len(o.Route) > 0 {
 				b.RoutesSubmittedByRound[idx]++
-				submitted[routeSeat{round: round, seat: seat}] = true
 			}
 		}
 	}
 
-	// firstHaltUnspent holds, per (round, seat) with at least one halt
-	// this round, the *first* halt's HaltStepsUnspent — mirrors
-	// telemetry's own firstHaltUnspent (match.go): a route can be halted
-	// more than once in a round (RFC §6.5: "a pushed loser is caught
-	// again by someone else's later movement step"), and only the first
-	// catch could have cancelled anything (D39).
-	firstHaltUnspent := map[routeSeat]int{}
-	seenHalt := map[routeSeat]bool{}
+	// RoutesHaltedByRound stays all-zero: no EventRouteHalted this match
+	// produces still signals a genuine mid-route cancellation, the same
+	// reason telemetry.MatchSummary.RoutesCancelledMidRoute's own
+	// numerator is always 0 (match.go's routesCancelledMidRoute, #267) —
+	// haltOrConvertMovement (internal/rules/confront.go, D39) converts
+	// every halt's unspent budget into further blind Pushing On steps
+	// instead of losing it. b.RoutesHaltedByRound is left at its
+	// zero-valued make([]int, cfg.Rounds) above so summing it still
+	// reproduces that field's own N-shaped numerator exactly (0), the
+	// same invariant this type's own doc comment states for every row it
+	// splits.
 	hitRounds := map[game.RoundNumber]bool{}
 	for _, e := range events {
-		switch e.Kind {
-		case game.EventRouteHalted:
-			key := routeSeat{round: e.Round, seat: e.Seat}
-			if !seenHalt[key] {
-				seenHalt[key] = true
-				firstHaltUnspent[key] = e.HaltStepsUnspent
-			}
-		case game.EventIncidentHit:
+		if e.Kind == game.EventIncidentHit {
 			hitRounds[e.Round] = true
 		}
-	}
-	for key := range submitted {
-		unspent, ok := firstHaltUnspent[key]
-		if !ok || unspent <= 0 {
-			continue
-		}
-		idx := int(key.round) - 1
-		b.RoutesHaltedByRound[idx]++
 	}
 
 	// Which card was live in which round comes from rules.IncidentCardForRound
