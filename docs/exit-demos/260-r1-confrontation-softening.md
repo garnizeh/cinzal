@@ -1,8 +1,74 @@
 # Exit demo: R1 under the changed confrontation rule
 
-**Issue:** [#260](https://github.com/garnizeh/cinzal/issues/260)
+**Issue:** [#260](https://github.com/garnizeh/cinzal/issues/260), re-run again by [#267](https://github.com/garnizeh/cinzal/issues/267)
 **Milestone:** M2 — Bots and simulation
 **Method:** [D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md) — 10,000 matches per configuration, `mean ± 1.96 · s / √n` over the per-match vector, action only when the whole interval sits on the failing side. Both root seeds — [#205](https://github.com/garnizeh/cinzal/issues/205)'s own two, `#205`'s own harness invocation, verbatim — algebraically combined into one pooled `(mean, half_width, n=20,000)` summary before any verdict is read (see Provenance below for the exact method; each seed's own unrounded CSV values are the inputs, not the two-decimal figures printed here).
+
+## Update (#267): row 1's numerator fixed, re-run again
+
+The section below this one (**"What this demonstration was asked to prove, and what it found instead"** onward) is the record of the *previous* re-run, under [#268](https://github.com/garnizeh/cinzal/issues/268): D39's rule (§15, option E+) confirmed working, but `RoutesCancelledMidRoute` itself measuring the wrong thing — still counting a halt as cancelled whenever the seat's declared plan was cut short at the moment of the first halt, whether or not those steps went on to be spent as a D39 blind walk. That gap was filed as [#267](https://github.com/garnizeh/cinzal/issues/267) and is what this update re-runs against.
+
+**#267's fix is not a chain-aware read of `HaltStepsUnspent` — it's the removal of `EventRouteHalted` from row 1's numerator entirely.** Investigating #267 found that `haltOrConvertMovement` (D39, `confront.go`) always either converts a halt's unspent budget into further blind Pushing On steps or has nothing left to convert (`unspent <= 0`, `haltMovement`'s own only remaining call site) — so no `EventRouteHalted` this package produces can still distinguish "converted and later spent" from "genuinely never spent." A temporary ground-truth probe (not merged, the D37/D38/D39 pattern), built to measure the residual directly against final match state rather than events, found it to be 0.18% (31 of 17,167 submitted routes with at least one halt, 300 four-player Operator matches) — attributable to map dead-ends and incident truncation of an already-converted blind walk, neither observable from `EventRouteHalted`'s existing fields. The redefined `routesCancelledMidRoute` (`internal/telemetry/match.go`) reads that as 0 for every match, honestly, rather than approximating it with a signal proven (by the same investigation) to overcount by roughly two orders of magnitude.
+
+Investigating #267 also surfaced and fixed a second, previously-hidden defect this measurement depends on: `haltOrConvertMovement`'s own boundary calculation (`len(Route)+PushingOn.Steps`, the absolute step `advance()` and `movementSteps()` read a halted seat's remaining budget against) silently shrank on any second halt against the same seat in the same round, or a first halt landing mid the seat's own declared Pushing On — costing real steps D39 was supposed to preserve, and potentially shortening the round's own shared movement-loop bound for other seats too. Filed and fixed together as [#269](https://github.com/garnizeh/cinzal/issues/269), landing in the same PR as #267 ([#270](https://github.com/garnizeh/cinzal/pull/270)) — #267's acceptance criterion can't be measured against a boundary that's still wrong.
+
+### Provenance (this re-run)
+
+| | |
+|---|---|
+| Git SHA | `8d67b08a4bcbfe5530959475b79eb206174d2eb4` — `issue-267-r1-halt-chain`, includes #270 (#267 + #269). Working tree clean at measurement time. |
+| Root seed 1 (default) | `cinzal-simulate-default-root-seed-v1` → `e4c50a633bfa5326029d36fcc00ea91af9510b523942539d4f89ed107866aa09` — same seed #260/#268 used |
+| Root seed 2 (independent) | `cinzal-simulate-205-second-seed-aa742df36a7e1d86944d2dc9cee43022` → `6e9de6981c839e3f965a2ec1cc24b8f4d0b27fcf8ab0a2fc65a61c53d066d98e` — same seed #260/#268 used |
+| Config | `game.DefaultConfig()`, unmodified |
+| Matches per configuration | 10,000 (20,000 pooled per cell); all 16 configurations report `status=ok`, `matches_completed=10000` |
+| Player counts | 2, 3, 4, 5 |
+| Bot tiers | Drifter and Operator, both reported for every cell (D35) |
+
+Raw CSVs for all 16 configurations are in [`267/`](267/), two files each (`--out` and `--breakdown`), the identical harness invocation `#260`/`#268` used:
+
+```bash
+simulate --matches 10000 --players <N> --bots <drifter|operator> \
+  --sweep Rounds=15 --seed <root-seed-string> \
+  --out       267/p<N>-<tier>-<seed-label>.csv \
+  --breakdown 267/p<N>-<tier>-<seed-label>-breakdown.csv
+```
+
+Every file carries `git_sha=8d67b08a4bcbfe5530959475b79eb206174d2eb4` and `root_seed` matching one of the two hexes above, checked directly.
+
+### Row 1 — the acceptance criterion, re-measured
+
+| | 2p | 3p | 4p | 5p |
+|---|---|---|---|---|
+| **Operator, measured** | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] |
+| **Operator, D39 predicted** | 1.65% [1.62%, 1.69%] | 2.85% [2.81%, 2.88%] | 3.51% [3.47%, 3.54%] | 4.75% [4.71%, 4.78%] |
+| **Drifter, measured** | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] |
+| **Drifter, D39 predicted** | 0.99% [0.96%, 1.02%] | 1.71% [1.68%, 1.74%] | 2.16% [2.14%, 2.19%] | 3.46% [3.43%, 3.49%] |
+
+The zero-width interval is exact, not rounded: `RoutesCancelledMidRoute_mean` reads `0.000000` in every one of the 32 CSV rows (16 configurations × `--out`/`--breakdown`), with an empty half-width field — `cmd/simulate`'s own "a zero-width interval is a fact, not a measurement" handling (`#249`), for a metric that is a genuine constant across every match under the current definition, not an artifact of nothing being measured (`N` is `10000` at every cell, the full submitted-route population).
+
+**Acceptance criterion, read literally: still does not land inside D39's predicted intervals, at every cell, on both tiers — but on the opposite side from `#268`'s finding.** Every predicted interval's own lower bound (0.99%–4.75% across the 8 cells) sits strictly above the measured 0.00%. Per `#267`'s own acceptance criterion ("if it still does not [land inside], that gap is reported rather than assumed away, the same standard `#260` itself was held to"), this is that report: the gap is real, and it is not an implementation shortfall on this side — every path in `internal/rules/confront.go` that could still leave a submitted route's declared plan short of its full budget by round's end goes through `haltOrConvertMovement`, and that function converts whatever's left rather than dropping it, unconditionally. Nothing observable from the event stream distinguishes "genuinely never spent" from "converted and spent" any more, because under the fixed rule there is close to nothing left in the first category (the 0.18% ground-truth figure above).
+
+**Reading this as "R1 passes with an even larger margin than D39 predicted" is the correct reading, not a technicality.** R1's own text is a `< 15%` threshold, action above it; 0.00% clears that threshold by more room than any option D39 measured, including E+ itself. The gap from D39's own predicted 1.65%–4.75% most likely reflects D39's external probe modeling the round's movement-loop bound less generously than `internal/rules`' actual `movementSteps` (`resolve.go`) does — a static per-round cap rather than the dynamic, per-seat-preserving recomputation the shipped code performs — though that is not independently confirmed here, since the probe's own source was never part of any merged diff (D39's own Method section).
+
+### Corroborating rows, re-checked against this fix
+
+Every row `#268` read as independent of `HaltStepsUnspent` still lands where it did — confirming the rules fix (`#269`) changed RNG consumption (golden fixtures moved) without changing match outcomes in any way these rows would catch. Operator, per player count, seed 1 vs. seed 2 (both from the same `267/` CSVs above):
+
+| Row | 2p | 3p | 4p | 5p |
+|---|---|---|---|---|
+| 9 — confrontations won against an Evasive loser | 43.77% / 43.39% | 43.75% / 44.12% | 45.80% / 45.65% | 44.84% / 44.84% |
+| 10/11 — confrontations per match | 5.7392 / 5.7537 | 11.6742 / 11.6447 | 17.3347 / 17.3658 | 26.1108 / 26.1888 |
+| 20 — confrontations in the final 3 rounds | 20.36% / 19.97% | 20.36% / 20.57% | 21.03% / 21.21% | 20.25% / 20.26% |
+| 2 — deliveries per player | 1.5036 / 1.5109 | 1.2545 / 1.2546 | 0.9799 / 0.9740 | 0.7949 / 0.7927 |
+| 17 — rounds flagged Loitering | 3.90% / 3.93% | 4.24% / 4.24% | 4.15% / 4.20% | 4.94% / 5.01% |
+
+Every figure is within a few tenths of a percentage point of `#268`'s own measured values at the same cells (Operator, 4p: row 9 was 45.51% [45.28%, 45.73%], row 10/11 was 17.4158 [17.3604, 17.4712], row 20 was 21.19% [21.06%, 21.31%]) — the same "the rule itself is confirmed working" verdict `#268` reached, undisturbed by the boundary fix.
+
+## What lands, and what does not (updated)
+
+**R1's underlying rule is confirmed working, again, and now so is its telemetry.** Row 1 reads exactly 0.00% at every cell, `N=10000` throughout — a genuine measurement, not an unmeasured gap — clearing the `< 15%` threshold with more margin than D39's own E+ prediction, for the reason explained above. `#267` is resolved; `#269`, the boundary defect it surfaced, is resolved with it. GDD §20's R1 entry and §22 row 1 can both be read against this figure going forward, in preference to every number in the sections below, which predate the numerator fix and the boundary fix alike.
+
+---
 
 ## What this demonstration was asked to prove, and what it found instead
 
