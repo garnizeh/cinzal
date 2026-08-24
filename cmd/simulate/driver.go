@@ -94,6 +94,11 @@ func RunMatch(seed [32]byte, cfg game.Config, players int, bot bots.Bot) (MatchR
 		return MatchResult{}, fmt.Errorf("cmd/simulate: RunMatch: telemetry.Match: %w", err)
 	}
 
+	breakdown, err := tracker.finish(s, log, events, cfg)
+	if err != nil {
+		return MatchResult{}, fmt.Errorf("cmd/simulate: RunMatch: %w", err)
+	}
+
 	return MatchResult{
 		Seed:      seed,
 		Players:   players,
@@ -102,7 +107,7 @@ func RunMatch(seed [32]byte, cfg game.Config, players int, bot bots.Bot) (MatchR
 		Log:       log,
 		Scores:    rules.FinalScore(s),
 		Summary:   summary,
-		Breakdown: tracker.finish(s, log, events, cfg),
+		Breakdown: breakdown,
 	}, nil
 }
 

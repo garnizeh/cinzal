@@ -29,6 +29,18 @@ import (
 // checks did not produce a real MatchState to begin with — "every
 // threshold in §22 is satisfied by a match that never happened."
 //
+// A fifth structural check joins those four: every OrderLog round key must
+// fall within 1..cfg.Rounds. nonEmptyRoutes ranges log's own map keys with
+// no bound of its own, trusting this check to have already run — the same
+// division of labor RoundActions already applies to its own fold
+// (round_action.go). Before this check existed, that trust was misplaced:
+// row 1's own population counted every (round, seat) entry the caller's
+// log happened to hold, so a log with a stray entry outside 1..cfg.Rounds
+// silently inflated RoutesCancelledMidRoute.N while
+// cmd/simulate's own per-round split — bounded from the start — did not
+// (#263). Rejecting it here, once, keeps that bound a single fact both
+// readers agree on rather than two independent guesses at it.
+//
 // A single row's own population being empty this match — no incident was
 // ever live, no confrontation occurred, no [C] card fired — is a different
 // thing entirely: a legitimate, if unlucky, outcome of one match's random
@@ -56,6 +68,11 @@ func Match(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game
 	}
 	if len(log) == 0 {
 		return MatchSummary{}, errors.New("telemetry: Match: OrderLog has no entries — no order was ever submitted")
+	}
+	for round := range log {
+		if round < 1 || int(round) > cfg.Rounds {
+			return MatchSummary{}, fmt.Errorf("telemetry: Match: OrderLog has round %d, outside 1-%d", round, cfg.Rounds)
+		}
 	}
 
 	groups := groupConfrontations(events)
@@ -103,7 +120,10 @@ type routeHaltKey struct {
 // nonEmptyRoutes returns every (round, seat) pair whose OrderLog entry
 // declared a non-empty Route — RoutesCancelledMidRoute's denominator
 // population, unchanged by D39: an order that never declared a route
-// cannot be "cancelled mid-route" by definition.
+// cannot be "cancelled mid-route" by definition. It trusts log's round
+// keys are already within 1..cfg.Rounds — Match's own precondition checks
+// enforce that once, rather than this helper re-checking a bound its
+// caller already guarantees (#263).
 func nonEmptyRoutes(log rules.OrderLog) map[routeHaltKey]bool {
 	routes := make(map[routeHaltKey]bool)
 	for round, orders := range log {

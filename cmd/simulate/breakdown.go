@@ -1,6 +1,8 @@
 package main
 
 import (
+	"fmt"
+
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/rules"
 )
@@ -326,7 +328,22 @@ func (c *crossingCounts) record(a seatActs) {
 // stream, and R6's per-card sets, off the final MatchState's own incident
 // deck. Both mirror internal/telemetry's definitions of the rows they split
 // — see the fields' own comments.
-func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game.Config) Breakdown {
+//
+// It rejects an OrderLog entry outside 1..cfg.Rounds the same way
+// telemetry.Match does (match.go), rather than silently excluding it from
+// RoutesSubmittedByRound the way this function used to: two readers of the
+// same row 1 population disagreeing on a malformed log — one counting it
+// in, one dropping it — is exactly the gap #263 found. In RunMatch's own
+// flow this is unreachable, since telemetry.Match already rejects the same
+// log first; it matters for a synthetic log built directly, the way
+// breakdown_test.go's own fails-closed test does.
+func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game.Config) (Breakdown, error) {
+	for round := range log {
+		if round < 1 || int(round) > cfg.Rounds {
+			return Breakdown{}, fmt.Errorf("cmd/simulate: finish: OrderLog has round %d, outside 1-%d", round, cfg.Rounds)
+		}
+	}
+
 	b := t.b
 
 	for _, p := range s.Players {
@@ -351,9 +368,6 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 	submitted := map[routeSeat]bool{}
 	for round, orders := range log {
 		idx := int(round) - 1
-		if idx < 0 || idx >= cfg.Rounds {
-			continue
-		}
 		for seat, o := range orders {
 			if len(o.Route) > 0 {
 				b.RoutesSubmittedByRound[idx]++
@@ -389,9 +403,6 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 			continue
 		}
 		idx := int(key.round) - 1
-		if idx < 0 || idx >= cfg.Rounds {
-			continue
-		}
 		b.RoutesHaltedByRound[idx]++
 	}
 
@@ -416,5 +427,5 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 		}
 	}
 
-	return b
+	return b, nil
 }
