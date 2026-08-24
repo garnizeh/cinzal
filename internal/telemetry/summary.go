@@ -48,15 +48,32 @@ type MatchSummary struct {
 	Solo bool
 
 	// RoutesCancelledMidRoute is row 1: "< 15% of submitted routes" fails
-	// if > 15% (R1: "the confrontation rule gets softened"). Value is
-	// len(EventRouteHalted) / N. N counts every OrderLog entry across the
-	// whole match whose Route has at least one step — an order that never
-	// declared a route cannot be "cancelled mid-route" by definition, so
-	// GDD §22's own phrase ("of submitted routes") is read here as
-	// submitted *non-empty* routes, the population EventRouteHalted could
-	// possibly have fired against (D33 row 1: the numerator is
-	// EventRouteHalted; the denominator is order-log-shaped, not an
-	// event).
+	// if > 15% (R1: "the confrontation rule gets softened"). N counts
+	// every OrderLog entry across the whole match whose Route has at
+	// least one step — an order that never declared a route cannot be
+	// "cancelled mid-route" by definition, so GDD §22's own phrase ("of
+	// submitted routes") is read here as submitted *non-empty* routes.
+	//
+	// The numerator is not len(EventRouteHalted): event count and
+	// submitted-route count are different units (D39, superseding D33 row
+	// 1's own len(EventRouteHalted) read). EventRouteHalted fires once per
+	// confrontation participant, so a stationary seat that submitted no
+	// route is still a valid target (GDD §15 evaluates every player's
+	// position after each step "whether or not they moved") and, at the
+	// other end, an already-halted route can be caught again by a later
+	// movement step this same round (RFC §6.5's own worked case) — both
+	// inflate the event count against a denominator that does not include
+	// them. A halt landing on the very last step of a plan also fires the
+	// event while cancelling nothing.
+	//
+	// The numerator here is instead the count of distinct (round, seat)
+	// pairs that submitted a non-empty route and whose *first* halt that
+	// round left at least one step of the declared plan — Route or
+	// Pushing On — unspent (HaltStepsUnspent > 0). A seat with no
+	// submitted route that round, or whose first halt already had nothing
+	// left to cancel, does not count; a second halt against an
+	// already-halted (round, seat) is ignored, since only the first catch
+	// could have cancelled anything.
 	RoutesCancelledMidRoute Rate
 
 	// DeliveriesPerPlayer is row 2: target 4-6, fails if < 3 ("cooldown too

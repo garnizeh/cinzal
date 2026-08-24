@@ -190,19 +190,43 @@ func fixtureOrderLog() rules.OrderLog {
 	}
 }
 
-// fixtureEvents is the match's whole accumulated event stream, 24 events.
+// fixtureEvents is the match's whole accumulated event stream, 26 events.
 // Every group below is annotated with which MatchSummary row(s) it exists
 // for; match_test.go's own comments show the arithmetic each group feeds.
 func fixtureEvents() []game.Event {
 	var events []game.Event
 
-	// Row 1 numerator: 4 EventRouteHalted, against the 15 non-empty
-	// submitted routes in fixtureOrderLog.
+	// Row 1 numerator: D39's three exclusions, each exercised once, plus
+	// one genuine cut-short that does count.
 	events = append(events,
-		game.Event{Kind: game.EventRouteHalted, Round: 2, Node: 1, Seat: 1},
-		game.Event{Kind: game.EventRouteHalted, Round: 4, Node: 2, Seat: 2},
-		game.Event{Kind: game.EventRouteHalted, Round: 5, Node: 0, Seat: 0},
-		game.Event{Kind: game.EventRouteHalted, Round: 6, Node: 3, Seat: 1},
+		// (Round 2, Seat 1): route(0), len 1, non-empty — genuine
+		// cut-short, the first event for this pair, HaltStepsUnspent > 0.
+		// Counts.
+		game.Event{Kind: game.EventRouteHalted, Round: 2, Node: 1, Seat: 1, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: 1},
+
+		// (Round 3, Seat 1): fixtureOrderLog's round 3 seat 1 declared an
+		// *empty* route — a stationary confrontation participant (GDD
+		// §15 evaluates every player's position "whether or not they
+		// moved"). Excluded: absent from the non-empty-route population
+		// regardless of HaltStepsUnspent.
+		game.Event{Kind: game.EventRouteHalted, Round: 3, Node: 3, Seat: 1, HaltCause: game.HaltCauseTie, HaltStepsUnspent: 2},
+
+		// (Round 4, Seat 2): route(0), len 1, non-empty. Two catches this
+		// round (RFC §6.5: "a pushed loser is caught again") — the
+		// *first* left nothing unspent, so this pair is excluded even
+		// though the second, later event claims steps were unspent; only
+		// the first halt counts.
+		game.Event{Kind: game.EventRouteHalted, Round: 4, Node: 2, Seat: 2, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: 0},
+		game.Event{Kind: game.EventRouteHalted, Round: 4, Node: 3, Seat: 2, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: 2},
+
+		// (Round 5, Seat 0): route(0), len 1, non-empty — a single halt
+		// on the plan's last step, HaltStepsUnspent == 0: cancels
+		// nothing. Excluded.
+		game.Event{Kind: game.EventRouteHalted, Round: 5, Node: 0, Seat: 0, HaltCause: game.HaltCauseCorrectedWinner, HaltStepsUnspent: 0},
+
+		// (Round 6, Seat 1): route(2), len 1, non-empty — genuine
+		// cut-short. Counts.
+		game.Event{Kind: game.EventRouteHalted, Round: 6, Node: 3, Seat: 1, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: 1},
 	)
 
 	// Row 2: 5 EventDelivered.

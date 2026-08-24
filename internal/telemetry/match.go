@@ -92,26 +92,78 @@ func countEvents(events []game.Event, kind game.EventKind) int {
 	return n
 }
 
-// routesCancelledMidRoute computes MatchSummary.RoutesCancelledMidRoute —
-// see that field's own doc comment for the numerator/denominator
-// definition. Ranges log's two map levels only to sum a count, the same
-// provably order-independent aggregation posts.go's sectorMajorityWinner
-// documents for its own map-adjacent code — unlike Resolve's own pipeline
-// (RFC §6.3), nothing here decides a tie or writes state from iteration
-// order, and TestMatchIsDeterministic checks the result holds regardless.
-func routesCancelledMidRoute(log rules.OrderLog, events []game.Event) Rate {
-	n := 0
-	for _, round := range log {
-		for _, order := range round {
+// routeHaltKey identifies one (round, seat) pair — the unit D39 defines
+// both RoutesCancelledMidRoute's population (a seat's submitted route that
+// round) and its numerator (that same seat's first halt that round) over.
+type routeHaltKey struct {
+	round game.RoundNumber
+	seat  game.SeatID
+}
+
+// nonEmptyRoutes returns every (round, seat) pair whose OrderLog entry
+// declared a non-empty Route — RoutesCancelledMidRoute's denominator
+// population, unchanged by D39: an order that never declared a route
+// cannot be "cancelled mid-route" by definition.
+func nonEmptyRoutes(log rules.OrderLog) map[routeHaltKey]bool {
+	routes := make(map[routeHaltKey]bool)
+	for round, orders := range log {
+		for seat, order := range orders {
 			if len(order.Route) > 0 {
-				n++
+				routes[routeHaltKey{round: round, seat: seat}] = true
 			}
 		}
 	}
-	if n == 0 {
+	return routes
+}
+
+// firstHaltUnspent maps every (round, seat) pair with at least one
+// EventRouteHalted to that round's *first* halt's HaltStepsUnspent. A route
+// can be halted more than once in a round — RFC §6.5's own worked case: "a
+// pushed loser is caught again by someone else's later movement step" — so
+// only the earliest catch could have cancelled anything; events later in
+// the stream against an already-halted (round, seat) are ignored here,
+// exactly as D39 specifies ("first halt that round").
+func firstHaltUnspent(events []game.Event) map[routeHaltKey]int {
+	unspent := make(map[routeHaltKey]int)
+	seen := make(map[routeHaltKey]bool)
+	for _, e := range events {
+		if e.Kind != game.EventRouteHalted {
+			continue
+		}
+		key := routeHaltKey{round: e.Round, seat: e.Seat}
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		unspent[key] = e.HaltStepsUnspent
+	}
+	return unspent
+}
+
+// routesCancelledMidRoute computes MatchSummary.RoutesCancelledMidRoute —
+// see that field's own doc comment for the numerator/denominator
+// definition. Ranges log's and events' own map/slice shapes only to sum a
+// count, the same provably order-independent aggregation posts.go's
+// sectorMajorityWinner documents for its own map-adjacent code — unlike
+// Resolve's own pipeline (RFC §6.3), nothing here decides a tie or writes
+// state from iteration order, and TestMatchIsDeterministic checks the
+// result holds regardless. firstHaltUnspent's own single linear pass over
+// events is the one place order matters, and that order is events' own
+// slice order, not a map's.
+func routesCancelledMidRoute(log rules.OrderLog, events []game.Event) Rate {
+	submitted := nonEmptyRoutes(log)
+	if len(submitted) == 0 {
 		return Rate{}
 	}
-	return Rate{Value: float64(countEvents(events, game.EventRouteHalted)) / float64(n), N: n}
+
+	halts := firstHaltUnspent(events)
+	n := 0
+	for key := range submitted {
+		if unspent, ok := halts[key]; ok && unspent > 0 {
+			n++
+		}
+	}
+	return Rate{Value: float64(n) / float64(len(submitted)), N: len(submitted)}
 }
 
 // deliveriesPerPlayer computes MatchSummary.DeliveriesPerPlayer.
