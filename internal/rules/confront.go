@@ -213,22 +213,31 @@ func losersExcept(seats []game.SeatID, winner game.SeatID) []game.SeatID {
 // already equals their current position) — no stake, cargo, or Infamy
 // change, since a stake was never actually deducted at declaration
 // ("stakes are returned" is therefore a no-op here, not a refund). Their
-// remaining route and action this round are halted regardless: the GDD
+// declared route and action this round are forfeit regardless: the GDD
 // does not restate that for a tie the way it does for a Loser, but it is
 // an implementation necessity — advance() (movement.go) trusts
 // Route[step-1] to be adjacent to the seat's actual current position, and
 // a reverted position generally invalidates whatever the rest of a
-// multi-step route assumed. Returns one EventRouteHalted per participant,
-// HaltCauseTie and each one's own HaltStepsUnspent (D39; step is
-// resolve.go's movement loop index, the same parameter advance takes).
+// multi-step route assumed. Since D39, the round's remaining steps are not
+// lost with it: haltOrConvertMovement below turns any unspent budget into a
+// blind Pushing On walk from dest, and Previous is pointed at c.Node — not
+// dest's own predecessor — so that walk's first step cannot re-enter the
+// node the tie happened at (§9.1's ladder level 5 does the rest). Returns
+// one EventRouteHalted per participant, HaltCauseTie and each one's own
+// HaltStepsUnspent (D39; step is resolve.go's movement loop index, the same
+// parameter advance takes) — unchanged in meaning by D39's continuation:
+// still how many steps of the declared plan were cut short, whether or not
+// they survive as blind ones.
 func resolveTie(s *MatchState, c confrontation, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, step int) []game.Event {
 	events := make([]game.Event, 0, len(c.Seats))
 	for _, seat := range c.Seats {
 		dest := walks[seat].Previous
 		s.Players[seat].Position = dest
 		walks[seat].Path = []game.NodeID{dest}
-		unspent := haltStepsUnspent(validated[seat], step)
-		haltMovement(validated, seat)
+		unspent := haltOrConvertMovement(validated, seat, step)
+		if unspent > 0 {
+			walks[seat].Previous = c.Node
+		}
 		events = append(events, game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: seat, HaltCause: game.HaltCauseTie, HaltStepsUnspent: unspent})
 	}
 	return events
@@ -262,16 +271,21 @@ func tieEvents(round game.RoundNumber, node game.NodeID, seats []game.SeatID, va
 // for winner: true only for the rare crossing case where the winner's own
 // pre-fight position was the "blocked" side (their attempted move undone to
 // reach c.Node) — their remaining route no longer starts from where it
-// assumed, so it is halted exactly like a loser's despite winning; every
-// other case leaves it untouched, "route continues" exactly as written.
-// step is resolve.go's movement loop index, needed by haltStepsUnspent for
-// every EventRouteHalted this call (and resolveLoser's) produces (D39).
+// assumed, so their declared route and action are forfeit exactly like a
+// loser's despite winning, though since D39 their remaining steps are not:
+// haltOrConvertMovement below turns any unspent budget into a blind Pushing
+// On walk from c.Node, the node the winner is already standing on — no
+// walks[winner].Previous write and no exclusion needed, unlike the loser and
+// tie cases, since there is nowhere behind them to backtrack into. Every
+// other case leaves the winner's route untouched, "route continues" exactly
+// as written. step is resolve.go's movement loop index, needed by
+// haltOrConvertMovement for every EventRouteHalted this call (and
+// resolveLoser's) produces (D39).
 func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerCorrected bool, losers []game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, step int, cfg game.Config, r *RNG) []game.Event {
 	s.Players[winner].Infamy = ApplyInfamyDelta(s.Players[winner].Infamy, InfamyGainConfrontationWin)
 	var haltEvents []game.Event
 	if winnerCorrected {
-		unspent := haltStepsUnspent(validated[winner], step)
-		haltMovement(validated, winner)
+		unspent := haltOrConvertMovement(validated, winner, step)
 		haltEvents = append(haltEvents, game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: winner, HaltCause: game.HaltCauseCorrectedWinner, HaltStepsUnspent: unspent})
 	}
 
@@ -310,17 +324,20 @@ func resolveDecisive(s *MatchState, c confrontation, winner game.SeatID, winnerC
 
 // resolveLoser applies GDD §15's Loser consequences for seat, in order:
 // stake, cargo (shakedown or forfeiture), Deadline Pause, Infamy, then
-// pushback and halting the remainder of their round. Returns the Cr$ the
-// winner collects from this loser's stake (half of what was actually
-// forfeited, rounded down — never half of the declared stake: legalBalance
-// (legal.go) deliberately excludes Aggressive stake from the submission-time
-// affordability check, so a stake can legally outgrow balance by the time it
-// resolves), the Cr$ shakedown this loser paid — GDD §15: "pay the Cr$4
-// shakedown to the winner", so the caller must credit it there too, exactly
-// like the stake share — whether this seat's cargo is forfeit and still
-// theirs to give — the caller decides whether the winner takes it or it
-// drops at the node — and this loser's own EventRouteHalted, HaltCauseDecisiveLoser
-// and its HaltStepsUnspent (D39; step is resolve.go's movement loop index).
+// pushback and converting the remainder of their round into blind steps
+// (D39). Returns the Cr$ the winner collects from this loser's stake (half
+// of what was actually forfeited, rounded down — never half of the declared
+// stake: legalBalance (legal.go) deliberately excludes Aggressive stake from
+// the submission-time affordability check, so a stake can legally outgrow
+// balance by the time it resolves), the Cr$ shakedown this loser paid — GDD
+// §15: "pay the Cr$4 shakedown to the winner", so the caller must credit it
+// there too, exactly like the stake share — whether this seat's cargo is
+// forfeit and still theirs to give — the caller decides whether the winner
+// takes it or it drops at the node — and this loser's own EventRouteHalted,
+// HaltCauseDecisiveLoser and its HaltStepsUnspent (D39; step is resolve.go's
+// movement loop index) — unchanged in meaning by D39's continuation: still
+// how many steps of the declared plan were cut short, whether or not they
+// survive as blind ones.
 func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated map[game.SeatID]game.Order, walks map[game.SeatID]*seatWalk, step int, cfg game.Config, r *RNG) (stakeShare, shakedownPaid int, forfeitCargo bool, haltEvent game.Event) {
 	p := &s.Players[seat]
 	o := validated[seat]
@@ -355,8 +372,14 @@ func resolveLoser(s *MatchState, c confrontation, seat game.SeatID, validated ma
 	p.Infamy = ApplyInfamyDelta(p.Infamy, InfamyLossConfrontationLoss)
 
 	pushback(s, c, seat, o.Stance.Stance == game.StanceEvasive, walks, r)
-	unspent := haltStepsUnspent(o, step)
-	haltMovement(validated, seat)
+	unspent := haltOrConvertMovement(validated, seat, step)
+	if unspent > 0 {
+		// The loser now stands at the pushback destination, not at c.Node —
+		// walk.Previous would otherwise still hold whatever ordinary
+		// predecessor advance() last recorded, and the exclusion has to
+		// name the confrontation node specifically (D39).
+		walks[seat].Previous = c.Node
+	}
 	haltEvent = game.Event{Kind: game.EventRouteHalted, Round: s.Round, Node: c.Node, Seat: seat, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: unspent}
 
 	return staked / 2, shakedownPaid, forfeitCargo, haltEvent
@@ -486,16 +509,59 @@ func neighborsExcluding(g Graph, node game.NodeID, exclude ...game.NodeID) []gam
 // haltMovement clears validated[seat]'s remaining Route and Pushing On so
 // advance() (movement.go) never moves this seat again this round, and
 // forces its Action to Nothing — GDD §15: "loses the remainder of their
-// route and their action." Applied to every confrontation participant whose
-// final position this step isn't a straightforward continuation of their
-// own plan: losers, tie participants, and the rare crossing-corrected
-// winner (resolveDecisive).
+// route and their action." Since D39, this is no longer every confrontation
+// halt site's whole story — see haltOrConvertMovement below, which calls
+// this only for the case D39 left unchanged: a seat with no budget left to
+// convert.
 func haltMovement(validated map[game.SeatID]game.Order, seat game.SeatID) {
 	o := validated[seat]
 	o.Route = nil
 	o.PushingOn = game.PushingOn{}
 	o.Action = game.ActionOrder{Kind: game.ActionNothing}
 	validated[seat] = o
+}
+
+// haltOrConvertMovement is D39's replacement for a bare haltMovement call at
+// all three of resolveConfrontations' halt sites (resolveTie, resolveLoser,
+// resolveDecisive's corrected winner): "any confrontation participant whose
+// declared route can no longer be walked from where they now stand keeps
+// the round's remaining steps, and spends them as GDD §9.1 blind steps."
+// The declared route and action are forfeit exactly as haltMovement always
+// made them — Route nil, Action Nothing — but when o's declared plan (Route
+// plus Pushing On, read before this call mutates anything) still had a step
+// left unspent at movement step step, that budget is not thrown away: Route
+// is truncated to its already-walked prefix (so advance's own
+// `step <= len(o.Route)` check reads it as exhausted from the very next
+// step onward) and PushingOn.Steps is set to the unspent count, turning the
+// remainder into a fresh blind walk from wherever the seat now stands. A
+// seat with no budget left (unspent <= 0) gets exactly haltMovement's old
+// behaviour — there is nothing to continue.
+//
+// This does not set walk.Previous — the exclusion GDD §9.1's ladder level 5
+// needs to keep that blind walk's first step from re-entering the
+// confrontation node is the caller's own job, since resolveTie and
+// resolveLoser stand somewhere other than c.Node by the time this runs
+// while resolveDecisive's corrected winner stands on c.Node itself and
+// needs no exclusion at all (D39).
+//
+// Returns the same unspent count haltStepsUnspent already computed —
+// unchanged in meaning by this rule: still how many steps of the declared
+// plan were cut short, whether or not they now survive as blind ones (D39,
+// GDD §22 row 1's numerator) — for the caller's own EventRouteHalted.
+func haltOrConvertMovement(validated map[game.SeatID]game.Order, seat game.SeatID, step int) int {
+	o := validated[seat]
+	unspent := haltStepsUnspent(o, step)
+	if unspent <= 0 {
+		haltMovement(validated, seat)
+		return 0
+	}
+
+	walked := min(step, len(o.Route))
+	o.Route = o.Route[:walked]
+	o.PushingOn.Steps = unspent
+	o.Action = game.ActionOrder{Kind: game.ActionNothing}
+	validated[seat] = o
+	return unspent
 }
 
 // haltStepsUnspent returns how many steps of o's declared plan — Route and
@@ -507,8 +573,8 @@ func haltMovement(validated map[game.SeatID]game.Order, seat game.SeatID) {
 // whether this particular seat moved this step — GDD §15b's collision check
 // evaluates every seat's position "whether or not they moved." Floored at 0
 // for a seat whose plan had already run out before this step. Must be
-// called with o read before haltMovement clears it (D39, GDD §22 row 1's
-// "at least one step ... unspent" numerator).
+// called with o read before haltMovement or haltOrConvertMovement mutates
+// it (D39, GDD §22 row 1's "at least one step ... unspent" numerator).
 func haltStepsUnspent(o game.Order, step int) int {
 	if left := len(o.Route) + o.PushingOn.Steps - step; left > 0 {
 		return left

@@ -105,6 +105,19 @@ func mean(xs []float64) float64 {
 // failing to report the margin is not (hence t.Logf below regardless of
 // outcome).
 //
+// This currently fails on its own committed golden seed: D39
+// (docs/decisions/D39-r1-confrontation-softening.md, issue #259) softened
+// what a confrontation loss costs, which narrows whatever edge Operator's
+// route planning bought over Runner's simpler heuristic — root 0xa0 below
+// now lands Operator at a mean RP a hair under Runner's (margin ~-0.005 out
+// of ~2.2), and a probe across three more seed roots found the sign is not
+// stable (some show Operator ahead by a comparable margin), i.e. the true
+// post-D39 margin is statistical noise for a single 1,000-match comparison,
+// not a code defect — both tiers resolve confrontations through the
+// identical, symmetric path. Left as-is, undisturbed, rather than folded
+// into #259's own scope or resolved unilaterally: issue #265 (D41) is
+// deciding what this test should assert going forward.
+//
 // Fails closed exactly as the acceptance criteria state: both cohorts must
 // have completed all 1,000 matches to round 15 (a cohort that silently
 // dropped matches to a degenerate early end would report a mean over a
