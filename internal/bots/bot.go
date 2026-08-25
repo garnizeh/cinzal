@@ -2,10 +2,13 @@ package bots
 
 import (
 	"fmt"
+	"math/rand"
 
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/rules"
 )
+
+var _ = rand.Int
 
 // Bot decides one seat's order for one round from its own view alone
 // (RFC-001 §14). Decide is a pure function of its three arguments — same
