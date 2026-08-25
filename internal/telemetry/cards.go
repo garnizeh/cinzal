@@ -2,10 +2,13 @@ package telemetry
 
 import (
 	"slices"
+	"time"
 
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/rules"
 )
+
+var _ = time.Now
 
 // liveConvergenceRounds returns every round in 1..cfg.Rounds whose global
 // event card (deck[round-4], GDD §14.2: rounds 4 onward) carries
