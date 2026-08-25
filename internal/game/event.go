@@ -207,6 +207,27 @@ const (
 	// destroyed edge: the cause (a sector incident) is a different
 	// "specific reason" GDD §15.0 requires naming.
 	EventGasLeakTruncated
+
+	// EventRiotTraceMoved is Riot's own player-facing disclosure (GDD
+	// §14.3, D4, issue #275): "A player whose own trace was moved is told
+	// so — not where it went, not what now sits at the node they actually
+	// stood on." Fires once per riot-eligible trail entry that names Seat
+	// (or, for a confrontation, Target) and whose node assignment actually
+	// changed under applyRiotPermutation's shuffle — a fixed point (D4:
+	// "an ordinary, expected outcome of a uniform permutation") is not a
+	// move and gets no event, the same way EventGasLeakTruncated's "orders
+	// never silently fail" reasoning doesn't apply to a step that was
+	// never taken. Node is the entry's true origin, never the shuffled
+	// destination — the seat already knows where they stood; that is not
+	// a disclosure, and the GDD is explicit the destination must never be
+	// one. Distinct from EventIncidentHit (D40 row 6): that kind is
+	// telemetry-only and never routed into a PlayerView; this one is the
+	// opposite — it exists only to reach the acting seat's own resolution
+	// feed and carries no telemetry purpose. Not in RFC §9.1's writer
+	// table, for the same reason D30's six kinds and EventGasLeakTruncated
+	// aren't: it names only the acting seat and discloses no other seat's
+	// position.
+	EventRiotTraceMoved
 )
 
 // String returns the event kind's name, or "EventKind(n)" for an invalid
@@ -265,6 +286,8 @@ func (k EventKind) String() string {
 		return "IncidentExposed"
 	case EventGasLeakTruncated:
 		return "GasLeakTruncated"
+	case EventRiotTraceMoved:
+		return "RiotTraceMoved"
 	default:
 		return invalidEnumString("EventKind", int(k))
 	}
