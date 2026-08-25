@@ -80,8 +80,8 @@ func TestRoundActionsAgainstHandComputedFixture(t *testing.T) {
 }
 
 // TestRoundActionsIsDeterministic mirrors TestMatchIsDeterministic: nothing
-// about ranging OrderLog's two map levels (the same iteration shape
-// routesCancelledMidRoute already uses) may leak into the result.
+// about ranging OrderLog's two map levels (round_action.go's own fold) may
+// leak into the result.
 func TestRoundActionsIsDeterministic(t *testing.T) {
 	s, log, cfg := fixtureState(), fixtureOrderLog(), fixtureConfig()
 

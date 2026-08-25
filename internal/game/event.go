@@ -163,10 +163,11 @@ const (
 	// loser, or the rare crossing-corrected winner; HaltCause says which.
 	// Since D39, the round's remaining steps are not lost with it —
 	// haltOrConvertMovement (confront.go) converts any unspent budget
-	// into further blind Pushing On steps — so GDD §22 row 1's numerator
-	// is not, and cannot be made, a function of this event: see
-	// internal/telemetry/match.go's routesCancelledMidRoute for the full
-	// reasoning (#267).
+	// into further blind Pushing On steps — so no reading of this event
+	// stream computes GDD §22 row 1: internal/telemetry reports no
+	// measurement for that row at all post-D39 (D43,
+	// docs/decisions/D43-row-1-unmeasurable-post-d39.md; full reasoning
+	// in match.go's routesCancelledMidRoute).
 	EventRouteHalted
 
 	// EventIncidentHit fires when a sector incident actually affects a
@@ -341,7 +342,10 @@ type Event struct {
 	// HaltCause identifies which of EventRouteHalted's three call sites
 	// produced this event — a tie participant, a decisive loser, or the
 	// rare crossing-corrected winner (D39). Populated only for
-	// EventRouteHalted.
+	// EventRouteHalted. Read by RFC §11.3's narrated resolution list (M5)
+	// and §15.1's debug panel, not by internal/telemetry — GDD §22 row 1 is
+	// structurally unmeasurable post-D39 (D43,
+	// docs/decisions/D43-row-1-unmeasurable-post-d39.md).
 	HaltCause HaltCause
 
 	// HaltStepsUnspent is how many steps of the halted seat's declared
@@ -351,6 +355,7 @@ type Event struct {
 	// short of its declared plan and (D39, haltOrConvertMovement,
 	// confront.go) converted into a further blind Pushing On walk from
 	// wherever the seat now stands, not lost. Populated only for
-	// EventRouteHalted.
+	// EventRouteHalted. Same consumers as HaltCause above, not
+	// internal/telemetry.
 	HaltStepsUnspent int
 }

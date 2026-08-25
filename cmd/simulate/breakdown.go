@@ -35,19 +35,15 @@ import (
 // one demonstration's own decompositions, with one sink; adding them to
 // MatchSummary would make the §22 metric set stop meaning "§22".
 type Breakdown struct {
-	// RoutesSubmittedByRound and RoutesHaltedByRound are row 1's own
-	// denominator and numerator, split by round instead of summed — index
-	// r-1 holds round r, both sized cfg.Rounds. The denominator is
-	// order-log-shaped and counts submitted *non-empty* routes, exactly as
-	// telemetry.MatchSummary.RoutesCancelledMidRoute defines it; summing
-	// RoutesSubmittedByRound reproduces that field's own N. RoutesHaltedByRound
-	// stays all-zero — no EventRouteHalted signals a genuine cancellation any
-	// more (#267) — so summing it reproduces that field's own numerator (0)
-	// too; kept as its own per-round vector rather than dropped so a future
-	// rule change that reintroduces a real cancellation path has somewhere to
-	// land without another field added here.
+	// RoutesSubmittedByRound is a true order-log fact, split by round instead
+	// of summed — index r-1 holds round r, sized cfg.Rounds. Counts
+	// submitted *non-empty* routes, the same population
+	// telemetry.MatchSummary.RoutesCancelledMidRoute's field comment names,
+	// though that field itself no longer reports a value at all (D43,
+	// docs/decisions/D43-row-1-unmeasurable-post-d39.md): row 1's own
+	// numerator is gone, not merely unsplit, so there is nothing left here
+	// to pair this with as a rate — reported as a per-round count instead.
 	RoutesSubmittedByRound []int
-	RoutesHaltedByRound    []int
 
 	// IncidentLive and IncidentHit split row 6 by card identity. A card
 	// appears at most once in a match's 13-card deck (GDD §14.3 draws 13 of
@@ -355,7 +351,6 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 	}
 
 	b.RoutesSubmittedByRound = make([]int, cfg.Rounds)
-	b.RoutesHaltedByRound = make([]int, cfg.Rounds)
 
 	for round, orders := range log {
 		idx := int(round) - 1
@@ -366,17 +361,6 @@ func (t *breakdownTracker) finish(s rules.MatchState, log rules.OrderLog, events
 		}
 	}
 
-	// RoutesHaltedByRound stays all-zero: no EventRouteHalted this match
-	// produces still signals a genuine mid-route cancellation, the same
-	// reason telemetry.MatchSummary.RoutesCancelledMidRoute's own
-	// numerator is always 0 (match.go's routesCancelledMidRoute, #267) —
-	// haltOrConvertMovement (internal/rules/confront.go, D39) converts
-	// every halt's unspent budget into further blind Pushing On steps
-	// instead of losing it. b.RoutesHaltedByRound is left at its
-	// zero-valued make([]int, cfg.Rounds) above so summing it still
-	// reproduces that field's own N-shaped numerator exactly (0), the
-	// same invariant this type's own doc comment states for every row it
-	// splits.
 	hitRounds := map[game.RoundNumber]bool{}
 	for _, e := range events {
 		if e.Kind == game.EventIncidentHit {

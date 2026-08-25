@@ -110,7 +110,8 @@ func TestCreditBandNamesMatchGDDSection5Point1(t *testing.T) {
 
 // TestHaltCauseNamesAreStable pins the String() output of every HaltCause
 // constant — D39's split of EventRouteHalted's three call sites, the value
-// GDD §22 row 1's numerator and any future audit of it both read.
+// RFC §11.3's narrated resolution list (M5) and §15.1's debug panel read
+// (D43, docs/decisions/D43-row-1-unmeasurable-post-d39.md).
 func TestHaltCauseNamesAreStable(t *testing.T) {
 	want := map[HaltCause]string{
 		HaltCauseTie:             "Tie",

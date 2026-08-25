@@ -25,13 +25,11 @@ func TestMatchAgainstHandComputedFixture(t *testing.T) {
 	}
 
 	want := MatchSummary{
-		// Row 1: #267 — haltOrConvertMovement (confront.go, D39) always
-		// either converts a halt's unspent budget into further blind
-		// Pushing On steps or has nothing left to convert, so no
-		// EventRouteHalted signals a genuine mid-route cancellation any
-		// more; see routesCancelledMidRoute's own doc comment. 0 / 15
-		// non-empty submitted routes.
-		RoutesCancelledMidRoute: Rate{Value: 0, N: 15},
+		// Row 1: D43 — structurally unmeasurable by bot simulation post-D39;
+		// see routesCancelledMidRoute's own doc comment (match.go). The zero
+		// Rate on every match, regardless of this fixture's 15 non-empty
+		// submitted routes.
+		RoutesCancelledMidRoute: Rate{},
 
 		// Row 2: 5 EventDelivered / 3 players.
 		DeliveriesPerPlayer: 5.0 / 3.0,
@@ -188,10 +186,11 @@ func TestMatchFailsClosed(t *testing.T) {
 			cfg:    fixtureConfig(),
 		},
 		{
-			// #263: nonEmptyRoutes ranged log with no bound of its own, so
-			// a stray entry outside 1..cfg.Rounds inflated
-			// RoutesCancelledMidRoute.N against cmd/simulate's own
-			// per-round split, which was already bounded.
+			// #263: this bound is now a standing precondition on the
+			// input's own shape (see Match's own doc comment) — nothing
+			// row-level bounds it any more, but cmd/simulate's Breakdown
+			// still indexes its own per-round vector by it and must reject
+			// the same log Match does.
 			name:  "OrderLog has a round outside 1..cfg.Rounds",
 			state: fixtureState(),
 			log: func() rules.OrderLog {
@@ -238,60 +237,14 @@ func TestFinalThirdStart(t *testing.T) {
 	}
 }
 
-// TestRoutesCancelledMidRouteDenominatorOnly is #267's own acceptance
-// criterion: routesCancelledMidRoute no longer takes an events argument at
-// all (see its own doc comment for why no EventRouteHalted this package can
-// read still signals a genuine cancellation under haltOrConvertMovement,
-// confront.go) — only the denominator, driven by OrderLog's own submitted
-// non-empty routes, still varies.
-func TestRoutesCancelledMidRouteDenominatorOnly(t *testing.T) {
-	tests := []struct {
-		name string
-		log  rules.OrderLog
-		want Rate
-	}{
-		{
-			name: "no orders at all",
-			log:  rules.OrderLog{},
-			want: Rate{},
-		},
-		{
-			name: "every submitted route is empty",
-			log: rules.OrderLog{
-				1: {0: game.Order{}, 1: game.Order{}},
-			},
-			want: Rate{},
-		},
-		{
-			// GDD §15 evaluates every player's position after each step
-			// "whether or not they moved" — a stationary seat that
-			// submitted no route this round is still a confrontation
-			// participant, but it is not a member of "submitted routes"
-			// to begin with.
-			name: "one non-empty route among several seats",
-			log: rules.OrderLog{
-				1: {
-					0: game.Order{},                        // no route declared
-					1: game.Order{Route: []game.NodeID{5}}, // the match's only submitted route
-				},
-			},
-			want: Rate{Value: 0, N: 1},
-		},
-		{
-			name: "non-empty routes across two rounds",
-			log: rules.OrderLog{
-				1: {0: game.Order{Route: []game.NodeID{5}}},
-				2: {0: game.Order{Route: []game.NodeID{6}}, 1: game.Order{Route: []game.NodeID{7}}},
-			},
-			want: Rate{Value: 0, N: 3},
-		},
-	}
-
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := routesCancelledMidRoute(tc.log); got != tc.want {
-				t.Errorf("routesCancelledMidRoute() = %+v, want %+v", got, tc.want)
-			}
-		})
+// TestRoutesCancelledMidRouteReportsNoValue is D43's own acceptance
+// criterion (docs/decisions/D43-row-1-unmeasurable-post-d39.md): GDD §22
+// row 1 is structurally unmeasurable by bot simulation post-D39, so
+// routesCancelledMidRoute returns the zero Rate unconditionally — no code
+// path, including a non-empty submitted-route population, can produce a
+// non-zero N.
+func TestRoutesCancelledMidRouteReportsNoValue(t *testing.T) {
+	if got, want := routesCancelledMidRoute(), (Rate{}); got != want {
+		t.Errorf("routesCancelledMidRoute() = %+v, want %+v", got, want)
 	}
 }
