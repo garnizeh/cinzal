@@ -193,7 +193,7 @@
 > - §22 row 1's numerator is re-specified from halt events to routes, which moves a `telemetry.MatchSummary` computation and no RFC-stated structure: §17's "one computation, three sinks" and [D34](../decisions/D34-telemetry-package-placement.md)'s `Match` signature are untouched, and no new event kind is created — the halt event gains a field. Companion doc moves to GDD v2.29.
 >
 > **Changelog r35 → r36** — companion pointer only (issue [#280](https://github.com/garnizeh/cinzal/issues/280), [D42](../decisions/D42-r7-two-player-remedies-rejected.md))
-> - GDD §20's R7 remedy dials (Tier IV deadline, Tier IV reward, Legend step allowance) are rejected on measurement — all three govern behaviour that only takes effect once Infamy 9 is already reached, so none can move the climb the row measures. No `telemetry` field, event, or `Match` signature changes: this is a `game.Config`-and-bot-behaviour finding, not a new computation or a new sink. Companion doc moves to GDD v2.30.
+> - GDD §20's R7 remedy dials (Tier IV deadline, Tier IV reward, Legend step allowance) are rejected — the first two on measurement, the third on structural grounds without a run — all three govern behaviour that only takes effect once Infamy 9 is already reached, so none can move the climb the row measures. No `telemetry` field, event, or `Match` signature changes: this is a `game.Config`-and-bot-behaviour finding, not a new computation or a new sink. Companion doc moves to GDD v2.30.
 
 ---
 
