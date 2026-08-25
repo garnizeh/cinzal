@@ -804,7 +804,16 @@ func TestApplyRiotPermutationStaysWithinRealOrigins(t *testing.T) {
 	// never enters the sector's eligible set at all — and the hit is
 	// reported at the entry's real origin (node 1), never the shuffled
 	// target the permutation above may have moved it to.
-	want := []game.Event{{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: actor1}}
+	//
+	// Issue #275: this seed genuinely swaps the two sector entries (node
+	// 0's Fresh Tracks and node 1's CargoTaken trade places — see
+	// PurposeIncidentRiot's consumed count above), so actor1's own entry
+	// really did move and gets its own EventRiotTraceMoved, at its real
+	// origin (node 1), the same way the hit above is.
+	want := []game.Event{
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: actor1},
+		{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: 1, Seat: actor1},
+	}
 	if !slices.Equal(events, want) {
 		t.Errorf("events = %+v, want %+v", events, want)
 	}
@@ -895,6 +904,107 @@ func TestApplyRiotPermutationEmitsNothingForAnonymousEntries(t *testing.T) {
 
 	if events != nil {
 		t.Errorf("events = %+v, want nil (neither entry names a seat)", events)
+	}
+}
+
+// TestApplyRiotPermutationNotifiesOwnerOfAGenuineMove is issue #275, D4's
+// "what the acting player sees": a player whose own entry actually changed
+// node under the shuffle is told so, naming only their own true origin —
+// never the destination the GDD is explicit must stay withheld.
+func TestApplyRiotPermutationNotifiesOwnerOfAGenuineMove(t *testing.T) {
+	s := incidentsTestState()
+	sector := game.SectorOldDocks
+	incCtx := incidentContext{sector: &sector, card: IncidentRiot, live: true}
+	actor1, actor2 := game.SeatID(0), game.SeatID(1)
+	entries := map[game.NodeID][]game.TrailEntry{
+		0: {{Kind: game.EventCargoTaken, Node: 0, Actor: &actor1}},
+		1: {{Kind: game.EventCargoTaken, Node: 1, Actor: &actor2}},
+	}
+	r := NewRNG(testSeed(1), 5) // this seed swaps the two entries — see TestApplyRiotPermutationStaysWithinRealOrigins
+
+	events := applyRiotPermutation(&s, entries, incCtx, r)
+
+	want := []game.Event{
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 0, Seat: actor1},
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: actor2},
+		{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: 0, Seat: actor1},
+		{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: 1, Seat: actor2},
+	}
+	if !slices.Equal(events, want) {
+		t.Errorf("events = %+v, want %+v", events, want)
+	}
+	if entries[0][0].Actor == nil || *entries[0][0].Actor != actor2 {
+		t.Errorf("entries[0] = %+v, want actor2's entry (the swap landed here)", entries[0])
+	}
+	if entries[1][0].Actor == nil || *entries[1][0].Actor != actor1 {
+		t.Errorf("entries[1] = %+v, want actor1's entry (the swap landed here)", entries[1])
+	}
+}
+
+// TestApplyRiotPermutationNotifiesBothConfrontationPartiesOnAMove is issue
+// #275, the confrontation-specific half CodeRabbit flagged as missing from
+// the cargo-taken-only coverage above: a moved confrontation entry names
+// two seats, and both — not just the one addConfrontation calls Seat — get
+// their own EventRiotTraceMoved, at the confrontation's true origin.
+func TestApplyRiotPermutationNotifiesBothConfrontationPartiesOnAMove(t *testing.T) {
+	s := incidentsTestState()
+	sector := game.SectorOldDocks
+	incCtx := incidentContext{sector: &sector, card: IncidentRiot, live: true}
+	actor, target, other := game.SeatID(0), game.SeatID(1), game.SeatID(2)
+	entries := map[game.NodeID][]game.TrailEntry{
+		0: {{Kind: game.EventConfrontation, Node: 0, Actor: &actor, Target: &target}},
+		1: {{Kind: game.EventCargoTaken, Node: 1, Actor: &other}},
+	}
+	r := NewRNG(testSeed(1), 5) // this seed swaps the two entries — see TestApplyRiotPermutationStaysWithinRealOrigins
+
+	events := applyRiotPermutation(&s, entries, incCtx, r)
+
+	want := []game.Event{
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 0, Seat: actor},
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 0, Seat: target},
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: other},
+		{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: 0, Seat: actor},
+		{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: 0, Seat: target},
+		{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: 1, Seat: other},
+	}
+	if !slices.Equal(events, want) {
+		t.Errorf("events = %+v, want %+v", events, want)
+	}
+	if entries[1][0].Kind != game.EventConfrontation {
+		t.Errorf("entries[1] = %+v, want the confrontation entry (the swap landed here)", entries[1])
+	}
+}
+
+// TestApplyRiotPermutationSilentOnAFixedPoint is D4's own explicit case: "a
+// fixed point... an ordinary, expected outcome of a uniform permutation, not
+// a bug." A named entry the shuffle happens to return to its own origin was
+// never actually moved, so telling its owner it was would be exactly the
+// lie D4 rules out.
+func TestApplyRiotPermutationSilentOnAFixedPoint(t *testing.T) {
+	s := incidentsTestState()
+	sector := game.SectorOldDocks
+	incCtx := incidentContext{sector: &sector, card: IncidentRiot, live: true}
+	actor1, actor2 := game.SeatID(0), game.SeatID(1)
+	entries := map[game.NodeID][]game.TrailEntry{
+		0: {{Kind: game.EventCargoTaken, Node: 0, Actor: &actor1}},
+		1: {{Kind: game.EventCargoTaken, Node: 1, Actor: &actor2}},
+	}
+	r := NewRNG(testSeed(2), 5) // this seed is a fixed point — neither entry moves
+
+	events := applyRiotPermutation(&s, entries, incCtx, r)
+
+	want := []game.Event{
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 0, Seat: actor1},
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: actor2},
+	}
+	if !slices.Equal(events, want) {
+		t.Errorf("events = %+v, want %+v (no EventRiotTraceMoved: neither entry actually moved)", events, want)
+	}
+	if entries[0][0].Actor == nil || *entries[0][0].Actor != actor1 {
+		t.Errorf("entries[0] = %+v, want actor1's entry unmoved", entries[0])
+	}
+	if entries[1][0].Actor == nil || *entries[1][0].Actor != actor2 {
+		t.Errorf("entries[1] = %+v, want actor2's entry unmoved", entries[1])
 	}
 }
 

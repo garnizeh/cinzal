@@ -99,8 +99,9 @@ func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []gam
 	// Riot (issue #73, GDD §14.3, D4) permutes the flagged sector's
 	// sight-gated entries in place, strictly before distributeTrail hands
 	// them out by sight — see writeTrail's own doc for why this cannot
-	// wait for incident()'s normal Phase 7 call site. Its own EventIncidentHit
-	// events (D40 row 6) are appended into out here, matching every other
+	// wait for incident()'s normal Phase 7 call site. Its own
+	// EventIncidentHit events (D40 row 6) and EventRiotTraceMoved events
+	// (issue #275) are appended into out here, matching every other
 	// roundEvents contributor in this file.
 	out = append(out, applyRiotPermutation(s, entries, incCtx, r)...)
 
@@ -359,6 +360,15 @@ func (s riotSitesByKey) Less(i, j int) bool {
 // is minted. Built from the sorted sites — the same deterministic (Node,
 // Kind, Seat) order the permutation itself sorts by — so the returned event
 // order stays reproducible independent of the map iteration above.
+//
+// Issue #275 (D4's own "what the acting player sees"): every entry whose
+// node assignment genuinely changes under the shuffle also gets its named
+// seat(s) an EventRiotTraceMoved, naming only the entry's true origin, never
+// the shuffled destination. Same Actor/Target-only sourcing as the
+// EventIncidentHit block above and the identical reason — a Fresh Tracks or
+// below-gate entry has no seat to notify — plus one more condition D40's
+// telemetry kind doesn't need: a fixed point (the permutation happens to
+// return an entry to its own origin) is not a move, so it gets no event.
 func applyRiotPermutation(s *MatchState, entries map[game.NodeID][]game.TrailEntry, incCtx incidentContext, r *RNG) []game.Event {
 	if !incCtx.live || incCtx.card != IncidentRiot {
 		return nil
@@ -406,8 +416,25 @@ func applyRiotPermutation(s *MatchState, entries map[game.NodeID][]game.TrailEnt
 
 	for i, site := range sites {
 		e := site.entry
+		origin := e.Node
 		e.Node = targets[i]
 		entries[e.Node] = append(entries[e.Node], e)
+
+		// Issue #275, D4's own "what the acting player sees": only a
+		// genuine relocation is disclosed — a fixed point (origin ==
+		// targets[i], an ordinary outcome of a uniform permutation, not a
+		// bug) means nothing actually moved, so telling the seat it did
+		// would be the exact lie D4 rules out. Node is origin, the seat's
+		// own true, already-known position — never targets[i], the
+		// destination the GDD is explicit must stay withheld.
+		if e.Node != origin {
+			if e.Actor != nil {
+				events = append(events, game.Event{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: origin, Seat: *e.Actor})
+			}
+			if e.Kind == game.EventConfrontation {
+				events = append(events, game.Event{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: origin, Seat: *e.Target})
+			}
+		}
 	}
 
 	return events
