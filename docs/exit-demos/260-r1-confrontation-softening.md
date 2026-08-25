@@ -51,9 +51,9 @@ Every file carries `git_sha=8d67b08a4bcbfe5530959475b79eb206174d2eb4` and `root_
 
 | | 2p | 3p | 4p | 5p |
 |---|---|---|---|---|
-| **Operator, measured** | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] |
+| **Operator, reported** *(degenerate — not a measurement, [D43](../decisions/D43-row-1-unmeasurable-post-d39.md))* | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] |
 | **Operator, D39 predicted** | 1.65% [1.62%, 1.69%] | 2.85% [2.81%, 2.88%] | 3.51% [3.47%, 3.54%] | 4.75% [4.71%, 4.78%] |
-| **Drifter, measured** | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] |
+| **Drifter, reported** *(degenerate — not a measurement, [D43](../decisions/D43-row-1-unmeasurable-post-d39.md))* | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] | 0.00% [0.00%, 0.00%] |
 | **Drifter, D39 predicted** | 0.99% [0.96%, 1.02%] | 1.71% [1.68%, 1.74%] | 2.16% [2.14%, 2.19%] | 3.46% [3.43%, 3.49%] |
 
 The zero-width interval is exact, not rounded: `RoutesCancelledMidRoute_mean` reads `0.000000` in every one of the 32 CSV rows (16 configurations × `--out`/`--breakdown`), with an empty half-width field — `cmd/simulate`'s own zero-width-interval handling (`#249`). **[withdrawn — D43]** *this sentence went on to read that as "a genuine constant across every match under the current definition, not an artifact of nothing being measured (`N` is `10000` at every cell, the full submitted-route population)". The empty half-width is the harness declining to give a verdict, and a full denominator does not make a constant numerator a measurement — see the D43 update at the top of this document.*
