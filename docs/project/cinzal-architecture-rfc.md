@@ -734,7 +734,7 @@ outbox(id, to_email, template, payload JSONB, attempts,
 
 `orders` has a primary key on `(match_id, round, seat)`, so resubmission during an open round is an `ON CONFLICT DO UPDATE` — which is exactly the GDD §18 rule that the last submission stands.
 
-`events`, `match_summary` and `match_players.last_seen_round` are **derived projections**. They exist so the lobby list and the recap don't refold — or, for the cursor, rescan `orders` — on every page load. They carry a comment saying so, and there is a `cmd/replay --rebuild` that regenerates them. Nothing reads them as authority. `last_seen_round` is reconstructible as `(SELECT MAX(round) FROM orders WHERE match_id = X AND seat = Y AND source = 'human') − 1` (0 if no such row) — see [D16](../decisions/D16-recap-cursor.md).
+`events`, `match_summary` and `match_players.last_seen_round` are **derived projections**. They exist so the lobby list and the recap don't refold — or, for the cursor, rescan `orders` — on every page load. They carry a comment saying so, and there is a `cmd/replay --rebuild` that regenerates them. Nothing reads them as authority. `last_seen_round` is reconstructible as `COALESCE((SELECT MAX(round) FROM orders WHERE match_id = X AND seat = Y AND source = 'human') − 1, 0)` — the `COALESCE` matters: `MAX()` over zero rows is `NULL`, and `NULL − 1` stays `NULL`, so the 0-for-no-human-orders fallback has to be explicit in the expression itself, not left to prose — see [D16](../decisions/D16-recap-cursor.md).
 
 ### 7.3 On not building a cache — with the arithmetic
 
