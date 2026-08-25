@@ -154,7 +154,7 @@ Six checks make the architecture real rather than conventional. They are not sty
 
 | Gate | Asserts |
 |---|---|
-| **Rules purity** | `internal/rules` imports nothing that does I/O, tells time, or generates randomness |
+| **Rules purity** | `internal/rules`, `internal/telemetry` and `internal/bots` import nothing that does I/O, tells time, or generates randomness |
 | **Fog boundary** | The rendering and web layers cannot name the full match state |
 | **Debug isolation** | The production binary contains no debug routes |
 | **Secret scan** | No credentials or connection strings in the tree, or in the commits this change adds |

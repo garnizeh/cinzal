@@ -122,7 +122,7 @@ generate: require-templ require-sqlc
 packages:
 	./scripts/check-packages.sh
 
-## purity    assert internal/rules does no I/O, reads no clock, draws no randomness
+## purity    assert internal/rules, internal/telemetry, internal/bots do no I/O, read no clock, draw no randomness
 purity:
 	./scripts/check-rules-purity.sh
 
