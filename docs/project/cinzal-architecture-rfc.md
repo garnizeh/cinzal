@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r40 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r41 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -206,6 +206,12 @@
 >
 > **Changelog r39 → r40** — Go version floor raised to 1.27.0
 > - **§4 now names Go 1.27.0** rather than 1.26.5. Same reasoning as r11 → r12's original pin (§6.3's determinism guarantee): none of this is a response to a known bug in 1.26.5, it just keeps the project on a current toolchain. `go.mod`'s `go` directive was the floor already carrying the number (see its own header comment for why nothing else can pin it); CI's enforcement mechanism — `setup-go` with `go-version-file: go.mod` plus `GOTOOLCHAIN=local` — is unchanged, since it was already designed to track whatever `go.mod` says rather than a hardcoded number. Companion doc stays at v2.32.
+>
+> **Changelog r40 → r41** — the Recap had no per-seat cursor (issue [#302](https://github.com/garnizeh/cinzal/issues/302), [D16](../decisions/D16-recap-cursor.md))
+> - **§7.2's `match_players` gains `last_seen_round INT NOT NULL DEFAULT 0`**, a derived, rebuildable read cache in the same category as `events`, `match_summary` and `missed_deadlines` — reconstructible from `orders` as the last round a *human* order was submitted for, minus one. `0` is the seat-creation value for every seat regardless of when in the lobby phase it joins, on the same "1-indexed, so 0 unambiguously means never" convention `Player.LastOfferRound` already uses (`internal/rules/contracts.go`).
+> - **§8.1's submit-transaction sample gains one more statement**: `last_seen_round = GREATEST(last_seen_round, round − 1)`, run in the same transaction as the `orders` upsert. Advancing here — never on a `GET` of the board or the Recap fragment — repeats the reasoning §12.2 already gave for not offering magic links alongside OTP codes: a `GET` is prefetchable by the surrounding transport (HTMX, browsers), and consuming single-fire state from one silently discards it. `POST /m/{id}/order` is the one write that both proves the player engaged with the page the Recap sits on (RFC §11.1's fragment discipline) and is immune to prefetch by construction.
+> - **No `source` guard is needed for Autopilot.** Bot and Autopilot orders are generated inside `Tick()` (§8, §8.2), never through the submit handler, so the cursor is structurally incapable of moving except on a genuine human submission — the returning player's first Recap (§13's `autopilot` email) is intact without a separate rule saying so.
+> - No GDD text change: this is a persistence-and-timing decision, GDD §18's Recap requirement is unamended. Companion doc stays at v2.32.
 
 ---
 
@@ -704,6 +710,7 @@ matches(
 match_players(
   match_id, seat, user_id NULL, bot_kind NULL,
   faction, joined_at, missed_deadlines INT,
+  last_seen_round INT NOT NULL DEFAULT 0,  -- Recap cursor (D16), derived from orders
   PRIMARY KEY (match_id, seat)
 )
 
@@ -727,7 +734,7 @@ outbox(id, to_email, template, payload JSONB, attempts,
 
 `orders` has a primary key on `(match_id, round, seat)`, so resubmission during an open round is an `ON CONFLICT DO UPDATE` — which is exactly the GDD §18 rule that the last submission stands.
 
-`events` and `match_summary` are **derived projections**. They exist so the lobby list and the recap don't refold every match on every page load. They carry a comment saying so, and there is a `cmd/replay --rebuild` that regenerates them. Nothing reads them as authority.
+`events`, `match_summary` and `match_players.last_seen_round` are **derived projections**. They exist so the lobby list and the recap don't refold — or, for the cursor, rescan `orders` — on every page load. They carry a comment saying so, and there is a `cmd/replay --rebuild` that regenerates them. Nothing reads them as authority. `last_seen_round` is reconstructible as `(SELECT MAX(round) FROM orders WHERE match_id = X AND seat = Y AND source = 'human') − 1` (0 if no such row) — see [D16](../decisions/D16-recap-cursor.md).
 
 ### 7.3 On not building a cache — with the arithmetic
 
@@ -871,6 +878,12 @@ SELECT round, deadline_at, status FROM matches WHERE id = $1 FOR UPDATE;
 -- reject if status <> 'active' OR now() >= deadline_at OR round <> $2
 INSERT INTO orders (...) VALUES (...)
 ON CONFLICT (match_id, round, seat) DO UPDATE SET payload = ..., submitted_at = now();
+-- Recap cursor (D16): advance to the last round that has actually resolved —
+-- $2 - 1, never $2 itself, since the round being submitted for is still open.
+-- GREATEST guards a resubmission (GDD §18) from moving it backward.
+UPDATE match_players
+   SET last_seen_round = GREATEST(last_seen_round, $2 - 1)
+ WHERE match_id = $1 AND seat = $3;
 ```
 
 Three properties follow. The grace period is **zero and deterministic**, independent of how often the sweeper runs. Instance clock skew is irrelevant, because there is one clock and it belongs to the database. And a late submission is rejected with an explicit *"this round has closed"* rather than being silently swallowed — the player learns immediately instead of discovering it in the recap.

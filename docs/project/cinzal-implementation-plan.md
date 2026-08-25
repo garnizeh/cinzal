@@ -194,7 +194,9 @@ Four, all decided before M2 opened. Unlike §3.2's, none of these were found by 
 
 ### 3.4 Product surface — blocks **M5**/**M6**
 
-**D16 · The Recap has no cursor.** GDD §18 requires "every round since your last visit", and the RFC schema has no per-seat last-seen-round. `sessions.last_seen_at` is per session, not per match. Needs a column (`match_players.last_seen_round`) and a defined update point.
+**D16 · The Recap has no cursor.** GDD §18 requires "every round since your last visit", and the RFC schema has no per-seat last-seen-round. `sessions.last_seen_at` is per session, not per match. Needs a column (`match_players.last_seen_round`) and a defined update point. See [D16](../decisions/D16-recap-cursor.md) and [issue #302](https://github.com/garnizeh/cinzal/issues/302).
+
+**Resolved by [D16](../decisions/D16-recap-cursor.md): `match_players.last_seen_round INT NOT NULL DEFAULT 0`, advanced inside the order-submission transaction, human submissions only.** `last_seen_round = GREATEST(last_seen_round, round − 1)` runs alongside the `orders` upsert (RFC §8.1) — never on a `GET` of the board or the Recap fragment, which RFC §12.2's magic-link reasoning already rules out as prefetchable. `0` is the seat-creation value for every seat regardless of when in the lobby phase it joins. The column is derived, rebuildable from `orders` exactly like `events`/`match_summary`/`missed_deadlines`, not a new exception to §7.1's fold — and since bot/Autopilot orders never pass through the submit handler (§8.2), an Autopilot seat's cursor cannot move without a genuine human resubmission.
 
 **D17 · Invite links have no storage.** RFC §19 promises "high-entropy, revocable, single-match scope"; §7.2's schema has no table or column for them. Needs a design, including whether revocation is per-link or per-match.
 
@@ -310,16 +312,16 @@ Plus: a bot could be written **competently against `PlayerView` alone** (RFC §1
 **Goal:** matches survive a restart and reproduce exactly.
 
 **Deliverables**
-- Schema per RFC §7.2, plus the D16–D19 additions (Recap cursor, invite links, pins, email preferences) and the D20 rate-limit table.
+- Schema per RFC §7.2 — which now includes D16's `last_seen_round` directly — plus the D17–D19 additions (invite links, pins, email preferences) and the D20 rate-limit table.
 - `sqlc` queries, `goose` migrations embedded and run at startup behind the **advisory lock** (§7.5).
 - `fold()` — `state = fold(Resolve, initial(seed, cfg), orderLog)`.
-- `cmd/replay`, including `--rebuild` for the derived `events` / `match_summary` projections.
+- `cmd/replay`, including `--rebuild` for the derived `events` / `match_summary` / `match_players.last_seen_round` projections.
 - Fold duration and fold allocation metrics wired from day one — they are the falsifiability trigger for the no-snapshot decision (§7.3) and are worthless added later.
 
 **Exit criteria**
 - A match folded from the log equals the incrementally computed state, asserted over a golden fixture.
 - Two app processes booting simultaneously against a fresh database both come up, with migrations applied exactly once.
-- `cmd/replay --rebuild` regenerates `events` and `match_summary` to byte-identical content.
+- `cmd/replay --rebuild` regenerates `events`, `match_summary` and `match_players.last_seen_round` to byte-identical content.
 - p99 fold duration and fold allocation share are visible on a dashboard, with the §7.3 thresholds (50 ms, 20% of heap churn) marked.
 
 ---

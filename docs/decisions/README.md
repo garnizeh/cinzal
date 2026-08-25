@@ -98,7 +98,7 @@ The row stays, struck through, because the numbering is cited elsewhere and a si
 
 | # | Question | Status |
 |---|---|---|
-| D16 | The Recap has no per-seat cursor | open |
+| [D16](D16-recap-cursor.md) | The Recap has no per-seat cursor — where does `last_seen_round` live, and what advances it? — filed as [#302](https://github.com/garnizeh/cinzal/issues/302) | **decided** — `match_players.last_seen_round INT NOT NULL DEFAULT 0`, advanced inside the order-submission transaction (`last_seen_round = GREATEST(last_seen_round, round − 1)`, alongside the `orders` upsert, RFC §8.1) on human submissions only, never on a `GET` of the board or the Recap fragment — the same prefetch hazard RFC §12.2 already rejected for OTP magic links; `0` at seat creation covers both lobby-formation and mid-lobby-join seats identically, since `POST /m/{id}/join` only runs before round 1 resolves; derived and rebuildable from `orders` exactly like `events`/`match_summary`/`missed_deadlines`, not a new exception to §7.1's fold; and since bot/Autopilot orders never pass through the submit handler (§8.2), an Autopilot seat's cursor is structurally incapable of moving without a genuine human resubmission |
 | D17 | Invite links have no storage | open |
 | D18 | Pins and notes are promised in v1 scope and have no storage | open |
 | D19 | Per-match email preferences have no storage | open |
