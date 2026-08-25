@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r38 · **Companion doc:** `cinzal-gdd.md` **v2.31**
+**Status:** draft for review · **Revision:** r39 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -200,6 +200,9 @@
 >
 > **Changelog r37 → r38** — one §6.4 correction, no companion pointer move (issue [#284](https://github.com/garnizeh/cinzal/issues/284), [D11](../decisions/D11-config-suppression-flags.md))
 > - §6.4's `incident.sector` row stated an unconditional cost of 1. It has two zero-draw conditions, both already correct in `internal/rules`: `ConsumptionTable` (`rng_purpose.go`) has read "1, 0 under Suppress.Incidents or Rounds < 3" since D11, and `initialUnstableSector` (`initial.go`) checks both before drawing, so the skip costs zero indices rather than a drawn-and-discarded one. The row now states both conditions and cites D11 for the `Suppress.Incidents` half, matching the code's own wording. No behaviour change — the engine was already correct; this closes the drift between it and the row describing it. GDD §21 entry 4 (Market stock) was checked for the same omission and found already correct — it states its own conditional firing ("odd rounds only") inline, and Market stock has no `Suppress` flag to omit in the first place. Companion doc stays at v2.31.
+>
+> **Changelog r38 → r39** — companion pointer only (issue [#286](https://github.com/garnizeh/cinzal/issues/286))
+> - GDD §20's R6, R9 and R11 paragraphs, and §10.4's "note on the rate," now carry the M2 results that produced their disposition (no action for R6/R11, a split remedy-taken/deferred-to-M5.5 for R9, out-of-band-and-deferred for the lease rate) alongside the issue and decision that produced each. Every figure cited is data the GDD already owned before this entry — no new measurement is taken, no band or threshold moves, and no RFC-stated structure changes: this closes a gap between what M2 already measured and what §20/§10.4's prose said, the same gap D39/D42/D43's own companion entries closed for R1 and R7. Companion doc moves to GDD v2.32.
 
 ---
 
