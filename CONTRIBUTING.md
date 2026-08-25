@@ -136,7 +136,7 @@ make packages  # assert the package graph matches scripts/packages.txt
 
 ### Requirements
 
-**Go 1.26.5.** RFC §4 names it and §6.3 explains why the project cares: the design is staked on `seed + order log` reproducing a match exactly, and *"which Go built it"* should never be a candidate explanation for a determinism mismatch. Note that `go.mod` can only express a **floor** — no directive pins a version from inside it — so the exact version is enforced in CI.
+**Go 1.27.0.** RFC §4 names it and §6.3 explains why the project cares: the design is staked on `seed + order log` reproducing a match exactly, and *"which Go built it"* should never be a candidate explanation for a determinism mismatch. Note that `go.mod` can only express a **floor** — no directive pins a version from inside it — so the exact version is enforced in CI.
 
 `golangci-lint` for `make lint`. `gitleaks` for `make secrets`. `templ` and `sqlc` for `make generate`; both are no-ops until M5 and M3 respectively, so you can skip them until then. Postgres 16 arrives with M3.
 

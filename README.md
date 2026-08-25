@@ -33,7 +33,7 @@ The fog test suite is deliberately **negative**: it asserts hidden facts are *ab
 
 ## Planned stack
 
-Go 1.26.5 · [templ](https://templ.guide) · HTMX 2.x + SSE · [sqlc](https://sqlc.dev) · [goose](https://github.com/pressly/goose) · pgx/v5 · Postgres 16
+Go 1.27.0 · [templ](https://templ.guide) · HTMX 2.x + SSE · [sqlc](https://sqlc.dev) · [goose](https://github.com/pressly/goose) · pgx/v5 · Postgres 16
 
 Zero hand-written JavaScript in v1. Event-sourced state with no snapshots — the order log is the only source of truth. One static binary plus a database URL is the entire production topology.
 

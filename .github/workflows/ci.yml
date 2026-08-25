@@ -34,9 +34,9 @@ env:
   # commit. These are build tools and stay out of go.mod deliberately — a tool
   # directive drags its own dependency graph into the module, and RFC-001 §4
   # keeps the runtime footprint deliberately small.
-  GOLANGCI_LINT_VERSION: v2.11.4
-  TEMPL_VERSION: v0.3.1001
-  SQLC_VERSION: v1.28.0
+  GOLANGCI_LINT_VERSION: v2.13.1
+  TEMPL_VERSION: v0.3.1020
+  SQLC_VERSION: v1.31.1
   GITLEAKS_VERSION: 8.30.1
   # Pinning the version pins WHICH release, not WHAT is in it. Published by
   # upstream in gitleaks_8.30.1_checksums.txt; verified before extraction,
@@ -47,7 +47,7 @@ env:
   # pseudo-versions — so the pin is a commit, not a semver tag like the
   # others above. Same reasoning as those: a tool release (here, a commit)
   # should not change what CI does without a reviewed change to this file.
-  BENCHSTAT_VERSION: v0.0.0-20260709024250-82a0b07e230d
+  BENCHSTAT_VERSION: v0.0.0-20260825160852-19be9d8e6c70
 
 jobs:
   check:
