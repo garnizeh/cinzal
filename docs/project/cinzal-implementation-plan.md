@@ -264,7 +264,7 @@ Blocked by: **D3–D14**. Blocks: everything.
 
 ---
 
-### M2 · Bots and simulation — **the measurement gate** · **open**
+### M2 · Bots and simulation — **the measurement gate** · **closed**
 
 **Goal:** answer the balance questions the GDD deferred, by measurement, before any of them can be rationalised away.
 
@@ -285,15 +285,15 @@ Blocked by: M1 (closed) and **D32–D35** (§3.3, all decided). **Blocks nothing
 
 The milestone is done when the following have numbers attached, from sweeps at 2/3/4/5 players — **10,000 matches per configuration, each number reported with its interval, each verdict read against the tier named** ([D35](../decisions/D35-simulation-sample-size-and-verdict-rule.md), §3.3):
 
-| Question | GDD ref | Threshold that forces action | Read against |
-|---|---|---|---|
-| Confrontations per match | R9 / §22 | > 12 → raise node count before touching anything else, and read §22 rows 8 and 19 as the guardrail on how far ([D38](../decisions/D38-board-going-unused-indicator.md)) | **Drifter** — a map-shape question |
-| Two-player encounter rate under rotating borders | §6.3 | < 4 per match | **Drifter** — whether the mechanic geometrically forces encounters |
-| Routes cancelled mid-route | R1 | > 15% → soften the confrontation rule | **Operator** — about a player who is trying |
-| Incidents actually hitting a player | R6 | < 20% or > 70% | **Operator** — the question is whether they land against active avoidance |
-| Matches reaching Infamy 9 | R7 | < 10% → step gradient too steep | **Operator** — a managed climb only Runner/Operator model |
-| Endgame camping | R11 | confrontations in the final 3 rounds > 45% | **Operator** — a rational-incentive question |
-| Lease rate — the most sensitive dial in the game | §10.4 | live leases at scoring outside 2–4 per player | **Operator** — Runner never buys, Drifter has no plan |
+| Question | GDD ref | Threshold that forces action | Read against | Result |
+|---|---|---|---|---|
+| Confrontations per match | R9 / §22 | > 12 → raise node count before touching anything else, and read §22 rows 8 and 19 as the guardrail on how far ([D38](../decisions/D38-board-going-unused-indicator.md)) | **Drifter** — a map-shape question | 4p 11.75/11.81 [11.68, 11.89] — **met**, node count raised 25→28 ([#229](../exit-demos/229-node-count-raise.md)). 5p 19.10/19.12 [19.01, 19.20] — **deferred to M5.5** via [#241](https://github.com/garnizeh/cinzal/issues/241): clears only past 46 nodes ([D37](../decisions/D37-five-player-confrontation-load.md)), declined — by then rows 8 and 19 have already left their own bands |
+| Two-player encounter rate under rotating borders | §6.3 | < 4 per match | **Drifter** — whether the mechanic geometrically forces encounters | 4.47–4.51 [4.42, 4.55] — **met** ([#203](../exit-demos/203-confrontation-load.md)) |
+| Routes cancelled mid-route | R1 | > 15% → soften the confrontation rule | **Operator** — about a player who is trying | Rule already softened, confirmed working ([D39](../decisions/D39-r1-confrontation-softening.md)); the fix converted away the row's own numerator, so it reports no value — **deferred to M5.5** via [#241](https://github.com/garnizeh/cinzal/issues/241) ([D43](../decisions/D43-row-1-unmeasurable-post-d39.md)) |
+| Incidents actually hitting a player | R6 | < 20% or > 70% | **Operator** — the question is whether they land against active avoidance | 25.68–44.55% [25.53, 44.70] at 2p–5p — **no action**, re-measured after a two-card under-count ([D40](../decisions/D40-gas-leak-riot-row-6-and-silent-truncation.md)) |
+| Matches reaching Infamy 9 | R7 | < 10% → step gradient too steep | **Operator** — a managed climb only Runner/Operator model | 2p 8.93% [8.53%, 9.33%] — trips; all three GDD-named remedies rejected on measurement, **deferred to M5.5** via [#241](https://github.com/garnizeh/cinzal/issues/241) ([D42](../decisions/D42-r7-two-player-remedies-rejected.md)). 3p–5p 21.83%–44.52% — **met** |
+| Endgame camping | R11 | confrontations in the final 3 rounds > 45% | **Operator** — a rational-incentive question | 20.5%–21.3% [20.3%, 21.7%] at 2p–5p — **met**, with a standing weak-evidence caveat carried to M5.5 (Operator cannot model being out of contention) ([#203](../exit-demos/203-confrontation-load.md)) |
+| Lease rate — the most sensitive dial in the game | §10.4 | live leases at scoring outside 2–4 per player | **Operator** — Runner never buys, Drifter has no plan | 0.00175 [0.00134, 0.00216] at the shipped default; 0.28387 [0.27853, 0.28922] with the chokepoint gate swept fully open — still 7–14× short of the band floor — **deferred to M5.5** via [#241](https://github.com/garnizeh/cinzal/issues/241) ([D36](../decisions/D36-lease-rate-chokepoint-gate.md)) |
 
 **A threshold is tripped only when the whole 95% interval sits on the failing side of it.** A point estimate of 12.3 with the interval spanning 12 is *watch, not act*: re-run that configuration under a second root seed, pool both vectors into one 20,000-match interval, and if it still straddles, record "watch, unresolved at n = 20,000" and hand it to M5.5. Both tiers are reported for every row regardless — a metric where Drifter and Operator disagree sharply is a metric that rewards skill, which is its own finding. A zero-width interval is a degenerate sample, not a result.
 
