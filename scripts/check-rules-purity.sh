@@ -59,17 +59,24 @@
 # rules" is not enforced here.
 #
 # `fmt` is importable because Errorf and Sprintf are pure and all three trees
-# need them, but fmt.Print* and Fprint* are rejected at the call site: an
-# import rule cannot separate formatting from writing, and only the second is
-# I/O.
+# need them, but fmt.Print* and Fprint*/Fscan* are rejected at the call site:
+# an import rule cannot separate formatting from writing, and only the
+# second is I/O. That call-site check is an AST walk, scripts/check-fmt-
+# purity.go, run once per tree below — see that file's own header for why
+# (issue #297: the textual predecessor of this check matched a selector only
+# when directly followed by "(", so `p := fmt.Println; p("x")` sailed
+# through unseen, and could not resolve an aliased fmt import at all, so it
+# rejected aliasing outright rather than risk being unsound).
 #
-# That call-site check is textual, with two consequences stated rather than
-# discovered. Aliased and dot imports of fmt are rejected outright, because they
-# would make the qualifier unpredictable and the grep unsound. And a mention of
-# fmt.Println inside a comment or a string literal will fail the gate - a false
-# positive, deliberately, because it costs a rename while a false negative costs
-# the property. If this ever gets noisy, the answer is an AST-based check, not a
-# looser pattern.
+# `io` is in FORBIDDEN_EXACT below for the same issue's other gap. Importing
+# `io` alone does nothing — io.ReadAll/io.Copy are generic over whatever
+# io.Reader/io.Writer they are handed, and constructing a concrete one still
+# needs os/net/etc., already forbidden. But a future Resolve/Match/Decide-
+# adjacent function that accepted an io.Reader/io.Writer PARAMETER would let
+# a caller (which may legitimately import os) hand in a real file or socket,
+# and the callee would perform I/O without importing anything else this gate
+# inspects. Forbidding the import closes that path before any code exploits
+# it, even though nothing in these trees does today.
 #
 # THIS CHECK FAILS CLOSED. Every path that cannot complete the inspection exits
 # non-zero rather than falling through to success — per tree, so a typo in one
@@ -79,7 +86,17 @@
 set -euo pipefail
 
 MODULE="github.com/garnizeh/cinzal"
-ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+
+# REPO_ROOT locates this script's own siblings (scripts/check-fmt-purity.go)
+# and never changes. ROOT is where go list is asked to look for the trees
+# below and does change, but only for scripts/check-rules-purity_test.sh:
+# PURITY_TEST_ROOT/_DIR/_SELF/_ALLOWED point a single synthetic tree at a
+# fixture module instead of the real internal/rules et al, so that self-test
+# can assert both this gate's failure modes without ever touching real code.
+# Unset (the default for `make purity`), the three real trees run exactly as
+# declared below.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+ROOT="${PURITY_TEST_ROOT:-$REPO_ROOT}"
 
 # The trees this gate protects. Parallel arrays rather than an associative one,
 # for portability across bash versions.
@@ -98,8 +115,15 @@ TREE_ALLOWED=(
     "$MODULE/internal/game $MODULE/internal/rules"
 )
 
+if [ -n "${PURITY_TEST_ROOT:-}" ]; then
+    TREE_DIRS=("${PURITY_TEST_DIR:-.}")
+    TREE_SELF=("${PURITY_TEST_SELF:-fixture}")
+    TREE_ALLOWED=("${PURITY_TEST_ALLOWED:-}")
+fi
+
 # Exact stdlib packages that break purity if imported directly.
 FORBIDDEN_EXACT="
+io
 time
 hash/maphash
 math/rand
@@ -201,27 +225,20 @@ for i in "${!TREE_DIRS[@]}"; do
     summary="$summary $dir=$tree_count"
 
     # fmt stays importable - Errorf and Sprintf are pure and these trees need
-    # them - but fmt.Print* and Fprint* write to stdout or a writer and
-    # fmt.Fscan* reads from a reader, all of which are I/O in a package that
-    # must perform none. An import rule cannot express that distinction, so
-    # it is checked at the call site. Sprintf, Sscanf and Errorf operate on
-    # strings and stay allowed.
-    #
-    # A textual check can only be sound if the qualifier is predictable, so
-    # aliased and dot imports of fmt are rejected first. `import f "fmt"` or
-    # `import . "fmt"` would let f.Println or a bare Println through unseen.
-    aliased="$(cd "$ROOT" && grep -rnE '^[[:space:]]*(import[[:space:]]+)?(\.|[A-Za-z_][A-Za-z0-9_]*)[[:space:]]+"fmt"' \
-        --include='*.go' "$dir" 2>/dev/null \
-        | grep -v '_test\.go:' \
-        | grep -vE ':[[:space:]]*import[[:space:]]+"fmt"([[:space:]]|$)' || true)"
-    if [ -n "$aliased" ]; then
-        violations="$violations$(printf '%s\n' "$aliased" | sed 's/^/  aliased or dot import of fmt: /')"$'\n'
+    # them - but fmt.Print*, Fprint* and Fscan* are I/O in a package that must
+    # perform none. An import rule cannot express that distinction, so it is
+    # checked at the call site by scripts/check-fmt-purity.go (an AST walk -
+    # see that file's header for why, and for its contract with this script:
+    # a clean tree prints nothing and exits 0, findings print one line each
+    # and exit 1, and an infra failure is distinguished by the literal
+    # "check-fmt-purity: FAIL:" prefix rather than by exit code).
+    fmtcheck="$(cd "$REPO_ROOT" && go run scripts/check-fmt-purity.go "$ROOT/$dir" 2>&1)" || true
+    if printf '%s' "$fmtcheck" | grep -q '^check-fmt-purity: FAIL:'; then
+        fail "the fmt call-site check on $dir did not complete:
+$fmtcheck"
     fi
-
-    printers="$(cd "$ROOT" && grep -rnE '\bfmt\.(Print|Printf|Println|Fprint|Fprintf|Fprintln|Fscan|Fscanf|Fscanln)\(' \
-        --include='*.go' "$dir" 2>/dev/null | grep -v '_test\.go:' || true)"
-    if [ -n "$printers" ]; then
-        violations="$violations$(printf '%s\n' "$printers" | sed 's/^/  writes to output: /')"$'\n'
+    if [ -n "$fmtcheck" ]; then
+        violations="$violations$(printf '%s\n' "$fmtcheck" | sed 's/^/  /')"$'\n'
     fi
 done
 

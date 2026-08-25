@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps check replay clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity purity-selftest fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps check replay clean
 
 ## help      list these targets
 help:
@@ -126,6 +126,16 @@ packages:
 purity:
 	./scripts/check-rules-purity.sh
 
+## purity-selftest  fixture coverage for check-rules-purity.sh and check-fmt-purity.go (issue #297)
+#
+# Deterministic and fast — synthetic fixture modules, nothing about the real
+# internal/rules, internal/telemetry or internal/bots involved — so like
+# bots-isolation-selftest and bench-regression-selftest this carries none of
+# the noise that would keep it out of `check`. See
+# scripts/check-rules-purity_test.sh's own comment.
+purity-selftest:
+	./scripts/check-rules-purity_test.sh
+
 ## fog       assert render and web never DIRECTLY import internal/rules
 fog:
 	./scripts/check-fog-boundary.sh
@@ -201,6 +211,13 @@ generate-check: generate
 # #199) — a plain go list/grep, so unlike bots-isolation it needs no
 # selftest of its own (check-packages.sh, the same shape, has none either).
 #
+# purity-selftest joined the same way again, in issue #297: once
+# check-rules-purity.sh started shelling out to an AST-based checker
+# (check-fmt-purity.go) instead of a grep, it warranted the same fixture
+# coverage bots-isolation's own AST walk already gets, for the same reason —
+# deterministic and fast enough to belong on this line, not held out the way
+# bench-compare is.
+#
 # generate-check is deliberately absent from this line for the same reason,
 # not an oversight: with GENERATED still empty (M3/M5 not landed), it can only
 # report VACUOUS, and listing it here would make `check`'s own success mean
@@ -217,7 +234,7 @@ generate-check: generate
 #
 # If this line and the CI workflow ever disagree, the workflow is wrong: it
 # calls these targets rather than restating them, so there is one definition.
-check: packages purity fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps lint test bench-regression-selftest prod dev
+check: packages purity purity-selftest fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps lint test bench-regression-selftest prod dev
 
 ## replay    golden-replay determinism suite, for the cross-OS/arch matrix (issue #80)
 #
