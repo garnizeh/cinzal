@@ -99,8 +99,10 @@ func writeTrail(s *MatchState, validated map[game.SeatID]game.Order, seats []gam
 	// Riot (issue #73, GDD §14.3, D4) permutes the flagged sector's
 	// sight-gated entries in place, strictly before distributeTrail hands
 	// them out by sight — see writeTrail's own doc for why this cannot
-	// wait for incident()'s normal Phase 7 call site.
-	applyRiotPermutation(s, entries, incCtx, r)
+	// wait for incident()'s normal Phase 7 call site. Its own EventIncidentHit
+	// events (D40 row 6) are appended into out here, matching every other
+	// roundEvents contributor in this file.
+	out = append(out, applyRiotPermutation(s, entries, incCtx, r)...)
 
 	distributeTrail(s, validated, seats, entries, suppressFreshTracks, blackoutActive)
 
@@ -343,9 +345,23 @@ func (s riotSitesByKey) Less(i, j int) bool {
 // .Node moves. No-op, zero draws, when Riot isn't this round's card or no
 // eligible entry exists (RFC §6.4's lazy-draw rule) — matches D4's own
 // n=0 case exactly.
-func applyRiotPermutation(s *MatchState, entries map[game.NodeID][]game.TrailEntry, incCtx incidentContext, r *RNG) {
+//
+// D40 row 6: every eligible entry that names a seat also gets that seat its
+// own EventIncidentHit before the permutation moves it — Node is the real
+// origin, never the shuffled target, since row 6 is measuring what the
+// incident actually did to a player's own turn, not where their trace
+// ended up landing. A confrontation entry names both parties (addConfrontation
+// always names both, unconditionally), so both get their own hit. A Fresh
+// Tracks entry, or a cargo-taken/item-purchased entry below its own naming
+// gate, has no Actor at all — riotParticipant's 0 return for that case is
+// documented as ambiguous between "seat 0" and "no seat," so it is never
+// read here; only entry.Actor/entry.Target, directly, decide whether a hit
+// is minted. Built from the sorted sites — the same deterministic (Node,
+// Kind, Seat) order the permutation itself sorts by — so the returned event
+// order stays reproducible independent of the map iteration above.
+func applyRiotPermutation(s *MatchState, entries map[game.NodeID][]game.TrailEntry, incCtx incidentContext, r *RNG) []game.Event {
 	if !incCtx.live || incCtx.card != IncidentRiot {
-		return
+		return nil
 	}
 	sector := *incCtx.sector
 
@@ -366,10 +382,21 @@ func applyRiotPermutation(s *MatchState, entries map[game.NodeID][]game.TrailEnt
 		entries[n.ID] = kept
 	}
 	if len(sites) == 0 {
-		return
+		return nil
 	}
 
 	sort.Stable(riotSitesByKey(sites))
+
+	var events []game.Event
+	for _, site := range sites {
+		e := site.entry
+		if e.Actor != nil {
+			events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: e.Node, Seat: *e.Actor})
+		}
+		if e.Kind == game.EventConfrontation {
+			events = append(events, game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: e.Node, Seat: *e.Target})
+		}
+	}
 
 	targets := make([]game.NodeID, len(sites))
 	for i, site := range sites {
@@ -382,6 +409,8 @@ func applyRiotPermutation(s *MatchState, entries map[game.NodeID][]game.TrailEnt
 		e.Node = targets[i]
 		entries[e.Node] = append(entries[e.Node], e)
 	}
+
+	return events
 }
 
 // performedQualifyingAction reports whether seat's declared Action this

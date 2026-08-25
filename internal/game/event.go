@@ -180,6 +180,33 @@ const (
 	// live incident then does to them — GDD §22's "players ending a
 	// route in a flagged unstable sector" (D33 row 12).
 	EventIncidentExposed
+
+	// EventGasLeakTruncated is Gas Leak's own truncation notification (D40,
+	// issue #274): fired the moment a movement step's destination reverts
+	// to its origin because that destination sits in this round's flagged
+	// Gas Leak sector — GDD §15.0's "orders never silently fail," extended
+	// past Step 0 by D30 to this movement-phase truncation the same way
+	// D30 already extended it to Step N+1 and N+3 resolution-time losses.
+	// Not one of the six Step 0 kinds above, and appended here rather than
+	// spliced into that block, for the same reason the three M2 telemetry
+	// kinds above are appended rather than inserted into their own
+	// thematic groups: EventKind's numeric value is not stable across a
+	// code version (RFC §6.3's determinism claim is seed + order log
+	// within one binary, never a cross-version wire guarantee — no
+	// persisted schema anywhere yet reads it as a raw int), but nothing is
+	// gained by moving it either, and every golden-fixture regeneration
+	// this decision already requires would otherwise be needlessly
+	// widened to any match producing an anchor-routed kind after the
+	// insertion point. Documented the same way as the six Step 0 kinds:
+	// Round, Node (the last node still reachable, same as
+	// EventRouteTruncated/EventCurfewTruncated), Seat, and not in RFC
+	// §9.1's writer table for the identical reason those kinds aren't — it
+	// names only the acting seat and discloses no other seat's position.
+	// A distinct kind rather than a reuse of EventRouteTruncated or
+	// EventCurfewTruncated, on D30's own precedent for Curfew versus a
+	// destroyed edge: the cause (a sector incident) is a different
+	// "specific reason" GDD §15.0 requires naming.
+	EventGasLeakTruncated
 )
 
 // String returns the event kind's name, or "EventKind(n)" for an invalid
@@ -236,6 +263,8 @@ func (k EventKind) String() string {
 		return "IncidentHit"
 	case EventIncidentExposed:
 		return "IncidentExposed"
+	case EventGasLeakTruncated:
+		return "GasLeakTruncated"
 	default:
 		return invalidEnumString("EventKind", int(k))
 	}

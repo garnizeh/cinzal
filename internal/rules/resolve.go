@@ -81,7 +81,8 @@ func Resolve(s MatchState, orders map[game.SeatID]game.Order, cfg game.Config, r
 	// of MatchState.
 	walks := newSeatWalks(next, seats)
 	for step := 1; step <= movementSteps(seats, validated); step++ {
-		transitions := advance(&next, walks, validated, seats, step, incCtx, r)
+		transitions, gasLeakEvents := advance(&next, walks, validated, seats, step, incCtx, r)
+		events = append(events, gasLeakEvents...)
 		crossings := detectCrossings(transitions, seats, validated)
 		collisions := detectCollisions(next, seats)
 		pending := mergeConfrontations(next, crossings, collisions)

@@ -711,8 +711,8 @@ func TestAdvanceTruncatesGasLeakEntryAndStaysLazy(t *testing.T) {
 	walks := newSeatWalks(s, []game.SeatID{0})
 	r := NewRNG(testSeed(1), 5)
 
-	advance(&s, walks, validated, []game.SeatID{0}, 1, incCtx, r) // 0->1, legal
-	advance(&s, walks, validated, []game.SeatID{0}, 2, incCtx, r) // 1->2 would enter the flagged sector
+	advance(&s, walks, validated, []game.SeatID{0}, 1, incCtx, r)              // 0->1, legal
+	_, events := advance(&s, walks, validated, []game.SeatID{0}, 2, incCtx, r) // 1->2 would enter the flagged sector
 
 	if got := s.Players[0].Position; got != 1 {
 		t.Errorf("Position = %d, want 1 (truncated before entering the flagged sector)", got)
@@ -722,6 +722,19 @@ func TestAdvanceTruncatesGasLeakEntryAndStaysLazy(t *testing.T) {
 	}
 	if got := r.Consumed(PurposePushonEdge); got != 0 {
 		t.Errorf("PurposePushonEdge consumed = %d, want 0 (truncation halts before any blind step runs)", got)
+	}
+
+	// D40 row 6 and its own notification fix: the truncating step emits
+	// both EventIncidentHit (row 6's fix) and EventGasLeakTruncated (GDD
+	// §15.0's "orders never silently fail," D30's reasoning extended to
+	// this call site), both naming node 1 — the last node still reachable
+	// — not node 2, the sector Gas Leak actually blocked entry to.
+	want := []game.Event{
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: 0},
+		{Kind: game.EventGasLeakTruncated, Round: s.Round, Node: 1, Seat: 0},
+	}
+	if !slices.Equal(events, want) {
+		t.Errorf("events = %+v, want %+v", events, want)
 	}
 }
 
@@ -762,7 +775,7 @@ func TestApplyRiotPermutationStaysWithinRealOrigins(t *testing.T) {
 	}
 	r := NewRNG(testSeed(1), 5)
 
-	applyRiotPermutation(&s, entries, incCtx, r)
+	events := applyRiotPermutation(&s, entries, incCtx, r)
 
 	total := 0
 	for _, list := range entries {
@@ -785,6 +798,16 @@ func TestApplyRiotPermutationStaysWithinRealOrigins(t *testing.T) {
 	if got := r.Consumed(PurposeIncidentRiot); got != 2 {
 		t.Errorf("PurposeIncidentRiot consumed = %d, want 2 (one per eligible entry)", got)
 	}
+
+	// D40 row 6: only the sector's own node-1 CargoTaken entry names a
+	// seat — node 0's Fresh Tracks carries no Actor, and node 3's entry
+	// never enters the sector's eligible set at all — and the hit is
+	// reported at the entry's real origin (node 1), never the shuffled
+	// target the permutation above may have moved it to.
+	want := []game.Event{{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: actor1}}
+	if !slices.Equal(events, want) {
+		t.Errorf("events = %+v, want %+v", events, want)
+	}
 }
 
 // TestApplyRiotPermutationQuietRoundConsumesNothing is RFC §6.4's
@@ -796,10 +819,13 @@ func TestApplyRiotPermutationQuietRoundConsumesNothing(t *testing.T) {
 	entries := map[game.NodeID][]game.TrailEntry{}
 	r := NewRNG(testSeed(1), 5)
 
-	applyRiotPermutation(&s, entries, incCtx, r)
+	events := applyRiotPermutation(&s, entries, incCtx, r)
 
 	if got := r.Consumed(PurposeIncidentRiot); got != 0 {
 		t.Errorf("PurposeIncidentRiot consumed = %d, want 0", got)
+	}
+	if events != nil {
+		t.Errorf("events = %+v, want nil", events)
 	}
 }
 
@@ -812,13 +838,63 @@ func TestApplyRiotPermutationLeavesGlobalEntriesUntouched(t *testing.T) {
 	entries := map[game.NodeID][]game.TrailEntry{0: {{Kind: game.EventLoitering, Node: 0}}}
 	r := NewRNG(testSeed(1), 5)
 
-	applyRiotPermutation(&s, entries, incCtx, r)
+	events := applyRiotPermutation(&s, entries, incCtx, r)
 
 	if len(entries[0]) != 1 || entries[0][0].Kind != game.EventLoitering {
 		t.Errorf("entries[0] = %+v, want the Loitering entry untouched", entries[0])
 	}
 	if got := r.Consumed(PurposeIncidentRiot); got != 0 {
 		t.Errorf("PurposeIncidentRiot consumed = %d, want 0", got)
+	}
+	if events != nil {
+		t.Errorf("events = %+v, want nil", events)
+	}
+}
+
+// TestApplyRiotPermutationEmitsHitForBothConfrontationParties is D40 row 6:
+// GDD's confrontation trail row always names both parties, so Riot
+// falsifying it hits both, not just the seat addConfrontation calls Seat.
+func TestApplyRiotPermutationEmitsHitForBothConfrontationParties(t *testing.T) {
+	s := incidentsTestState()
+	sector := game.SectorOldDocks
+	incCtx := incidentContext{sector: &sector, card: IncidentRiot, live: true}
+	actor, target := game.SeatID(0), game.SeatID(1)
+	entries := map[game.NodeID][]game.TrailEntry{
+		1: {{Kind: game.EventConfrontation, Node: 1, Actor: &actor, Target: &target}},
+	}
+	r := NewRNG(testSeed(1), 5)
+
+	events := applyRiotPermutation(&s, entries, incCtx, r)
+
+	want := []game.Event{
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: actor},
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: target},
+	}
+	if !slices.Equal(events, want) {
+		t.Errorf("events = %+v, want %+v", events, want)
+	}
+}
+
+// TestApplyRiotPermutationEmitsNothingForAnonymousEntries is D40's own
+// explicit reasoning: riotParticipant's 0 return for a seatless entry is
+// documented as ambiguous between "seat 0" and "no seat," safe only for its
+// one existing use as a sort key — reusing it here would mint a false hit
+// against seat 0 on a Fresh Tracks entry or a below-gate cargo-taken, so
+// this asserts neither one ever does.
+func TestApplyRiotPermutationEmitsNothingForAnonymousEntries(t *testing.T) {
+	s := incidentsTestState()
+	sector := game.SectorOldDocks
+	incCtx := incidentContext{sector: &sector, card: IncidentRiot, live: true}
+	entries := map[game.NodeID][]game.TrailEntry{
+		0: {{Kind: game.EventFreshTracks, Node: 0}},
+		1: {{Kind: game.EventCargoTaken, Node: 1}}, // below its own Infamy naming gate: no Actor
+	}
+	r := NewRNG(testSeed(1), 5)
+
+	events := applyRiotPermutation(&s, entries, incCtx, r)
+
+	if events != nil {
+		t.Errorf("events = %+v, want nil (neither entry names a seat)", events)
 	}
 }
 

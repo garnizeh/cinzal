@@ -103,8 +103,15 @@ func newSeatWalks(s MatchState, seats []game.SeatID) map[game.SeatID]*seatWalk {
 // declared Circulation Permit as this round's discard (GDD §12: "immune to
 // this round's Sector Incident") is exempt — the truncation simply never
 // fires for them.
-func advance(s *MatchState, walks map[game.SeatID]*seatWalk, validated map[game.SeatID]game.Order, seats []game.SeatID, step int, incCtx incidentContext, r *RNG) map[game.SeatID]transition {
+//
+// The same branch also emits this seat's own EventIncidentHit (D40 row 6:
+// Gas Leak genuinely hits the player, but resolves outside incident()'s own
+// switch, which never sees it) and a dedicated EventGasLeakTruncated (D40's
+// notification fix, event.go) — both returned alongside the step's
+// transitions for Resolve's own movement loop (resolve.go) to append.
+func advance(s *MatchState, walks map[game.SeatID]*seatWalk, validated map[game.SeatID]game.Order, seats []game.SeatID, step int, incCtx incidentContext, r *RNG) (map[game.SeatID]transition, []game.Event) {
 	transitions := make(map[game.SeatID]transition, len(seats))
+	var events []game.Event
 
 	for _, seat := range seats {
 		from := s.Players[seat].Position
@@ -126,6 +133,10 @@ func advance(s *MatchState, walks map[game.SeatID]*seatWalk, validated map[game.
 			o.PushingOn = game.PushingOn{}
 			o.Action = game.ActionOrder{Kind: game.ActionNothing}
 			validated[seat] = o
+			events = append(events,
+				game.Event{Kind: game.EventIncidentHit, Round: s.Round, Node: from, Seat: seat},
+				game.Event{Kind: game.EventGasLeakTruncated, Round: s.Round, Node: from, Seat: seat},
+			)
 		}
 
 		walk.Previous = from
@@ -139,7 +150,7 @@ func advance(s *MatchState, walks map[game.SeatID]*seatWalk, validated map[game.
 		transitions[seat] = transition{Seat: seat, From: from, To: to}
 	}
 
-	return transitions
+	return transitions, events
 }
 
 // pushOnStep computes and applies one blind Pushing On step from `from`,
