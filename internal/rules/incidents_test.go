@@ -941,6 +941,40 @@ func TestApplyRiotPermutationNotifiesOwnerOfAGenuineMove(t *testing.T) {
 	}
 }
 
+// TestApplyRiotPermutationNotifiesBothConfrontationPartiesOnAMove is issue
+// #275, the confrontation-specific half CodeRabbit flagged as missing from
+// the cargo-taken-only coverage above: a moved confrontation entry names
+// two seats, and both — not just the one addConfrontation calls Seat — get
+// their own EventRiotTraceMoved, at the confrontation's true origin.
+func TestApplyRiotPermutationNotifiesBothConfrontationPartiesOnAMove(t *testing.T) {
+	s := incidentsTestState()
+	sector := game.SectorOldDocks
+	incCtx := incidentContext{sector: &sector, card: IncidentRiot, live: true}
+	actor, target, other := game.SeatID(0), game.SeatID(1), game.SeatID(2)
+	entries := map[game.NodeID][]game.TrailEntry{
+		0: {{Kind: game.EventConfrontation, Node: 0, Actor: &actor, Target: &target}},
+		1: {{Kind: game.EventCargoTaken, Node: 1, Actor: &other}},
+	}
+	r := NewRNG(testSeed(1), 5) // this seed swaps the two entries — see TestApplyRiotPermutationStaysWithinRealOrigins
+
+	events := applyRiotPermutation(&s, entries, incCtx, r)
+
+	want := []game.Event{
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 0, Seat: actor},
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 0, Seat: target},
+		{Kind: game.EventIncidentHit, Round: s.Round, Node: 1, Seat: other},
+		{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: 0, Seat: actor},
+		{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: 0, Seat: target},
+		{Kind: game.EventRiotTraceMoved, Round: s.Round, Node: 1, Seat: other},
+	}
+	if !slices.Equal(events, want) {
+		t.Errorf("events = %+v, want %+v", events, want)
+	}
+	if entries[1][0].Kind != game.EventConfrontation {
+		t.Errorf("entries[1] = %+v, want the confrontation entry (the swap landed here)", entries[1])
+	}
+}
+
 // TestApplyRiotPermutationSilentOnAFixedPoint is D4's own explicit case: "a
 // fixed point... an ordinary, expected outcome of a uniform permutation, not
 // a bug." A named entry the shuffle happens to return to its own origin was
