@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r39 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r40 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -203,6 +203,9 @@
 >
 > **Changelog r38 → r39** — companion pointer only (issue [#286](https://github.com/garnizeh/cinzal/issues/286))
 > - GDD §20's R6, R9 and R11 paragraphs, and §10.4's "note on the rate," now carry the M2 results that produced their disposition (no action for R6/R11, a split remedy-taken/deferred-to-M5.5 for R9, out-of-band-and-deferred for the lease rate) alongside the issue and decision that produced each. Every figure cited is data the GDD already owned before this entry — no new measurement is taken, no band or threshold moves, and no RFC-stated structure changes: this closes a gap between what M2 already measured and what §20/§10.4's prose said, the same gap D39/D42/D43's own companion entries closed for R1 and R7. Companion doc moves to GDD v2.32.
+>
+> **Changelog r39 → r40** — Go version floor raised to 1.27.0
+> - **§4 now names Go 1.27.0** rather than 1.26.5. Same reasoning as r11 → r12's original pin (§6.3's determinism guarantee): none of this is a response to a known bug in 1.26.5, it just keeps the project on a current toolchain. `go.mod`'s `go` directive was the floor already carrying the number (see its own header comment for why nothing else can pin it); CI's enforcement mechanism — `setup-go` with `go-version-file: go.mod` plus `GOTOOLCHAIN=local` — is unchanged, since it was already designed to track whatever `go.mod` says rather than a hardcoded number. Companion doc stays at v2.32.
 
 ---
 
@@ -260,7 +263,7 @@ Three consequences shape the rest of this document.
 ## 4. Stack
 
 ```text
-Go 1.26.5
+Go 1.27.0
 templ                     — typed templates
 HTMX 2.x + SSE extension  — interactivity
 sqlc                      — typed queries from SQL

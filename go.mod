@@ -1,6 +1,6 @@
 module github.com/garnizeh/cinzal
 
-// On its own this is a FLOOR, not a pin: Go 1.27 satisfies it. A `toolchain`
+// On its own this is a FLOOR, not a pin: Go 1.28 satisfies it. A `toolchain`
 // directive would not change that. It names a MINIMUM toolchain to switch to,
 // so it raises the floor rather than capping it - and one equal to the line
 // below is redundant and does not survive: `go build` errors with "updates to
@@ -14,4 +14,4 @@ module github.com/garnizeh/cinzal
 //
 // This line is therefore the single source of the Go version. See
 // .github/workflows/ci.yml, RFC-001 §4, and the r12 changelog entry.
-go 1.26.5
+go 1.27.0
