@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r36 · **Companion doc:** `cinzal-gdd.md` **v2.30**
+**Status:** draft for review · **Revision:** r37 · **Companion doc:** `cinzal-gdd.md` **v2.31**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -194,6 +194,9 @@
 >
 > **Changelog r35 → r36** — companion pointer only (issue [#280](https://github.com/garnizeh/cinzal/issues/280), [D42](../decisions/D42-r7-two-player-remedies-rejected.md))
 > - GDD §20's R7 remedy dials (Tier IV deadline, Tier IV reward, Legend step allowance) are rejected — the first two on measurement, the third on structural grounds without a run — all three govern behaviour that only takes effect once Infamy 9 is already reached, so none can move the climb the row measures. No `telemetry` field, event, or `Match` signature changes: this is a `game.Config`-and-bot-behaviour finding, not a new computation or a new sink. Companion doc moves to GDD v2.30.
+>
+> **Changelog r36 → r37** — companion pointer only (issue [#283](https://github.com/garnizeh/cinzal/issues/283), [D43](../decisions/D43-row-1-unmeasurable-post-d39.md))
+> - GDD §22 row 1 is recorded as structurally unmeasurable by bot simulation after D39's rule change and its read deferred to M5.5, so `telemetry.MatchSummary.RoutesCancelledMidRoute` reports no value instead of a constant zero. **Nothing RFC-stated moves**: §17's "one computation, three sinks" holds, [D34](../decisions/D34-telemetry-package-placement.md)'s `Match` signature is unchanged (its `log` argument keeps its structural validation and simply loses its last row-level reader), no event kind is added or removed, and §6.4's consumption table is untouched. `Event.HaltCause` and `Event.HaltStepsUnspent` are **kept** rather than deleted: their consumer is §11.3's narrated resolution list, §13's `round_resolved` email and §15.1's debug panel — §11.5's first rendering guarantee is exactly why a halt must carry its cause as a structured param rather than as prose composed at the render edge. Companion doc moves to GDD v2.31.
 
 ---
 
