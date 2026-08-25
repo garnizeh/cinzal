@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r35 · **Companion doc:** `cinzal-gdd.md` **v2.29**
+**Status:** draft for review · **Revision:** r36 · **Companion doc:** `cinzal-gdd.md` **v2.30**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -191,6 +191,9 @@
 > **Changelog r34 → r35** — one §6.4 worked example, and a companion pointer (issue [#245](https://github.com/garnizeh/cinzal/issues/245), [D39](../decisions/D39-r1-confrontation-softening.md))
 > - GDD §15 now lets every confrontation participant whose declared route can no longer be walked — the loser, every tie participant, and the crossing-corrected winner — spend the round's remaining steps as §9.1 blind steps from wherever they stand instead of freezing. The corrected winner holds their node and so draws no `pushback.hop`; the other two draw as they already did. **§6.4's consumption table is unchanged**: no new purpose string, and `pushon.edge`/`scavenge.d6` already read "1 per blind step" and "1 per newly explored node". What changes is §6.4's second worked case, whose "a loser who moved consumes 0" line was true only while a loser stopped moving. The draws stay lazy, so §16.2's index-count invariant is asserted the same way against a different predicted count.
 > - §22 row 1's numerator is re-specified from halt events to routes, which moves a `telemetry.MatchSummary` computation and no RFC-stated structure: §17's "one computation, three sinks" and [D34](../decisions/D34-telemetry-package-placement.md)'s `Match` signature are untouched, and no new event kind is created — the halt event gains a field. Companion doc moves to GDD v2.29.
+>
+> **Changelog r35 → r36** — companion pointer only (issue [#280](https://github.com/garnizeh/cinzal/issues/280), [D42](../decisions/D42-r7-two-player-remedies-rejected.md))
+> - GDD §20's R7 remedy dials (Tier IV deadline, Tier IV reward, Legend step allowance) are rejected — the first two on measurement, the third on structural grounds without a run — all three govern behaviour that only takes effect once Infamy 9 is already reached, so none can move the climb the row measures. No `telemetry` field, event, or `Match` signature changes: this is a `game.Config`-and-bot-behaviour finding, not a new computation or a new sink. Companion doc moves to GDD v2.30.
 
 ---
 
