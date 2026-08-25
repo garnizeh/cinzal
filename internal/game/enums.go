@@ -267,11 +267,13 @@ func (c EventCategory) String() string {
 }
 
 // HaltCause identifies which of EventRouteHalted's three call sites
-// (internal/rules/confront.go) produced the event — D39's split of GDD §22
-// row 1's numerator, which `#205` could not compute without it: the
-// decisive-loser and crossing-corrected-winner causes are GDD §20's own
-// remedy target, while the tie cause is internal/rules' own addition —
-// GDD §15's tie paragraph never forfeits a round.
+// (internal/rules/confront.go) produced the event. Its consumers are RFC
+// §11.3's narrated resolution list (M5) and §15.1's debug panel — not GDD
+// §22 row 1, which D43 (docs/decisions/D43-row-1-unmeasurable-post-d39.md)
+// found structurally unmeasurable post-D39: internal/telemetry never reads
+// this field. The decisive-loser and crossing-corrected-winner causes are
+// GDD §20's own remedy target, while the tie cause is internal/rules' own
+// addition — GDD §15's tie paragraph never forfeits a round.
 type HaltCause uint8
 
 const (

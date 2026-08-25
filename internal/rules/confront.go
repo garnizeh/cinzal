@@ -560,10 +560,12 @@ func haltMovement(validated map[game.SeatID]game.Order, seat game.SeatID) {
 //
 // Returns the same unspent count haltStepsUnspent already computed — still
 // how many steps of the declared plan were cut short at the moment of
-// *this* halt, whether or not they go on to be spent as blind ones. GDD §22
-// row 1's numerator is not this value alone; see
-// internal/telemetry/match.go's routesCancelledMidRoute for how the chain
-// of a (round, seat) pair's own halts this round decides it (D39, #267).
+// *this* halt, whether or not they go on to be spent as blind ones. That
+// value only ever reaches game.Event.HaltStepsUnspent now (RFC §11.3's
+// narrated resolution list, M5, and §15.1's debug panel) — GDD §22 row 1 is
+// structurally unmeasurable post-D39, and internal/telemetry no longer
+// reads this chain at all (D43,
+// docs/decisions/D43-row-1-unmeasurable-post-d39.md).
 func haltOrConvertMovement(validated map[game.SeatID]game.Order, seat game.SeatID, step int) int {
 	o := validated[seat]
 	unspent := haltStepsUnspent(o, step)

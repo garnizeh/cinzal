@@ -59,7 +59,7 @@ func TestMatchAgainstHandComputedEmptyPopulations(t *testing.T) {
 	}
 
 	want := MatchSummary{
-		RoutesCancelledMidRoute:              Rate{},    // n == 0: no non-empty submitted route this match
+		RoutesCancelledMidRoute:              Rate{},    // D43: no measurement, on every match, not only this one
 		DeliveriesPerPlayer:                  1.0 / 2.0, // 1 EventDelivered / 2 players
 		WinnerRPLeadOverLastPlace:            Rate{},    // winner's Total is 0, not > 0
 		AnyPlayerReachedInfamy9:              false,

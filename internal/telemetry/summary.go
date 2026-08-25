@@ -33,9 +33,13 @@ type Rate struct {
 // them; the row number is named in each comment so a reader can find the
 // source line in docs/project/cinzal-gdd.md directly. Rows 15, 16 and 18
 // have no field here at all — see this package's own doc comment for why.
-// Row 13 has no field either, for a different reason: D33 found no precise
-// source for it in M2's first pass, and recommended shipping open rather
-// than approximate — it stays open here, not silently zero.
+// Row 1 is a differently-shaped case of the same absence: it keeps its
+// field, RoutesCancelledMidRoute, but that field deliberately never carries
+// a value (D43, docs/decisions/D43-row-1-unmeasurable-post-d39.md) — see
+// its own comment below. Row 13 has no field either, for a different
+// reason: D33 found no precise source for it in M2's first pass, and
+// recommended shipping open rather than approximate — it stays open here,
+// not silently zero.
 type MatchSummary struct {
 	// Solo is never set by Match — it has no way to know, from a
 	// MatchState, an OrderLog and an event stream alone, whether this
@@ -47,24 +51,25 @@ type MatchSummary struct {
 	// match's own solo flag.
 	Solo bool
 
-	// RoutesCancelledMidRoute is row 1: "< 15% of submitted routes" fails
-	// if > 15% (R1: "the confrontation rule gets softened"). N counts
-	// every OrderLog entry across the whole match whose Route has at
-	// least one step — an order that never declared a route cannot be
-	// "cancelled mid-route" by definition, so GDD §22's own phrase ("of
-	// submitted routes") is read here as submitted *non-empty* routes.
+	// RoutesCancelledMidRoute is row 1, and reports no measurement at all
+	// (D43, docs/decisions/D43-row-1-unmeasurable-post-d39.md): always the
+	// zero Rate, N == 0, on every match — not the row's "< 15% of
+	// submitted routes" target, target band, or R1's "the confrontation
+	// rule gets softened" action; those are all still §22's own definition
+	// of the row, just not one internal/telemetry can compute post-D39.
 	//
-	// The numerator is not len(EventRouteHalted): event count and
-	// submitted-route count are different units (D33 row 1, superseded by
-	// D39, itself superseded by #267). D39 tried "distinct (round, seat)
-	// pairs whose first halt that round left a declared-plan step unspent"
-	// (HaltStepsUnspent > 0), but that reading only ever matched "genuinely
-	// cancelled" for the instant between D39's own two halves landing — see
-	// routesCancelledMidRoute's own doc comment (match.go) for why, once
-	// haltOrConvertMovement (confront.go) always converts a halt's unspent
-	// budget into further blind Pushing On steps instead of losing it,
-	// EventRouteHalted can no longer signal a genuine cut-short at all, and
-	// the numerator is 0 for every match under the shipped rule.
+	// D39's rule change removed the row's own numerator: haltOrConvertMovement
+	// (confront.go) always either converts a halt's unspent budget into
+	// further blind Pushing On steps or has nothing left to convert, so no
+	// EventRouteHalted this package can read distinguishes "converted and
+	// later fully spent" from "genuinely never spent" any more (#267) — see
+	// routesCancelledMidRoute's own doc comment (match.go). D33's original
+	// numerator (event count) and D39's revision (HaltStepsUnspent > 0,
+	// distinct (round, seat) pairs) are both superseded; there is no fourth
+	// reading of the event stream to try. R1's own rule change stands on
+	// the measurements that actually confirmed it (rows 2, 9, 10/11, 17,
+	// 20); the row's human read is deferred to M5.5 alongside rows 15 and
+	// 18 (this package's own doc comment).
 	RoutesCancelledMidRoute Rate
 
 	// DeliveriesPerPlayer is row 2: target 4-6, fails if < 3 ("cooldown too

@@ -17,7 +17,7 @@ import (
 //
 // Two numbers, not one, and they answer different questions. Numerator and
 // Denominator are pooled totals across every match — the population size
-// issue #205 asks to see printed beside R1's rate ("the denominator is the
+// issue #205 asks to see printed beside a rate ("the denominator is the
 // demonstration"), and the only honest way to report a per-card R6 rate over
 // a deck that draws 13 of 16. Mean and HalfWidth are D35's own reduction,
 // where the match is the sampling unit and each match contributes one number
@@ -88,13 +88,6 @@ func (a *breakdownAccum) stat() breakdownStat {
 	}
 }
 
-// r1LotteryThreshold is GDD §22 row 1's own failing line, 15% of submitted
-// routes. It appears here as well as in the verdict because issue #205 asks
-// for the distribution and not only the mean: the share of individual
-// matches that are themselves over the line is what separates "fifteen
-// percent everywhere" from "fifteen percent in a handful of matches."
-const r1LotteryThreshold = 0.15
-
 // aggregateBreakdowns reduces one configuration's per-match Breakdowns to
 // the rows the --breakdown CSV writes, in a fixed order that does not depend
 // on map iteration: rounds ascending, then incident cards in
@@ -102,16 +95,22 @@ const r1LotteryThreshold = 0.15
 func aggregateBreakdowns(bs []Breakdown, cfg game.Config) []breakdownStat {
 	n := len(bs)
 
-	overall := newAccum("r1_overall", "all", "halted / submitted non-empty routes", n)
-	overThreshold := newAccum("r1_match_over_threshold", "0.15", "matches whose own rate clears row 1's failing line", n)
+	// Row 1 has no ratio block here at all: telemetry.MatchSummary.
+	// RoutesCancelledMidRoute reports no measurement post-D39 (D43,
+	// docs/decisions/D43-row-1-unmeasurable-post-d39.md), and a
+	// halted-over-submitted rate computed from an all-zero numerator would
+	// be exactly the false zero D43 removed from telemetry, reintroduced
+	// here instead. r1_round keeps RoutesSubmittedByRound as a count — a
+	// true order-log fact independent of row 1's own verdict — rather than
+	// as a rate's denominator.
 	byRound := make([]*breakdownAccum, cfg.Rounds)
 	for i := range byRound {
-		byRound[i] = newAccum("r1_round", strconv.Itoa(i+1), "halted / submitted, this round only", n)
+		byRound[i] = newAccum("r1_round", strconv.Itoa(i+1), "submitted non-empty routes, this round only", n)
 	}
 
 	for k, b := range bs {
 		// Every Breakdown here was produced by breakdownTracker.finish
-		// under the same cfg, so all three lengths agree by construction.
+		// under the same cfg, so this length agrees by construction.
 		// Checked anyway, and loudly: this is a package-level function
 		// taking any slice, and the two silent alternatives are both worse
 		// than a named panic. Indexing past byRound panics with nothing but
@@ -119,26 +118,17 @@ func aggregateBreakdowns(bs []Breakdown, cfg game.Config) []breakdownStat {
 		// writes a per-round table that is quietly missing rounds — the
 		// exact shape of "a gate that passes when it can't run" (CLAUDE.md)
 		// applied to a document nobody would re-derive.
-		if len(b.RoutesSubmittedByRound) != cfg.Rounds || len(b.RoutesHaltedByRound) != cfg.Rounds {
-			panic(fmt.Sprintf("cmd/simulate: aggregateBreakdowns: match %d has %d submitted / %d halted per-round entries, want %d each (cfg.Rounds)",
-				k, len(b.RoutesSubmittedByRound), len(b.RoutesHaltedByRound), cfg.Rounds))
+		if len(b.RoutesSubmittedByRound) != cfg.Rounds {
+			panic(fmt.Sprintf("cmd/simulate: aggregateBreakdowns: match %d has %d submitted per-round entries, want %d (cfg.Rounds)",
+				k, len(b.RoutesSubmittedByRound), cfg.Rounds))
 		}
 
-		submitted, halted := 0, 0
 		for i := range b.RoutesSubmittedByRound {
-			byRound[i].ratio(b.RoutesHaltedByRound[i], b.RoutesSubmittedByRound[i])
-			submitted += b.RoutesSubmittedByRound[i]
-			halted += b.RoutesHaltedByRound[i]
+			byRound[i].count(b.RoutesSubmittedByRound[i])
 		}
-		overall.ratio(halted, submitted)
-		if submitted <= 0 {
-			overThreshold.excluded++
-			continue
-		}
-		overThreshold.indicator(float64(halted)/float64(submitted) > r1LotteryThreshold)
 	}
 
-	stats := []breakdownStat{overall.stat(), overThreshold.stat()}
+	stats := make([]breakdownStat, 0, len(byRound))
 	for _, a := range byRound {
 		stats = append(stats, a.stat())
 	}

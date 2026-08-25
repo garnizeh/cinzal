@@ -66,28 +66,25 @@ func TestMatchAndBreakdownRejectTheSameMalformedOrderLog(t *testing.T) {
 }
 
 // TestBreakdownAgreesWithTelemetry is the check that keeps this file
-// honest. Breakdown splits three GDD §22 rows that internal/telemetry also
-// computes whole, which means three definitions now exist twice. A split
+// honest. Breakdown splits GDD §22 rows that internal/telemetry also
+// computes whole, which means those definitions now exist twice. A split
 // that quietly disagrees with the row it splits would produce a
 // demonstration whose supporting detail contradicts its own verdict, so
 // every split is asserted to sum back to telemetry's own number.
+//
+// Row 1 is checked the other way round: telemetry.MatchSummary.
+// RoutesCancelledMidRoute reports no measurement at all post-D39 (D43,
+// docs/decisions/D43-row-1-unmeasurable-post-d39.md), so there is no rate
+// for RoutesSubmittedByRound to sum back to — only that invariant, on
+// every match, is what this test asserts for row 1.
 func TestBreakdownAgreesWithTelemetry(t *testing.T) {
 	results, _ := breakdownMatches(t, 3, bots.Operator, 40)
 
 	for i, res := range results {
 		b := res.Breakdown
 
-		submitted, halted := 0, 0
-		for r := range b.RoutesSubmittedByRound {
-			submitted += b.RoutesSubmittedByRound[r]
-			halted += b.RoutesHaltedByRound[r]
-		}
-		if got, want := submitted, res.Summary.RoutesCancelledMidRoute.N; got != want {
-			t.Errorf("match %d: routes submitted summed by round = %d, telemetry row 1's N = %d", i, got, want)
-		}
-		wantHalted := int(res.Summary.RoutesCancelledMidRoute.Value*float64(submitted) + 0.5)
-		if halted != wantHalted {
-			t.Errorf("match %d: routes halted summed by round = %d, telemetry row 1's numerator = %d", i, halted, wantHalted)
+		if got, want := res.Summary.RoutesCancelledMidRoute, (telemetry.Rate{}); got != want {
+			t.Errorf("match %d: telemetry row 1 = %+v, want the zero Rate (D43: no measurement post-D39)", i, got)
 		}
 
 		if got, want := len(b.IncidentLive), res.Summary.SectorIncidentsHittingAPlayer.N; got != want {
@@ -110,8 +107,9 @@ func TestBreakdownAgreesWithTelemetry(t *testing.T) {
 // pipeline agrees — the same matches, reduced by the same D35 interval
 // routine, must produce identical numbers whether they arrive through
 // telemetry.MatchSummary and metricSpecs or through Breakdown and
-// aggregateBreakdowns. The three rows compared are exactly the three the
-// write-up quotes as headline figures.
+// aggregateBreakdowns. The two rows compared are exactly two the write-up
+// quotes as headline figures; row 1 has no rate block here at all to
+// compare (see TestAggregateBreakdownsHasNoRow1RateBlock).
 func TestAggregateBreakdownsReproducesTheTelemetryRowsItSplits(t *testing.T) {
 	results, cfg := breakdownMatches(t, 4, bots.Operator, 60)
 
@@ -132,7 +130,6 @@ func TestAggregateBreakdownsReproducesTheTelemetryRowsItSplits(t *testing.T) {
 	}
 
 	for _, tt := range []struct{ row, metric string }{
-		{"r1_overall/all", "RoutesCancelledMidRoute"},
 		{"r6_overall/all", "SectorIncidentsHittingAPlayer"},
 		{"r7_infamy9/final", "AnyPlayerReachedInfamy9"},
 	} {
@@ -151,6 +148,27 @@ func TestAggregateBreakdownsReproducesTheTelemetryRowsItSplits(t *testing.T) {
 					tt.row, got.mean, got.halfWidth, tt.metric, want.mean, want.halfWidth)
 			}
 		})
+	}
+}
+
+// TestAggregateBreakdownsHasNoRow1RateBlock is D43's own invariant read at
+// the breakdown level: telemetry row 1 reports no measurement post-D39
+// (docs/decisions/D43-row-1-unmeasurable-post-d39.md), so aggregateBreakdowns
+// must not synthesize one from RoutesSubmittedByRound — no "r1_overall" or
+// "r1_match_over_threshold" block, the two blocks a halted-over-submitted
+// rate used to produce.
+func TestAggregateBreakdownsHasNoRow1RateBlock(t *testing.T) {
+	results, cfg := breakdownMatches(t, 4, bots.Operator, 20)
+
+	breakdowns := make([]Breakdown, len(results))
+	for i, res := range results {
+		breakdowns[i] = res.Breakdown
+	}
+
+	for _, s := range aggregateBreakdowns(breakdowns, cfg) {
+		if s.block == "r1_overall" || s.block == "r1_match_over_threshold" {
+			t.Errorf("aggregateBreakdowns produced a %q row — row 1 has no rate to report post-D43", s.block)
+		}
 	}
 }
 
@@ -252,7 +270,6 @@ func TestAggregateBreakdownsExcludesEmptyDenominators(t *testing.T) {
 	// Match B: card 0 absent entirely, no Tier IV contract at all.
 	a := Breakdown{
 		RoutesSubmittedByRound: []int{2, 0},
-		RoutesHaltedByRound:    []int{1, 0},
 		IncidentLive:           map[rules.IncidentCardID]bool{catalog[0].ID: true},
 		IncidentHit:            map[rules.IncidentCardID]bool{catalog[0].ID: true},
 		Tier4Accepted:          1,
@@ -260,7 +277,6 @@ func TestAggregateBreakdownsExcludesEmptyDenominators(t *testing.T) {
 	}
 	b := Breakdown{
 		RoutesSubmittedByRound: []int{2, 2},
-		RoutesHaltedByRound:    []int{0, 0},
 		IncidentLive:           map[rules.IncidentCardID]bool{catalog[1].ID: true},
 		IncidentHit:            map[rules.IncidentCardID]bool{},
 	}
@@ -270,12 +286,16 @@ func TestAggregateBreakdownsExcludesEmptyDenominators(t *testing.T) {
 		stats[s.block+"/"+s.key] = s
 	}
 
+	// r1_round is count-shaped, not rate-shaped (D43: row 1 has no
+	// numerator to pair RoutesSubmittedByRound with) — every match is in
+	// its population by construction, the same reasoning as r7_tier4's
+	// count rows below.
 	round2 := stats["r1_round/2"]
-	if round2.n != 1 || round2.excluded != 1 {
-		t.Errorf("r1_round/2 = (n %d, excluded %d), want (1, 1) — the match that submitted no route in round 2 is excluded", round2.n, round2.excluded)
+	if round2.n != 2 || round2.excluded != 0 {
+		t.Errorf("r1_round/2 = (n %d, excluded %d), want (2, 0) — a count row excludes no match", round2.n, round2.excluded)
 	}
-	if round2.denominator != 2 || round2.numerator != 0 {
-		t.Errorf("r1_round/2 pooled = %d/%d, want 0/2", round2.numerator, round2.denominator)
+	if round2.denominator != 2 || round2.numerator != 2 {
+		t.Errorf("r1_round/2 pooled = %d/%d, want 2/2", round2.numerator, round2.denominator)
 	}
 
 	card0 := stats["r6_card/"+catalog[0].Name]
@@ -303,8 +323,8 @@ func TestAggregateBreakdownsExcludesEmptyDenominators(t *testing.T) {
 func TestAggregateBreakdownsZeroWidthIntervalOmitsHalfWidth(t *testing.T) {
 	cfg := game.DefaultConfig()
 	cfg.Rounds = 1
-	a := Breakdown{RoutesSubmittedByRound: []int{0}, RoutesHaltedByRound: []int{0}, Tier4Accepted: 2}
-	b := Breakdown{RoutesSubmittedByRound: []int{0}, RoutesHaltedByRound: []int{0}, Tier4Accepted: 2}
+	a := Breakdown{RoutesSubmittedByRound: []int{0}, Tier4Accepted: 2}
+	b := Breakdown{RoutesSubmittedByRound: []int{0}, Tier4Accepted: 2}
 
 	var accepted breakdownStat
 	for _, s := range aggregateBreakdowns([]Breakdown{a, b}, cfg) {
@@ -358,9 +378,8 @@ func TestAggregateBreakdownsRejectsAMismatchedRoundVector(t *testing.T) {
 		name string
 		b    Breakdown
 	}{
-		{"too long", Breakdown{RoutesSubmittedByRound: []int{1, 1, 1, 1}, RoutesHaltedByRound: []int{0, 0, 0, 0}}},
-		{"too short", Breakdown{RoutesSubmittedByRound: []int{1, 1}, RoutesHaltedByRound: []int{0, 0}}},
-		{"halted disagrees with submitted", Breakdown{RoutesSubmittedByRound: []int{1, 1, 1}, RoutesHaltedByRound: []int{0, 0}}},
+		{"too long", Breakdown{RoutesSubmittedByRound: []int{1, 1, 1, 1}}},
+		{"too short", Breakdown{RoutesSubmittedByRound: []int{1, 1}}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			defer func() {
@@ -420,7 +439,7 @@ func TestRunBreakdownHappyPath(t *testing.T) {
 	if len(configs) != 2 {
 		t.Errorf("breakdown covered %d configurations, want 2", len(configs))
 	}
-	for _, want := range []string{"r1_overall", "r1_round", "r6_overall", "r6_card", "r7_infamy9", "r7_tier4", "r7_crossing"} {
+	for _, want := range []string{"r1_round", "r6_overall", "r6_card", "r7_infamy9", "r7_tier4", "r7_crossing"} {
 		if blocks[want] == 0 {
 			t.Errorf("breakdown has no %q rows", want)
 		}

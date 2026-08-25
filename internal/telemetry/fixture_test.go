@@ -126,8 +126,11 @@ func fixtureState() rules.MatchState {
 
 // fixtureOrderLog is 18 submitted orders (3 seats x 6 rounds). Three of
 // them declare an empty route (round 1 seat 2, round 3 seat 1, round 6
-// seat 2) — GDD §22's "submitted routes" reads as non-empty routes here
-// (RoutesCancelledMidRoute's own doc comment), so N == 15, not 18.
+// seat 2) — 15 non-empty submitted routes, not 18. This count no longer
+// feeds a telemetry.MatchSummary row (D43,
+// docs/decisions/D43-row-1-unmeasurable-post-d39.md, RoutesCancelledMidRoute
+// reports no value on any input); it still feeds
+// cmd/simulate's Breakdown.RoutesSubmittedByRound (breakdown_test.go).
 //
 // Every order also carries a real Stance and Action — GDD §9.2/§9.3 make
 // both mandatory fields of a legal turn even when the route is empty — so
@@ -196,36 +199,19 @@ func fixtureOrderLog() rules.OrderLog {
 func fixtureEvents() []game.Event {
 	var events []game.Event
 
-	// Row 1 numerator: D39's three exclusions, each exercised once, plus
-	// one genuine cut-short that does count.
+	// EventRouteHalted sample: not read by any MatchSummary row post-D43
+	// (docs/decisions/D43-row-1-unmeasurable-post-d39.md) — row 1 reports no
+	// measurement on any input, and no other row reads this event kind.
+	// Kept as realistic stream content exercising all three HaltCause
+	// values and both HaltStepsUnspent shapes, the fields' real consumers
+	// being RFC §11.3's narrated resolution list (M5) and §15.1's debug
+	// panel, neither of which this package computes.
 	events = append(events,
-		// (Round 2, Seat 1): route(0), len 1, non-empty — genuine
-		// cut-short, the first event for this pair, HaltStepsUnspent > 0.
-		// Counts.
 		game.Event{Kind: game.EventRouteHalted, Round: 2, Node: 1, Seat: 1, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: 1},
-
-		// (Round 3, Seat 1): fixtureOrderLog's round 3 seat 1 declared an
-		// *empty* route — a stationary confrontation participant (GDD
-		// §15 evaluates every player's position "whether or not they
-		// moved"). Excluded: absent from the non-empty-route population
-		// regardless of HaltStepsUnspent.
 		game.Event{Kind: game.EventRouteHalted, Round: 3, Node: 3, Seat: 1, HaltCause: game.HaltCauseTie, HaltStepsUnspent: 2},
-
-		// (Round 4, Seat 2): route(0), len 1, non-empty. Two catches this
-		// round (RFC §6.5: "a pushed loser is caught again") — the
-		// *first* left nothing unspent, so this pair is excluded even
-		// though the second, later event claims steps were unspent; only
-		// the first halt counts.
 		game.Event{Kind: game.EventRouteHalted, Round: 4, Node: 2, Seat: 2, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: 0},
 		game.Event{Kind: game.EventRouteHalted, Round: 4, Node: 3, Seat: 2, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: 2},
-
-		// (Round 5, Seat 0): route(0), len 1, non-empty — a single halt
-		// on the plan's last step, HaltStepsUnspent == 0: cancels
-		// nothing. Excluded.
 		game.Event{Kind: game.EventRouteHalted, Round: 5, Node: 0, Seat: 0, HaltCause: game.HaltCauseCorrectedWinner, HaltStepsUnspent: 0},
-
-		// (Round 6, Seat 1): route(2), len 1, non-empty — genuine
-		// cut-short. Counts.
 		game.Event{Kind: game.EventRouteHalted, Round: 6, Node: 3, Seat: 1, HaltCause: game.HaltCauseDecisiveLoser, HaltStepsUnspent: 1},
 	)
 
