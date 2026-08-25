@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r37 · **Companion doc:** `cinzal-gdd.md` **v2.31**
+**Status:** draft for review · **Revision:** r38 · **Companion doc:** `cinzal-gdd.md` **v2.31**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -197,6 +197,9 @@
 >
 > **Changelog r36 → r37** — companion pointer only (issue [#283](https://github.com/garnizeh/cinzal/issues/283), [D43](../decisions/D43-row-1-unmeasurable-post-d39.md))
 > - GDD §22 row 1 is recorded as structurally unmeasurable by bot simulation after D39's rule change and its read deferred to M5.5, so `telemetry.MatchSummary.RoutesCancelledMidRoute` reports no value instead of a constant zero. **Nothing RFC-stated moves**: §17's "one computation, three sinks" holds, [D34](../decisions/D34-telemetry-package-placement.md)'s `Match` signature is unchanged (its `log` argument keeps its structural validation and simply loses its last row-level reader), no event kind is added or removed, and §6.4's consumption table is untouched. `Event.HaltCause` and `Event.HaltStepsUnspent` are **kept** rather than deleted: their consumer is §11.3's narrated resolution list, §13's `round_resolved` email and §15.1's debug panel — §11.5's first rendering guarantee is exactly why a halt must carry its cause as a structured param rather than as prose composed at the render edge. Companion doc moves to GDD v2.31.
+>
+> **Changelog r37 → r38** — one §6.4 correction, no companion pointer move (issue [#284](https://github.com/garnizeh/cinzal/issues/284), [D11](../decisions/D11-config-suppression-flags.md))
+> - §6.4's `incident.sector` row stated an unconditional cost of 1. It has two zero-draw conditions, both already correct in `internal/rules`: `ConsumptionTable` (`rng_purpose.go`) has read "1, 0 under Suppress.Incidents or Rounds < 3" since D11, and `initialUnstableSector` (`initial.go`) checks both before drawing, so the skip costs zero indices rather than a drawn-and-discarded one. The row now states both conditions and cites D11 for the `Suppress.Incidents` half, matching the code's own wording. No behaviour change — the engine was already correct; this closes the drift between it and the row describing it. GDD §21 entry 4 (Market stock) was checked for the same omission and found already correct — it states its own conditional firing ("odd rounds only") inline, and Market stock has no `Suppress` flag to omit in the first place. Companion doc stays at v2.31.
 
 ---
 
@@ -418,7 +421,7 @@ Every consumer must be enumerated, because an unaccounted draw is a replay diver
 | **Event deck — final round order** | `deck.event.order` | **11**, 0 under `Suppress.Events` | Setup only. Full Fisher-Yates shuffle of the 12 selected cards (`n − 1` for `n = 12`) — required because §14.2's "4.0 candidates in the final round" property depends on the 12 not being grouped by category (D03); skipped alongside `deck.event.select` under `Config.Suppress.Events` (D11) |
 | **Incident deck — hazard/boon-constrained selection** | `deck.incident.select` | **13** (9 of 11 hazards + 4 of 5 boons), 0 under `Suppress.Incidents` | Setup only. Same partial Fisher-Yates, two pools (D03); the incident deck is never built under `Config.Suppress.Incidents` (D11) |
 | **Incident deck — final round order** | `deck.incident.order` | **12**, 0 under `Suppress.Incidents` | Setup only. Full Fisher-Yates shuffle of the 13 selected cards (`n − 1` for `n = 13`) (D03); skipped alongside `deck.incident.select` (D11) |
-| Unstable sector | `incident.sector` | 1 | Phase 1 — drawn where it is announced |
+| Unstable sector | `incident.sector` | 1, 0 under `Suppress.Incidents` or `Rounds < 3` | Phase 1 — drawn where it is announced; skipped entirely, not drawn and discarded, under `Config.Suppress.Incidents` ([D11](../decisions/D11-config-suppression-flags.md)) or when the match has no round 3 to announce it for — `initialUnstableSector` never draws in either case |
 | Snatch Job relocation | `incident.relocate` | 1 per affected player | Phase 7 |
 | Crate placement | `crate.node` | 1 | Dead Runner, Spilled Load |
 | **Torn Map item** | `item.tornmap` | **exactly `min(4, hidden)`** | Method mandated below |
