@@ -1,7 +1,7 @@
 # D19 — Email preferences have no storage, and 'daily digest' is not a filter: what does M3 build, and what does it defer?
 
 **Status:** decided
-**Blocks:** the M3 schema migration, and M6's outbox worker, which must consult the preference both before it enqueues and again before it sends (see sub-question 4).
+**Blocks:** the M3 schema migration, and M6's mail pipeline — the enqueue producers (handlers, `Tick()`, the sweeper; §13) must filter before the `INSERT`, and the outbox worker must consult the preference again before it sends (see sub-question 4).
 **Decided:** 2026-08-26
 **Issue:** [#305](https://github.com/garnizeh/cinzal/issues/305)
 
