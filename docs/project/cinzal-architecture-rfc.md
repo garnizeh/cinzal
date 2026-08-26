@@ -1388,7 +1388,7 @@ A guest can bind an email later and keep their history. A guest session that exp
 
 - Codes are single-use and burned on success, expiry, or fifth failure.
 - The `/auth/request` response is identical for known and unknown emails; enumeration is not free.
-- Rate limits: 3 requests per email per 15 min, 20 per IP per hour.
+- Rate limits: 3 requests per email per 15 min, 20 per IP per hour — the sustained rate a well-behaved client sees; §12.3 gives the mechanism and its stated worst case under a hoarding attacker.
 - Magic links are **not** offered alongside codes. Email clients prefetch links, which silently consumes single-use tokens and generates support tickets that are miserable to diagnose. A code the user types has no prefetch problem.
 
 ### 12.3 Rate limiting (D20)
@@ -1413,20 +1413,24 @@ Both `/auth/request` and `/auth/verify` draw on the same two buckets — one sha
 
 ```sql
 -- $1=scope, $2=key, $3=capacity, $4=refill rate (tokens/second)
+-- clock_timestamp(), not now(): now() is pinned to this transaction's start,
+-- and this check runs inside the same transaction as the rest of the handler
+-- — a transaction held open by lock contention would write a backdated
+-- updated_at, letting a later check over-credit the refill.
 INSERT INTO rate_limits (scope, key, tokens, updated_at)
-VALUES ($1, $2, $3 - 1, now())
+VALUES ($1, $2, $3 - 1, clock_timestamp())
 ON CONFLICT (scope, key) DO UPDATE
   SET tokens = LEAST($3, rate_limits.tokens
-                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $4) - 1,
-      updated_at = now()
+                 + EXTRACT(EPOCH FROM (clock_timestamp() - rate_limits.updated_at)) * $4) - 1,
+      updated_at = clock_timestamp()
   WHERE LEAST($3, rate_limits.tokens
-                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $4) >= 1
+                 + EXTRACT(EPOCH FROM (clock_timestamp() - rate_limits.updated_at)) * $4) >= 1
 RETURNING tokens;
 ```
 
 Zero rows returned means limited. Both buckets are checked inside the same transaction as the rest of the handler; either returning zero rows rolls the whole transaction back, so a request blocked on one axis spends nothing against the other, and no `auth_codes` row or outbox mail is written for a request that didn't clear both.
 
-**IP key.** `TRUSTED_PROXY_HOPS` (§18), default `1`, names how many `X-Forwarded-For` hops are trusted; the key is read that many positions from the **right**, so nothing left of that point — client-supplied — can select a bucket. Fewer entries than expected, or no header at all, falls back to the raw connection address, which behind a correctly configured load balancer funnels every request into one shared bucket: stricter, not a bypass. IPv4 keys on `/32`; **IPv6 keys on `/64`**, the usual single-customer allocation — `/128` would let an attacker escape a bucket by requesting a fresh address inside a delegation they already control.
+**IP key.** `TRUSTED_PROXY_HOPS` (§18), default `1`, names how many `X-Forwarded-For` hops are trusted; the key is read that many positions from the **right**, so nothing left of that point — client-supplied — can select a bucket. This needs **at least `TRUSTED_PROXY_HOPS` entries** — a single trusted hop that appends rather than replaces (NGINX's `$proxy_add_x_forwarded_for`, HAProxy's `option forwardfor`) produces exactly one entry when the client sent none, which is already the real client address, not a case to fall back from. Fewer entries than that — a misconfiguration, or a connection bypassing the expected proxy chain — is what falls back to the raw connection address, which behind a correctly configured load balancer funnels every request into one shared bucket: stricter, not a bypass. IPv4 keys on `/32`; **IPv6 keys on `/64`**, the usual single-customer allocation — `/128` would let an attacker escape a bucket by requesting a fresh address inside a delegation they already control.
 
 **Failure policy: fail-closed.** A `rate_limits` check that errors is treated identically to zero rows returned — limited, nothing issued. This costs less than it looks like: `/auth/request` already has to write `auth_codes` to do anything useful, so a Postgres failure severe enough to break the limiter check already breaks that write regardless. And it needs no new response shape — a limiter error takes the same identical-response path §12.2 already mandates for a rate-limited or unknown-email request, so the enumeration guarantee and the fail-closed guarantee are the same code path. `/auth/verify` carries no enumeration constraint (the caller already holds a code), so its limited/failed response can say so plainly.
 

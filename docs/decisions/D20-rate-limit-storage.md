@@ -65,17 +65,17 @@ Two buckets in v1, both drawn on by **both** `/auth/request` and `/auth/verify` 
 
 **Worst case: bounded to roughly double the stated number, not exact — stated plainly rather than left implicit.** A bucket found full and drained in one instant, then drained again as fast as it refills, admits at most `capacity + capacity` — 6 for `auth_email`, 40 for `auth_ip` — within any single rolling window equal to the refill period, not the stated 3 or 20. This is not a corner case nobody would hit; a patient attacker who always spends a token the instant it's available gets exactly this, indefinitely. See Reasoning for why that bound is accepted rather than chased away by a more exact algorithm.
 
-**Algorithm: continuous-refill token bucket**, checked and consumed in one atomic statement (`$1`=scope, `$2`=key, `$3`=capacity, `$4`=refill rate in tokens/second, matching the positional style §8.1 already uses):
+**Algorithm: continuous-refill token bucket**, checked and consumed in one atomic statement (`$1`=scope, `$2`=key, `$3`=capacity, `$4`=refill rate in tokens/second, matching the positional style §8.1 already uses). It uses `clock_timestamp()`, not `now()`: `now()` is pinned to the enclosing transaction's *start*, and this check runs inside the same transaction as the rest of the handler (below) — a transaction held open by lock contention would write a backdated `updated_at`, letting a later check compute more elapsed time than actually passed and over-credit the refill. `clock_timestamp()` is evaluated fresh, so the value written is when the row is actually touched:
 
 ```sql
 INSERT INTO rate_limits (scope, key, tokens, updated_at)
-VALUES ($1, $2, $3 - 1, now())
+VALUES ($1, $2, $3 - 1, clock_timestamp())
 ON CONFLICT (scope, key) DO UPDATE
   SET tokens = LEAST($3, rate_limits.tokens
-                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $4) - 1,
-      updated_at = now()
+                 + EXTRACT(EPOCH FROM (clock_timestamp() - rate_limits.updated_at)) * $4) - 1,
+      updated_at = clock_timestamp()
   WHERE LEAST($3, rate_limits.tokens
-                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $4) >= 1
+                 + EXTRACT(EPOCH FROM (clock_timestamp() - rate_limits.updated_at)) * $4) >= 1
 RETURNING tokens;
 ```
 
@@ -83,7 +83,7 @@ Zero rows returned means limited. Capacity and refill rate are Go constants in `
 
 Both buckets are checked inside the same transaction as the rest of the handler. Either returning zero rows rolls the whole transaction back: a request blocked on one axis spends nothing against the other, and no `auth_codes` row or outbox mail is written for a request that didn't clear both checks.
 
-**IP key derivation.** A new env var, `TRUSTED_PROXY_HOPS` (alongside `DATABASE_URL`/`MAIL_PROVIDER_KEY`/`BASE_URL`/`SESSION_KEY`, §18), default `1` — matching §18's own "two app instances behind a load balancer" as the ceiling this design needs, i.e. exactly one trusted hop in the common case. The key is the `X-Forwarded-For` entry `TRUSTED_PROXY_HOPS` positions from the **right**; everything left of that point is client-supplied and ignored, so no header content an attacker controls can pick their own bucket. Fewer entries than `TRUSTED_PROXY_HOPS + 1`, or no header at all, falls back to the raw connection's remote address — behind a correctly configured load balancer that is the balancer's own address, which funnels every request into one shared bucket: a stricter failure, not a bypass. IPv4 keys on the exact address (`/32`); **IPv6 keys on the `/64` prefix** — the usual single-customer allocation size, so an attacker who requests a fresh address inside their own delegated block doesn't get a fresh bucket for it. Limiting per `/128` limits nothing, since nothing stops that rotation.
+**IP key derivation.** A new env var, `TRUSTED_PROXY_HOPS` (alongside `DATABASE_URL`/`MAIL_PROVIDER_KEY`/`BASE_URL`/`SESSION_KEY`, §18), default `1` — matching §18's own "two app instances behind a load balancer" as the ceiling this design needs, i.e. exactly one trusted hop in the common case. The key is the `X-Forwarded-For` entry `TRUSTED_PROXY_HOPS` positions from the **right**; everything left of that point is client-supplied and ignored, so no header content an attacker controls can pick their own bucket. This needs **at least `TRUSTED_PROXY_HOPS` entries**, not `TRUSTED_PROXY_HOPS + 1` — a single trusted hop that appends to (rather than replaces) the header produces exactly one entry when the client sent none at all, which is the ordinary case for NGINX's `$proxy_add_x_forwarded_for` and HAProxy's `option forwardfor`, and is already the real client's address, not something to be suspicious of. Requiring one more than that would reject the common single-hop case and fall back to the connection's remote address — the load balancer's own — silently funnelling every client behind it into one shared bucket. Fewer than `TRUSTED_PROXY_HOPS` entries (a misconfiguration, or a direct connection bypassing the expected proxy chain) is what triggers the remote-address fallback instead: a stricter failure, not a bypass. IPv4 keys on the exact address (`/32`); **IPv6 keys on the `/64` prefix** — the usual single-customer allocation size, so an attacker who requests a fresh address inside their own delegated block doesn't get a fresh bucket for it. Limiting per `/128` limits nothing, since nothing stops that rotation.
 
 **Failure policy: fail-closed.** A `rate_limits` check that errors — timeout, connection failure, anything — is treated identically to a returned zero rows: limited, no code issued, no mail enqueued.
 
