@@ -56,24 +56,50 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
-          # The secret scan reads history, not just the working tree: a
-          # credential committed and later removed is still leaked. The default
-          # shallow clone would hide exactly those commits, and the base of the
-          # range computed below would not resolve.
-          #
-          # This fetches every branch, which is why the history scan is scoped
-          # to a commit range rather than left to scan every ref it can see
-          # (#37). The depth stays; the scope is what was wrong.
+          # The path-gate step below diffs against the base commit, which a
+          # shallow (default) checkout does not contain. Full history is more
+          # than that step needs, but it is what the rest of this repo's gates
+          # already fetch (see `secrets` and `bench-compare`'s own checkouts),
+          # and a second depth convention here would be one more thing to keep
+          # consistent for no real saving.
           fetch-depth: 0
           # The steps below run repository-controlled code - Makefile targets,
           # module downloads, three third-party tools. Without this, checkout
           # leaves the job token in .git/config where any of them can read it.
           persist-credentials: false
 
+      # Issue #336: nothing past this point can affect anything but Go source,
+      # its build tooling, and the gates that inspect them, so a PR that
+      # touches none of that (docs, GDD/RFC prose, decision records) skips the
+      # whole toolchain install and `make check` run rather than paying full
+      # wall-clock time for a diff that could not possibly trip a Go-side
+      # gate. `secrets` is deliberately NOT this job's problem to skip — it
+      # scans docs too, and runs unconditionally in its own job below.
+      #
+      # Fails OPEN, not closed: see changed-paths/action.yml's own header.
+      # This workflow file and this action are both in the path list because
+      # a change to either must be able to exercise itself (#125) — a gate
+      # that cannot trigger its own test is the failure mode #125 shipped.
+      - name: Determine whether this change can affect check
+        id: changed
+        uses: ./.github/actions/changed-paths
+        with:
+          paths: |
+            internal
+            cmd
+            scripts
+            go.mod
+            go.sum
+            Makefile
+            .golangci.yml
+            .github/workflows/ci.yml
+            .github/actions/changed-paths/action.yml
+
       # go.mod is the single source of the version. Repeating it here would be
       # one more thing to keep in sync, and the copy that drifted would be the
       # one CI trusted.
       - uses: actions/setup-go@v7
+        if: steps.changed.outputs.touched == 'true'
         with:
           go-version-file: go.mod
           check-latest: false
@@ -81,6 +107,7 @@ jobs:
       # The pin is worthless if it silently fails to apply, and a runner
       # resolving a different version would look identical to success.
       - name: Assert the pinned Go version is the one in use
+        if: steps.changed.outputs.touched == 'true'
         run: |
           set -euo pipefail
           expected="go$(awk '/^go /{print $2; exit}' go.mod)"
@@ -95,7 +122,11 @@ jobs:
           fi
           echo "Go $actual, pinned by go.mod and GOTOOLCHAIN=$GOTOOLCHAIN"
 
+      # gitleaks is deliberately absent from this list: the secret scan moved
+      # to its own always-runs job (issue #336) and no longer shares this
+      # job's toolchain install.
       - name: Install pinned tools
+        if: steps.changed.outputs.touched == 'true'
         run: |
           set -euo pipefail
           go install "github.com/golangci/golangci-lint/v2/cmd/golangci-lint@${GOLANGCI_LINT_VERSION}"
@@ -103,24 +134,97 @@ jobs:
           go install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
           go install "golang.org/x/perf/cmd/benchstat@${BENCHSTAT_VERSION}"
 
-          # gitleaks ships binaries rather than a go-installable command, so it
-          # is downloaded - and verified before anything is extracted from it.
+      # One definition, two callers: the Makefile is the definition and this
+      # workflow is a caller, so `make check` reproduces a CI failure locally.
+      # Each gate in #9-#12 appends itself to the `check` target rather than to
+      # this file.
+      # -k keeps going after a failing target instead of stopping at the first.
+      # A contributor should see every failing gate in one run rather than
+      # fixing one, pushing, and discovering the next. The job still fails.
+      #
+      # Locally `make check` stops at the first failure, which is what you want
+      # while iterating; this is the one place the two differ, and deliberately.
+      #
+      # generate-check is NOT a prerequisite of check: GENERATED is empty
+      # until M3/M5 declare real generated paths, and a gate that can only
+      # report VACUOUS stays out of the aggregate rather than passing by not
+      # running (see the Makefile's own comment on `check`). It rejoins once
+      # there is something for it to actually compare.
+      #
+      # check-nosecrets, not check: `secrets` runs in its own job below and
+      # must not run twice. `make check` (the full list, secrets included)
+      # stays the thing a contributor runs locally — see the Makefile's own
+      # comment on the split.
+      - name: make check-nosecrets
+        if: steps.changed.outputs.touched == 'true'
+        run: make -k check-nosecrets
+
+  # Issue #336: split out of `check` so the secret scan is never subject to
+  # that job's path gate. `make check`'s own comment on the split explains
+  # why `secrets` cannot just be exempted from the gate as a step inside
+  # `check` instead — there is no per-target step boundary in `make -k check`
+  # to hang a selective `if:` on, only "the whole invocation". A DOCS-ONLY PR
+  # IS EXACTLY THE CASE THIS GATE EXISTS FOR: a token pasted into a decision
+  # record or a roadmap entry is a leak whether or not the same PR happens to
+  # touch Go source, so this job carries no `if:` and no path check — it
+  # always runs, on every pull_request and every push to main.
+  #
+  # No Go toolchain here at all — check-secrets.sh only needs `git` (already
+  # on every runner) and the `gitleaks` binary. Splitting this out of `check`
+  # means it no longer pays for setup-go and the four `go install`s as a side
+  # effect of sharing a job with them, and it now runs in parallel with
+  # `check`'s Go work rather than sequentially inside it.
+  secrets:
+    name: secrets
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The secret scan reads history, not just the working tree: a
+          # credential committed and later removed is still leaked. The
+          # default shallow clone would hide exactly those commits, and the
+          # base of the range computed below would not resolve.
+          #
+          # This fetches every branch, which is why the history scan is
+          # scoped to a commit range rather than left to scan every ref it
+          # can see (#37). The depth stays; the scope is what was wrong.
+          fetch-depth: 0
+          # gitleaks itself, and check-secrets.sh, run against this checkout.
+          # Without this, checkout leaves the job token in .git/config where
+          # either could read it.
+          persist-credentials: false
+
+      # gitleaks ships binaries rather than a go-installable command, so it is
+      # downloaded — and verified before anything is extracted from it. No Go
+      # toolchain in this job to give it a GOPATH/bin already on PATH, so the
+      # archive is extracted to RUNNER_TEMP instead and that directory is
+      # added to PATH for the remaining steps.
+      - name: Install gitleaks
+        run: |
+          set -euo pipefail
           archive="gitleaks_${GITLEAKS_VERSION}_linux_x64.tar.gz"
           curl -sSfL -o "$archive" \
             "https://github.com/gitleaks/gitleaks/releases/download/v${GITLEAKS_VERSION}/${archive}"
           echo "${GITLEAKS_SHA256}  ${archive}" | sha256sum --check --strict
-          tar -xz -C "$(go env GOPATH)/bin" -f "$archive" gitleaks
+          mkdir -p "$RUNNER_TEMP/gitleaks-bin"
+          tar -xz -C "$RUNNER_TEMP/gitleaks-bin" -f "$archive" gitleaks
           rm -f "$archive"
-          gitleaks version
+          echo "$RUNNER_TEMP/gitleaks-bin" >> "$GITHUB_PATH"
+
+      - name: Assert gitleaks is on PATH
+        run: gitleaks version
 
       # The secret scan asks whether THE CHANGE adds a credential, not whether
       # the repository contains one anywhere (#37). Only this workflow knows
-      # what "the change" is, so it computes the range and the gate consumes it;
-      # the gate itself decides what to do with one that does not resolve.
+      # what "the change" is, so it computes the range and the gate consumes
+      # it; the gate itself decides what to do with one that does not
+      # resolve. Self-contained bash with no dependency on anything else this
+      # job does — lifted from `check` unchanged (#336).
       #
       # The shas arrive as environment variables rather than inline ${{ }}
-      # expansions: an expansion is pasted into the script before bash sees it,
-      # so a value containing shell syntax would be executed rather than read.
+      # expansions: an expansion is pasted into the script before bash sees
+      # it, so a value containing shell syntax would be executed rather than
+      # read.
       - name: Determine the commits this change adds
         env:
           EVENT_NAME: ${{ github.event_name }}
@@ -171,24 +275,8 @@ jobs:
           echo "CINZAL_SECRETS_RANGE=$range" >> "$GITHUB_ENV"
           echo "secret scan scoped to $range"
 
-      # One definition, two callers: the Makefile is the definition and this
-      # workflow is a caller, so `make check` reproduces a CI failure locally.
-      # Each gate in #9-#12 appends itself to the `check` target rather than to
-      # this file.
-      # -k keeps going after a failing target instead of stopping at the first.
-      # A contributor should see every failing gate in one run rather than
-      # fixing one, pushing, and discovering the next. The job still fails.
-      #
-      # Locally `make check` stops at the first failure, which is what you want
-      # while iterating; this is the one place the two differ, and deliberately.
-      #
-      # generate-check is NOT a prerequisite of check: GENERATED is empty
-      # until M3/M5 declare real generated paths, and a gate that can only
-      # report VACUOUS stays out of the aggregate rather than passing by not
-      # running (see the Makefile's own comment on `check`). It rejoins once
-      # there is something for it to actually compare.
-      - name: make check
-        run: make -k check
+      - name: make secrets
+        run: make secrets
 
   # Issue #80's exit demonstration: "resolve(s, o) == resolve(s, o)
   # byte-identical, and a golden 15-round replay reproduces on a second
@@ -213,9 +301,33 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with:
+          # The path-gate step below diffs against the base commit, which a
+          # shallow (default) checkout does not contain. Same reasoning as
+          # `check`'s own checkout, above.
+          fetch-depth: 0
           persist-credentials: false
 
+      # Issue #336: this matrix pays for two runners' worth of Go toolchain
+      # setup and a full `internal/rules` test run — money not worth spending
+      # on a diff that could not touch Go source. Same path list and fail-
+      # open posture as `check`'s own gate; see changed-paths/action.yml.
+      - name: Determine whether this change can affect replay
+        id: changed
+        uses: ./.github/actions/changed-paths
+        with:
+          paths: |
+            internal
+            cmd
+            scripts
+            go.mod
+            go.sum
+            Makefile
+            .golangci.yml
+            .github/workflows/ci.yml
+            .github/actions/changed-paths/action.yml
+
       - uses: actions/setup-go@v7
+        if: steps.changed.outputs.touched == 'true'
         with:
           go-version-file: go.mod
           check-latest: false
@@ -224,6 +336,7 @@ jobs:
       # Go built it" must never be a candidate explanation for a divergence
       # this job exists specifically to catch across machines.
       - name: Assert the pinned Go version is the one in use
+        if: steps.changed.outputs.touched == 'true'
         run: |
           set -euo pipefail
           expected="go$(awk '/^go /{print $2; exit}' go.mod)"
@@ -234,6 +347,7 @@ jobs:
           fi
 
       - name: make replay
+        if: steps.changed.outputs.touched == 'true'
         run: make replay
 
   bench:
@@ -335,31 +449,41 @@ jobs:
           fetch-depth: 0
           persist-credentials: false
 
+      # This gate's own definition is in the path list on purpose: a change to
+      # the workflow job, this composite action, or the comparison script
+      # must exercise the thing it changes. Without it, the only way to test
+      # an edit to this job is a pull request that happens to also touch
+      # internal/rules/gen — which is how #125's defect reached main green in
+      # the first place.
+      #
+      # Issue #336 lifted this from a bespoke step into the same composite
+      # action `check` and `replay` use, so the "diff against a path list,
+      # fail open" mechanism has one definition instead of three. The path
+      # list stays this job's own and deliberately narrower than
+      # `check`/`replay`'s — internal/rules/gen specifically, not all Go
+      # source — because what this job measures is that package's
+      # performance, not its correctness.
       - name: Check whether this PR touches the benchmarked code or this gate
         id: changed
-        env:
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-        run: |
-          set -euo pipefail
-          # This gate's own definition is in the path list on purpose: a
-          # change to the workflow job or the comparison script must exercise
-          # the thing it changes. Without it, the only way to test an edit to
-          # this job is a pull request that happens to also touch
-          # internal/rules/gen — which is how #125's defect reached main
-          # green in the first place.
-          if git diff --quiet "$BASE_SHA" -- internal/rules/gen .github/workflows/ci.yml scripts/check-bench-regression.sh Makefile; then
-            echo "touched=false" >> "$GITHUB_OUTPUT"
-            echo "neither internal/rules/gen nor this gate changed — nothing for bench-compare to do"
-          else
-            echo "touched=true" >> "$GITHUB_OUTPUT"
-          fi
-          # What actions/checkout left us on: the synthetic merge commit
-          # (refs/pull/N/merge), NOT the pull request's head commit. That is
-          # the side this job wants to measure, and deliberately so — see the
-          # "Benchmark this pull request" step below. Captured here rather
-          # than recomputed later because the steps in between check other
-          # commits out.
-          echo "head_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        uses: ./.github/actions/changed-paths
+        with:
+          paths: |
+            internal/rules/gen
+            .github/workflows/ci.yml
+            .github/actions/changed-paths/action.yml
+            scripts/check-bench-regression.sh
+            Makefile
+
+      # What actions/checkout left us on: the synthetic merge commit
+      # (refs/pull/N/merge), NOT the pull request's head commit. That is the
+      # side this job wants to measure, and deliberately so — see the
+      # "Benchmark this pull request" step below. Captured in its own step,
+      # unconditionally, because the steps in between check other commits out
+      # and this one is cheap enough not to need the same path gate as the
+      # benchmark runs themselves.
+      - name: Capture the commit to benchmark
+        id: head
+        run: echo "head_ref=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
       - uses: actions/setup-go@v7
         if: steps.changed.outputs.touched == 'true'
@@ -407,7 +531,7 @@ jobs:
       - name: Benchmark this pull request and compare
         if: steps.changed.outputs.touched == 'true'
         env:
-          HEAD_REF: ${{ steps.changed.outputs.head_ref }}
+          HEAD_REF: ${{ steps.head.outputs.head_ref }}
         run: |
           set -euo pipefail
           git checkout --detach --quiet "$HEAD_REF"

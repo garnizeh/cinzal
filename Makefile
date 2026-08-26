@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity purity-selftest fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps check replay clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity purity-selftest fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps check check-nosecrets replay clean
 
 ## help      list these targets
 help:
@@ -151,6 +151,12 @@ debug-isolation:
 # unrelated pull requests. CI sets CINZAL_SECRETS_RANGE to the range the pull
 # request adds; unset, the script derives it from origin/main. The reasoning,
 # and the fail-open it closes, are in the script.
+#
+# Its own CI job (.github/workflows/ci.yml), not a step inside `check`'s —
+# issue #336. Docs can leak a credential as easily as code, so this is the
+# one gate that must run regardless of what a pull request touches; giving
+# it a dedicated job keeps it off `check`'s path gate rather than needing an
+# exemption from one.
 secrets: require-gitleaks
 	./scripts/check-secrets.sh
 
@@ -198,14 +204,14 @@ generate-check: generate
 
 ## check     everything CI runs — reproduce a CI failure locally with this
 #
-# EVERY GATE ADDS ITSELF HERE. The four gates of M0 do not exist yet and are
-# deliberately absent rather than stubbed: a target that cannot run must not be
-# listed as if it had. As each lands it appends itself to this line, and its
-# All four M0 gates are now listed. Anything added later appends itself here.
+# EVERY GATE ADDS ITSELF TO check-nosecrets, BELOW. The four gates of M0 did
+# not exist yet at first and were deliberately absent rather than stubbed: a
+# target that cannot run must not be listed as if it had. All four M0 gates
+# are now listed. Anything added later appends itself there.
 #
 # bots-isolation joined in M2 (issue #195), the same shape as the four M0
 # gates before it: it can always run once internal/bots exists, so unlike
-# generate-check it belongs on this line rather than staying out until
+# generate-check it belongs on that line rather than staying out until
 # something makes it non-vacuous. simulate-deps joined the same way, in the
 # same milestone, once cmd/simulate held a real driver to check (issue
 # #199) — a plain go list/grep, so unlike bots-isolation it needs no
@@ -215,26 +221,51 @@ generate-check: generate
 # check-rules-purity.sh started shelling out to an AST-based checker
 # (check-fmt-purity.go) instead of a grep, it warranted the same fixture
 # coverage bots-isolation's own AST walk already gets, for the same reason —
-# deterministic and fast enough to belong on this line, not held out the way
+# deterministic and fast enough to belong on that line, not held out the way
 # bench-compare is.
 #
-# generate-check is deliberately absent from this line for the same reason,
-# not an oversight: with GENERATED still empty (M3/M5 not landed), it can only
-# report VACUOUS, and listing it here would make `check`'s own success mean
-# "every gate that could run, passed" instead of "every gate passed" — exactly
-# the failure this file's own header warns against. It rejoins this line once
+# generate-check is deliberately absent for the same reason, not an
+# oversight: with GENERATED still empty (M3/M5 not landed), it can only
+# report VACUOUS, and listing it would make `check`'s own success mean
+# "every gate that could run, passed" instead of "every gate passed" —
+# exactly the failure this file's own header warns against. It rejoins once
 # GENERATED holds real paths.
 #
-# bench-compare is deliberately absent from this line too, but for the
-# opposite reason: it can run, and deciding it should still not block is the
-# point of issue #113 — see bench-compare's own comment and
-# CONTRIBUTING.md "What is deliberately not a gate". bench-regression-selftest
-# is not the same script and carries none of that noise — see its own
-# comment above — so it is listed here rather than kept out alongside it.
+# bench-compare is deliberately absent too, but for the opposite reason: it
+# can run, and deciding it should still not block is the point of issue #113
+# — see bench-compare's own comment and CONTRIBUTING.md "What is
+# deliberately not a gate". bench-regression-selftest is not the same script
+# and carries none of that noise — see its own comment above — so it is
+# listed rather than kept out alongside it.
 #
-# If this line and the CI workflow ever disagree, the workflow is wrong: it
-# calls these targets rather than restating them, so there is one definition.
-check: packages purity purity-selftest fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps lint test bench-regression-selftest prod dev
+# If check-nosecrets and the CI workflow ever disagree, the workflow is
+# wrong: it calls these targets rather than restating them, so there is one
+# definition.
+#
+# check-nosecrets HOLDS THE REAL LIST; check ADDS secrets ON TOP OF IT.
+#
+# Issue #336: CI's `check` workflow job path-gates on Go-relevant files, and
+# `secrets` must never be subject to that gate — it scans docs too, and a
+# credential pasted into a decision record is exactly the case it exists to
+# catch. There is no per-target step boundary in a single `make -k check`
+# invocation for CI to hang a selective `if:` on, so `secrets` moved out into
+# its own always-runs CI job (.github/workflows/ci.yml) instead, and
+# check-nosecrets is what that job's `check` step actually invokes.
+#
+# `make check`, run locally, still runs everything including `secrets` — a
+# contributor who is not thinking about CI's job split should not lose gate
+# coverage by running the target this file's own help text tells them to
+# run. `secrets` is listed last here rather than staying in its old middle
+# position: this list is the CI split's boundary, and secrets being visibly
+# bolted on is the point, not an accident of alphabetizing.
+#
+# No `## ` line, deliberately, unlike every other directly-invoked target in
+# this file: `make help` should keep pointing a contributor at `make check`,
+# not offer a target that quietly skips the secret scan as an equally
+# visible option. CI calls it by its full name instead of through `help`.
+check-nosecrets: packages purity purity-selftest fog debug-isolation bots-isolation bots-isolation-selftest simulate-deps lint test bench-regression-selftest prod dev
+
+check: check-nosecrets secrets
 
 ## replay    golden-replay determinism suite, for the cross-OS/arch matrix (issue #80)
 #

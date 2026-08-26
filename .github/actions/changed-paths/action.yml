@@ -1,0 +1,85 @@
+name: changed-paths
+description: >
+  Reports whether the change being tested touches any of a given set of
+  paths, so a caller can skip expensive work that no path in the diff could
+  possibly affect. Generalizes the inline check bench-compare grew for
+  itself (issue #113/#125) so `check` and `replay` can path-gate the same
+  way without three copies of the same bash (issue #336).
+
+# FAILS OPEN. Point 5 of #336: if the base commit this needs is missing or
+# does not resolve — a shallow checkout, a force-push whose "before" no
+# longer exists, an event this action was not taught — touched is reported
+# `true`, never `false`. A caller that cannot determine what changed must
+# run everything, the same posture check-secrets.sh already takes when its
+# own range does not resolve (see that script's own header). Reporting
+# `false` here would be exactly the "gate that passes because it could not
+# run" CLAUDE.md's own "Gates fail closed" section warns against — except
+# here it would be a skip instead of a pass, which is just as wrong.
+
+inputs:
+  paths:
+    description: >
+      Newline-separated list of paths/pathspecs to diff the base commit
+      against. Include the workflow file and this action's own path when the
+      caller's job exists to exercise something that lives in either — a
+      change to a gate must be able to trigger itself (issue #125).
+    required: true
+
+outputs:
+  touched:
+    description: "'true' if the change touches any of the given paths, 'false' if it demonstrably does not."
+    value: ${{ steps.diff.outputs.touched }}
+
+runs:
+  using: composite
+  steps:
+    - id: diff
+      shell: bash
+      env:
+        EVENT_NAME: ${{ github.event_name }}
+        PR_BASE_SHA: ${{ github.event.pull_request.base.sha }}
+        PUSH_BEFORE: ${{ github.event.before }}
+        INPUT_PATHS: ${{ inputs.paths }}
+      run: |
+        set -euo pipefail
+        resolves() { git rev-parse --verify --quiet "$1^{commit}" >/dev/null 2>&1; }
+
+        case "$EVENT_NAME" in
+          pull_request) base="$PR_BASE_SHA" ;;
+          push)         base="$PUSH_BEFORE" ;;
+          # A trigger this action was not taught about. Same reasoning as the
+          # `*)` branch in ci.yml's own "Determine the commits this change
+          # adds" step: guessing a range for an event nobody has reasoned
+          # about is how a real skip gets shipped, so it is refused instead.
+          *)            base="" ;;
+        esac
+
+        if [ -z "$base" ] || ! resolves "$base"; then
+          echo "::notice::changed-paths: no usable base commit for '$EVENT_NAME' — treating as touched"
+          echo "touched=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        # One path per line; blank lines (a trailing newline in the caller's
+        # multi-line input, most often) are dropped rather than handed to
+        # git diff, where an empty pathspec element is a syntax error.
+        #
+        # A while/read loop, not `mapfile` — `replay` runs this action on
+        # macos-latest too, and GitHub's macOS runners put the system bash
+        # (3.2, no `mapfile`) ahead of any newer one on PATH.
+        filtered=()
+        while IFS= read -r p; do
+          [ -n "$p" ] && filtered+=("$p")
+        done <<< "$INPUT_PATHS"
+        [ "${#filtered[@]}" -gt 0 ] || {
+          echo "::error::changed-paths: 'paths' input contained no non-blank lines"
+          exit 1
+        }
+
+        if git diff --quiet "$base" -- "${filtered[@]}"; then
+          echo "touched=false" >> "$GITHUB_OUTPUT"
+          echo "changed-paths: none of the given paths differ from $base"
+        else
+          echo "touched=true" >> "$GITHUB_OUTPUT"
+          echo "changed-paths: at least one given path differs from $base"
+        fi
