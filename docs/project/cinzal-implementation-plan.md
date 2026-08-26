@@ -204,6 +204,8 @@ Four, all decided before M2 opened. Unlike §3.2's, none of these were found by 
 
 **D18 · Pins and notes have no storage.** GDD §7.5 lists manual annotation as one of the Board's four tools and it is inside the v1 scope list (§17). Nothing in the RFC schema holds it. Either add a table or move it explicitly to v1.1 — the current state is that it is promised and unbuildable.
 
+**Resolved by [D18](../decisions/D18-board-notes-storage.md): a seat-private `board_notes` table, kept in v1.** `board_notes(match_id, seat, slot SMALLINT CHECK (slot BETWEEN 1 AND 20), node_id INT NULL, round, body TEXT CHECK (char_length(body) BETWEEN 1 AND 500), updated_at)`, primary key `(match_id, seat, slot)`. The per-seat count cap (up to 20 notes per seat per match) is the bounded `slot` column itself rather than a trigger or a counted `CHECK`, which Postgres cannot express declaratively across sibling rows; the primary key's own leading columns already make "my notes for this match" a prefix-indexed lookup. The upsert is `ON CONFLICT (match_id, seat, slot) DO UPDATE`, naming `updated_at = now()` explicitly since the column default only fires on `INSERT`. Authoritative state like `invite_links`, not derived from `orders`; excluded from the replay bundle, which is shared with every player in the match; deleted with a real `DELETE`, not a flag, since nothing references a note and no other seat has an attribution interest in one surviving its author's delete. The board-panel fragment becomes the one named exception to "every fragment takes `PlayerView`" — it also takes `[]BoardNote`, fetched directly from `internal/store` since notes have no fog projection to perform.
+
 **D19 · Per-match email preferences have no storage.** RFC §13 specifies four preference levels plus one-click unsubscribe per match. No table.
 
 **D20 · Rate-limit state has no home.** RFC §12.2 specifies per-email and per-IP limits. In-process counters are wrong across two app instances (the deployment target in §18). Options: a Postgres table (simple, consistent, one more write path on the auth hot path — which is low-traffic by nature) or a fixed-window counter in the DB with a cleanup job. Recommendation: Postgres. Redis is explicitly out of the stack (§4) and adding it for rate limiting would be the most expensive line in the deployment topology.
@@ -314,7 +316,7 @@ Plus: a bot could be written **competently against `PlayerView` alone** (RFC §1
 **Goal:** matches survive a restart and reproduce exactly.
 
 **Deliverables**
-- Schema per RFC §7.2 — which now includes D16's `last_seen_round` and D17's `invite_links` table (plus `match_players.invite_link_id`) directly — plus the D18–D19 additions (pins, email preferences) and the D20 rate-limit table.
+- Schema per RFC §7.2 — which now includes D16's `last_seen_round`, D17's `invite_links` table (plus `match_players.invite_link_id`), and D18's `board_notes` table directly — plus the D19 addition (email preferences) and the D20 rate-limit table.
 - `sqlc` queries, `goose` migrations embedded and run at startup behind the **advisory lock** (§7.5).
 - `fold()` — `state = fold(Resolve, initial(seed, cfg), orderLog)`.
 - `cmd/replay`, including `--rebuild` for the derived `events` / `match_summary` / `match_players.last_seen_round` projections.
@@ -363,7 +365,7 @@ Blocked by: **D2, D16–D18, D21**.
 - The order form (§11.1) with all five fields, the `round` staleness field (§11.1a), and the §10.2 affordance rules rendered as disabled markup with reasons.
 - **Server-rendered SVG map** (§11.2) clicked through HTMX, on the deterministic layout from D10 and a fixed `viewBox`.
 - Narrated resolution list (§11.3) — the same projected event stream the `round_resolved` email will use.
-- **The Board** (GDD §7.5): the Log, anchored Attribution as a candidate table, the Heat Map as a rate with sample counts and the low-confidence flag, and pins/notes per D18.
+- **The Board** (GDD §7.5): the Log, anchored Attribution as a candidate table, the Heat Map as a rate with sample counts and the low-confidence flag, and pins/notes against the `board_notes` table (D18).
 - HUD invariants (GDD §19.2): rounds to next offer, current step allowance, rounds remaining per lease.
 - Reference panel (contract table, Infamy ladder, confrontation formula, lease rates).
 - SSE hub with `LISTEN/NOTIFY` fan-out across instances (§11.4).

@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r42 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r43 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -221,6 +221,14 @@
 > - **§19's "Invite links" row is now concrete** instead of unbacked prose: high-entropy token hashed at rest, revocation is a flag on the link (never the match, never a `DELETE`), admission-only rather than seat-bound, reusable until revoked/expired/the match leaves `lobby` — not single-use, for the same prefetch reason [D16](../decisions/D16-recap-cursor.md) already ruled out consuming state on a `GET`: `GET /m/{id}/join`'s landing page is exactly as prefetchable as the magic links §12.2 rejects.
 > - **Bcrypt is deliberately not used**, unlike `auth_codes.code_hash`. OTP codes are low-entropy and found by `email` first, so a per-hash salted comparator works; an invite token has no second key to find its row by, so it needs a deterministic digest to support an indexed equality lookup at all — SHA-256 over a 256-bit input, where offline brute force is already infeasible by search-space size rather than by hashing cost.
 > - No GDD text change: this is a persistence-and-security decision, GDD §17's invite-link promise is unamended. Companion doc stays at v2.32.
+>
+> **Changelog r42 → r43** — pins and notes had no storage (issue [#304](https://github.com/garnizeh/cinzal/issues/304), [D18](../decisions/D18-board-notes-storage.md))
+> - **New table, §7.2: `board_notes`** — `match_id`, `seat`, `slot SMALLINT CHECK (slot BETWEEN 1 AND 20)`, `node_id INT NULL` (pinned to a node; `NULL` is a freeform note), `round`, `body TEXT CHECK (char_length(body) BETWEEN 1 AND 500)`, `updated_at`, primary key `(match_id, seat, slot)`. Like `invite_links`, this is authoritative state, not a derived projection — `cmd/replay --rebuild`'s scope is unchanged. The per-seat count cap (up to 20 notes per seat per match) is the bounded `slot` column itself, not a trigger or a counted `CHECK` (Postgres cannot express "at most N sibling rows" declaratively); the primary key's leading columns already make "my notes for this match" a prefix-indexed lookup, so no separate index is added. The upsert is `ON CONFLICT (match_id, seat, slot) DO UPDATE`, naming `updated_at = now()` explicitly in the `SET` clause since the column default only fires on `INSERT`.
+> - **§11's route table**: `GET /m/{id}/board-panel` becomes "fragment: log, attribution, heat map, pins"; adds `POST /m/{id}/note/{slot}` (write/replace) and `POST /m/{id}/note/{slot}/delete`. The fragment-discipline paragraph gains a named exception: the board-panel component takes `PlayerView` plus `[]BoardNote` fetched directly from `internal/store`, since board notes have no fog projection to perform and routing them through `PlayerView` would widen a `game`-package type to carry seat-private store rows unrelated to match state.
+> - **§15.4's "Match export" bullet** now states the replay bundle excludes `board_notes` explicitly — `{seed, config, orderLog}` is shared with every player in the match; a seat's notes are not.
+> - **§19's security table** gains a "Board notes" row: fetched only by `(match_id, seat)` with `seat` from the session, never a path or query parameter — no query the store package exposes can return another seat's notes.
+> - **Deletion is a real `DELETE`, not a flag**, unlike `invite_links.revoked_at`/`auth_codes.consumed_at` — nothing references a `board_notes` row and no other seat has an attribution interest in one surviving its author's delete.
+> - No GDD text change: GDD §7.5's four-tool description and §17's v1 scope bullet were already correct: this decision was about whether the schema catches up to them, not about what they say. Companion doc stays at v2.32.
 
 ---
 
@@ -742,6 +750,20 @@ orders(
   PRIMARY KEY (match_id, round, seat)
 )
 
+-- manual annotation: the Board's fourth tool (GDD §7.5, D18). Authoritative
+-- state with no order-log equivalent, like invite_links — never rendered to
+-- any seat but its own author.
+board_notes(
+  match_id, seat,
+  slot SMALLINT NOT NULL CHECK (slot BETWEEN 1 AND 20),  -- the per-seat cap, enforced by the bound itself
+  node_id INT NULL,                                      -- pinned to a node; NULL = a freeform note
+  round INT NOT NULL,                                    -- the round it was written in
+  body TEXT NOT NULL CHECK (char_length(body) BETWEEN 1 AND 500),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  FOREIGN KEY (match_id, seat) REFERENCES match_players(match_id, seat),
+  PRIMARY KEY (match_id, seat, slot)
+)
+
 -- derived, rebuildable, kept for cheap reads
 events(match_id, round, seq, kind, payload JSONB)
 match_summary(match_id, round, submitted_seats INT[], updated_at)
@@ -755,9 +777,13 @@ outbox(id, to_email, template, payload JSONB, attempts,
 
 `orders` has a primary key on `(match_id, round, seat)`, so resubmission during an open round is an `ON CONFLICT DO UPDATE` — which is exactly the GDD §18 rule that the last submission stands.
 
+`board_notes` follows the same shape on its own primary key, `(match_id, seat, slot)`: `INSERT ... ON CONFLICT (match_id, seat, slot) DO UPDATE SET node_id = EXCLUDED.node_id, round = EXCLUDED.round, body = EXCLUDED.body, updated_at = now()`. `updated_at` has to be named explicitly in that `SET` clause — its column default only fires on `INSERT`, so a conflict that reaches `DO UPDATE` without restating it would leave the timestamp stuck at the note's original creation time on every edit after the first.
+
 `events`, `match_summary` and `match_players.last_seen_round` are **derived projections**. They exist so the lobby list and the recap don't refold — or, for the cursor, rescan `orders` — on every page load. They carry a comment saying so, and there is a `cmd/replay --rebuild` that regenerates them. Nothing reads them as authority. `last_seen_round` is reconstructible as `COALESCE((SELECT MAX(round) FROM orders WHERE match_id = X AND seat = Y AND source = 'human') − 1, 0)` — the `COALESCE` matters: `MAX()` over zero rows is `NULL`, and `NULL − 1` stays `NULL`, so the 0-for-no-human-orders fallback has to be explicit in the expression itself, not left to prose — see [D16](../decisions/D16-recap-cursor.md).
 
 `invite_links` is **not** a derived projection, despite sitting next to `match_players` above — it is authoritative state with no order-log equivalent to fold it back from (a revoked or expired link leaves no trace in `orders`), so it is out of `cmd/replay --rebuild`'s scope entirely. See [D17](../decisions/D17-invite-link-storage.md).
+
+`board_notes` is the same kind of exception, for the same reason — a pin or note leaves no trace in `orders`, so there is nothing to rebuild it from. It is also seat-private in a way nothing else in this schema is: every query against it is scoped to `(match_id, seat)` with `seat` taken from the session, never from a path or form parameter, and no query the store package exposes can return another seat's rows. See [D18](../decisions/D18-board-notes-storage.md).
 
 ### 7.3 On not building a cache — with the arithmetic
 
@@ -1162,12 +1188,16 @@ GET  /m/{id}/order              fragment: the order form     ← HTMX target
 POST /m/{id}/order/node/{node}  append/remove a node from the route draft
 POST /m/{id}/order              submit or resubmit; triggers Tick
 GET  /m/{id}/recap              fragment: rounds since your last visit
-GET  /m/{id}/board-panel        fragment: log, attribution, heat map
+GET  /m/{id}/board-panel        fragment: log, attribution, heat map, pins (D18)
+POST /m/{id}/note/{slot}        write/replace a pinned note in that slot (D18)
+POST /m/{id}/note/{slot}/delete delete a pinned note (D18)
 GET  /m/{id}/events             SSE stream
 GET  /m/{id}/replay             finished only: {seed, config, log} bundle
 ```
 
 **Fragment discipline.** Every fragment is a templ component taking `PlayerView` and rendering a self-contained `<div id="…">`. The full page render composes the same components. There is exactly one code path per piece of UI, whether it arrives as a page load or a swap.
+
+**One named exception:** the board-panel fragment's component takes `PlayerView` **plus** `[]BoardNote`, fetched directly from `internal/store` rather than arriving inside `PlayerView`. Board notes have no fog projection to perform — the query already scopes to exactly one seat — so folding them into `PlayerView` would widen a `game`-package type to carry seat-private store rows that have nothing to do with match state. See [D18](../decisions/D18-board-notes-storage.md).
 
 ### 11.1 The order form
 
@@ -1503,7 +1533,7 @@ The inspector renders every seat's `PlayerView` side by side against the true `M
 
 Two things survive into the production build because they are diagnostics, not god views:
 
-- **Match export.** `{seed, config, orderLog}` for a *finished* match, downloadable by its players. It is the replay bundle (§10.4), and it is also the perfect bug report: attach it to an issue and `cmd/replay` reproduces the exact match.
+- **Match export.** `{seed, config, orderLog}` for a *finished* match, downloadable by its players. It is the replay bundle (§10.4), and it is also the perfect bug report: attach it to an issue and `cmd/replay` reproduces the exact match. `board_notes` is excluded by construction — the bundle is shared with every player in the match, and a seat's notes are not ([D18](../decisions/D18-board-notes-storage.md)).
 - **Determinism check.** After each tick, in a sampled fraction of matches, refold from scratch and compare to the incrementally computed state. A mismatch is logged loudly with the match ID and round. This is how a map-iteration bug (§6.3) gets caught in days instead of months.
 
 ---
@@ -1635,6 +1665,7 @@ Fly.io, Railway, or a VM with systemd all work. Two app instances behind a load 
 | Enumeration | Identical response for known and unknown emails |
 | CSRF | Same-site cookies plus a token on every mutating form |
 | Invite links | 32-byte `crypto/rand` token, SHA-256 hash stored and indexed, raw token never persisted (D17); revocation flags the link (`revoked_at`), never the match; admission-only, so concurrent joins on one link resolve as the ordinary lobby-capacity race, not a link-specific one |
+| Board notes | Fetched only by `(match_id, seat)` with `seat` from the session, never a path or query parameter — no query the store package exposes can return another seat's notes (D18) |
 | Timing | Constant-time comparison on OTP hashes and session tokens |
 
 ---
