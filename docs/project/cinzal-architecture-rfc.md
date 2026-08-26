@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r41 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r42 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -212,6 +212,15 @@
 > - **§8.1's submit-transaction sample gains one more statement**: `last_seen_round = GREATEST(last_seen_round, round − 1)`, run in the same transaction as the `orders` upsert. Advancing here — never on a `GET` of the board or the Recap fragment — repeats the reasoning §12.2 already gave for not offering magic links alongside OTP codes: a `GET` is prefetchable by the surrounding transport (HTMX, browsers), and consuming single-fire state from one silently discards it. `POST /m/{id}/order` is the one write that both proves the player engaged with the page the Recap sits on (RFC §11.1's fragment discipline) and is immune to prefetch by construction.
 > - **No `source` guard is needed for Autopilot.** Bot and Autopilot orders are generated inside `Tick()` (§8, §8.2), never through the submit handler, so the cursor is structurally incapable of moving except on a genuine human submission — the returning player's first Recap (§13's `autopilot` email) is intact without a separate rule saying so.
 > - No GDD text change: this is a persistence-and-timing decision, GDD §18's Recap requirement is unamended. Companion doc stays at v2.32.
+>
+> **Changelog r41 → r42** — invite links had no storage (issue [#303](https://github.com/garnizeh/cinzal/issues/303), [D17](../decisions/D17-invite-link-storage.md))
+> - **New table, §7.2: `invite_links`** — `match_id`, `token_hash BYTEA UNIQUE` (SHA-256 of 32 `crypto/rand` bytes; the raw token is never stored), `created_at`, `expires_at`, `revoked_at`. Unlike `events`/`match_summary`/`last_seen_round`, this table is authoritative state, not a derived projection — there is no order-log equivalent to rebuild it from, so `cmd/replay --rebuild`'s scope is unchanged.
+> - **`match_players` gains `invite_link_id NULL`**, attribution for which link admitted a seat, via a **composite** `FOREIGN KEY (invite_link_id, match_id) REFERENCES invite_links(id, match_id)`, not a plain FK on `id` alone — `invite_links` gains a matching `UNIQUE (id, match_id)` to support it. A plain FK only proves the referenced link exists, not that it belongs to the citing row's own match; the composite form makes cross-match attribution physically unrepresentable, closing the gap between the schema and §19's "single-match scope" itself. `NULL` for the host's own seat or a bot fill.
+> - **§11's route table states the GET/POST contract explicitly**: `POST /m/{id}/join` re-validates the token independently of the earlier `GET` (never trusting that the landing page already checked it), cross-checks `invite_links.match_id` against the `{id}` path segment, and is the request that writes `match_players.invite_link_id` — the `GET` only validates-and-renders. Token leakage through the query string itself (access logs, browser history, `Referer` headers) is a route-implementation concern outside this decision's scope, tracked for M5 as [#335](https://github.com/garnizeh/cinzal/issues/335).
+> - **§11's `POST /matches` entry states the raw-token handoff**: since `invite_links` stores only `token_hash`, the creation handler is the only place the raw token ever exists outside a client's URL bar, and it must return the invite URL in that same response — generate-once, show-once, the same shape as any other server-minted bearer credential.
+> - **§19's "Invite links" row is now concrete** instead of unbacked prose: high-entropy token hashed at rest, revocation is a flag on the link (never the match, never a `DELETE`), admission-only rather than seat-bound, reusable until revoked/expired/the match leaves `lobby` — not single-use, for the same prefetch reason [D16](../decisions/D16-recap-cursor.md) already ruled out consuming state on a `GET`: `GET /m/{id}/join`'s landing page is exactly as prefetchable as the magic links §12.2 rejects.
+> - **Bcrypt is deliberately not used**, unlike `auth_codes.code_hash`. OTP codes are low-entropy and found by `email` first, so a per-hash salted comparator works; an invite token has no second key to find its row by, so it needs a deterministic digest to support an indexed equality lookup at all — SHA-256 over a 256-bit input, where offline brute force is already infeasible by search-space size rather than by hashing cost.
+> - No GDD text change: this is a persistence-and-security decision, GDD §17's invite-link promise is unamended. Companion doc stays at v2.32.
 
 ---
 
@@ -710,8 +719,20 @@ matches(
 match_players(
   match_id, seat, user_id NULL, bot_kind NULL,
   faction, joined_at, missed_deadlines INT,
-  last_seen_round INT NOT NULL DEFAULT 0,  -- Recap cursor (D16), derived from orders
+  last_seen_round INT NOT NULL DEFAULT 0,   -- Recap cursor (D16), derived from orders
+  invite_link_id NULL,                      -- which link admitted this seat (D17); NULL for the host's own seat or a bot fill
+  FOREIGN KEY (invite_link_id, match_id) REFERENCES invite_links(id, match_id),  -- composite: same-match scope enforced in the DB, not just by convention
   PRIMARY KEY (match_id, seat)
+)
+
+-- the bearer credential for admission to one match's lobby (D17)
+invite_links(
+  id, match_id REFERENCES matches(id) NOT NULL,
+  token_hash BYTEA UNIQUE NOT NULL,   -- sha256(32 random bytes from crypto/rand); the raw token is never stored
+  created_at,
+  expires_at TIMESTAMPTZ NULL,        -- NULL = no forced expiry beyond the match's own lobby window
+  revoked_at TIMESTAMPTZ NULL,        -- NULL = live; set = revoked. A flag, never a DELETE — attribution survives.
+  UNIQUE (id, match_id)               -- lets match_players FK to (id, match_id), not id alone
 )
 
 -- THE LOG
@@ -735,6 +756,8 @@ outbox(id, to_email, template, payload JSONB, attempts,
 `orders` has a primary key on `(match_id, round, seat)`, so resubmission during an open round is an `ON CONFLICT DO UPDATE` — which is exactly the GDD §18 rule that the last submission stands.
 
 `events`, `match_summary` and `match_players.last_seen_round` are **derived projections**. They exist so the lobby list and the recap don't refold — or, for the cursor, rescan `orders` — on every page load. They carry a comment saying so, and there is a `cmd/replay --rebuild` that regenerates them. Nothing reads them as authority. `last_seen_round` is reconstructible as `COALESCE((SELECT MAX(round) FROM orders WHERE match_id = X AND seat = Y AND source = 'human') − 1, 0)` — the `COALESCE` matters: `MAX()` over zero rows is `NULL`, and `NULL − 1` stays `NULL`, so the 0-for-no-human-orders fallback has to be explicit in the expression itself, not left to prose — see [D16](../decisions/D16-recap-cursor.md).
+
+`invite_links` is **not** a derived projection, despite sitting next to `match_players` above — it is authoritative state with no order-log equivalent to fold it back from (a revoked or expired link leaves no trace in `orders`), so it is out of `cmd/replay --rebuild`'s scope entirely. See [D17](../decisions/D17-invite-link-storage.md).
 
 ### 7.3 On not building a cache — with the arithmetic
 
@@ -1127,9 +1150,11 @@ POST /auth/guest                display name → guest session (sync tables only
 POST /logout
 
 GET  /matches                   your matches: whose turn, time left, unread recap
-POST /matches                   create (config, player count, timer/deadline, bot seats)
-GET  /m/{id}/join               invite link landing
-POST /m/{id}/join               take a seat
+POST /matches                   create (config, player count, timer/deadline, bot seats); mints invite_links'
+                                 first row and returns the raw-token invite URL — the only response that ever
+                                 carries the raw token (D17)
+GET  /m/{id}/join               invite link landing — token as a query param, checked against invite_links (D17, #335)
+POST /m/{id}/join               take a seat — re-validates the token, writes match_players.invite_link_id (D17)
 
 GET  /m/{id}                    the match page (full render)
 GET  /m/{id}/board              fragment: map + HUD          ← HTMX target
@@ -1609,7 +1634,7 @@ Fly.io, Railway, or a VM with systemd all work. Two app instances behind a load 
 | OTP brute force | 5 attempts per code, rate limits per email and per IP (§12.2) |
 | Enumeration | Identical response for known and unknown emails |
 | CSRF | Same-site cookies plus a token on every mutating form |
-| Invite links | High-entropy, revocable, single-match scope |
+| Invite links | 32-byte `crypto/rand` token, SHA-256 hash stored and indexed, raw token never persisted (D17); revocation flags the link (`revoked_at`), never the match; admission-only, so concurrent joins on one link resolve as the ordinary lobby-capacity race, not a link-specific one |
 | Timing | Constant-time comparison on OTP hashes and session tokens |
 
 ---

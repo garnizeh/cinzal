@@ -200,6 +200,8 @@ Four, all decided before M2 opened. Unlike §3.2's, none of these were found by 
 
 **D17 · Invite links have no storage.** RFC §19 promises "high-entropy, revocable, single-match scope"; §7.2's schema has no table or column for them. Needs a design, including whether revocation is per-link or per-match.
 
+**Resolved by [D17](../decisions/D17-invite-link-storage.md): a separate `invite_links` table, not a `matches` column.** `match_id`, `token_hash BYTEA UNIQUE` (SHA-256 of 32 `crypto/rand` bytes, raw token never stored), `expires_at`, `revoked_at` — the last two flags, never a `DELETE`, matching `auth_codes.consumed_at`/`matches.finished_at`. Revocation kills one link without touching seats already joined through it (`match_players.invite_link_id`, a new nullable attribution FK, keeps its value regardless). A link grants admission, not a seat — two people racing on the same link resolve through the ordinary lobby-capacity contention on `match_players`'s own primary key, not a link-specific arbitration — and it stays reusable until revoked, expired, or the match leaves `lobby`, since `GET /m/{id}/join`'s landing page is exactly as prefetchable as the magic links §12.2 already rejects, and D16 already ruled out consuming single-use state on a `GET` for that reason.
+
 **D18 · Pins and notes have no storage.** GDD §7.5 lists manual annotation as one of the Board's four tools and it is inside the v1 scope list (§17). Nothing in the RFC schema holds it. Either add a table or move it explicitly to v1.1 — the current state is that it is promised and unbuildable.
 
 **D19 · Per-match email preferences have no storage.** RFC §13 specifies four preference levels plus one-click unsubscribe per match. No table.
@@ -312,7 +314,7 @@ Plus: a bot could be written **competently against `PlayerView` alone** (RFC §1
 **Goal:** matches survive a restart and reproduce exactly.
 
 **Deliverables**
-- Schema per RFC §7.2 — which now includes D16's `last_seen_round` directly — plus the D17–D19 additions (invite links, pins, email preferences) and the D20 rate-limit table.
+- Schema per RFC §7.2 — which now includes D16's `last_seen_round` and D17's `invite_links` table (plus `match_players.invite_link_id`) directly — plus the D18–D19 additions (pins, email preferences) and the D20 rate-limit table.
 - `sqlc` queries, `goose` migrations embedded and run at startup behind the **advisory lock** (§7.5).
 - `fold()` — `state = fold(Resolve, initial(seed, cfg), orderLog)`.
 - `cmd/replay`, including `--rebuild` for the derived `events` / `match_summary` / `match_players.last_seen_round` projections.
