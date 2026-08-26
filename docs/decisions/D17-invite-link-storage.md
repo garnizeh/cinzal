@@ -39,7 +39,8 @@ invite_links(
   token_hash BYTEA UNIQUE NOT NULL,   -- sha256(32 random bytes from crypto/rand); the raw token is never stored
   created_at,
   expires_at TIMESTAMPTZ NULL,        -- NULL = no forced expiry beyond the match's own lobby window
-  revoked_at TIMESTAMPTZ NULL         -- NULL = live; set = revoked. A flag, never a DELETE — attribution survives.
+  revoked_at TIMESTAMPTZ NULL,        -- NULL = live; set = revoked. A flag, never a DELETE — attribution survives.
+  UNIQUE (id, match_id)               -- lets match_players FK to (id, match_id), not id alone — see Reasoning
 )
 ```
 
@@ -47,8 +48,9 @@ invite_links(
 match_players(
   match_id, seat, user_id NULL, bot_kind NULL,
   faction, joined_at, missed_deadlines INT,
-  last_seen_round INT NOT NULL DEFAULT 0,           -- Recap cursor (D16), derived from orders
-  invite_link_id NULL REFERENCES invite_links(id),  -- which link admitted this seat (D17); NULL for the host's own seat or a bot fill
+  last_seen_round INT NOT NULL DEFAULT 0,   -- Recap cursor (D16), derived from orders
+  invite_link_id NULL,                      -- which link admitted this seat (D17); NULL for the host's own seat or a bot fill
+  FOREIGN KEY (invite_link_id, match_id) REFERENCES invite_links(id, match_id),
   PRIMARY KEY (match_id, seat)
 )
 ```
@@ -59,6 +61,8 @@ Answering the four sub-questions directly:
 2. **A link is revoked, never the match.** `UPDATE invite_links SET revoked_at = now() WHERE id = $1` — a flag, matching `auth_codes.consumed_at` and `matches.finished_at`'s existing soft-terminal-state convention rather than a `DELETE`. Seats already in `match_players` are untouched: `match_players.invite_link_id` keeps its historical value, and seat validity is never re-checked against the link's current state after the row exists. A host kills one leaked link without touching the four people already seated through it, or through any other link.
 3. **Hashed, with SHA-256, not bcrypt.** The token is 32 bytes from `crypto/rand`, hashed with SHA-256 before storage; the raw token is never persisted, only carried in the URL. `token_hash BYTEA UNIQUE` supports a plain indexed equality lookup: `SELECT * FROM invite_links WHERE token_hash = $1`. Bcrypt is wrong here for a structural reason, not a performance one — see Reasoning.
 4. **Admission only, not seat-bound.** A link resolves to a match, not a seat. `POST /m/{id}/join` assigns whichever seat is open at INSERT time, through the same `(match_id, seat)` primary-key contention every join already has. Two friends racing on the same link is therefore not a new conflict this schema has to express — it's the ordinary lobby-capacity race, resolved by whichever `INSERT` lands first claiming a seat and the other claiming the next open one (or "this table is full" if none remain). A link is **reusable** — not single-use — until it is revoked, expires, or the match leaves `lobby`.
+
+**The GET-to-POST contract.** `GET /m/{id}/join` validates and renders; it changes nothing. The token travels forward to `POST /m/{id}/join` (as a hidden form field the landing page renders it into — the exact markup is M5's, the requirement is not) and `POST` **re-validates independently** — same `token_hash` lookup, same `revoked_at`/`expires_at`/`matches.status = 'lobby'` checks — never trusting that the earlier `GET` already did it, since the two are separate requests with nothing binding one's validation to the other's authority. `POST` additionally checks `invite_links.match_id = {id}` (the path segment), rejecting a token resolved from one match presented against another match's URL, and it is `POST`, not `GET`, that performs the `match_players` insert carrying `invite_link_id = invite_links.id` — the only point in the flow that writes attribution.
 
 **Entropy budget: 32 bytes (256 bits) from `crypto/rand`.** `base64.RawURLEncoding.EncodeToString` of those 32 bytes is what goes in the URL (~43 URL-safe characters); the hash is computed over the raw 32 bytes, before encoding.
 
@@ -76,13 +80,16 @@ Answering the four sub-questions directly:
 
 **Why `expires_at` defaults to `NULL` rather than a fixed TTL.** Neither GDD nor RFC states a lobby-formation time budget (GDD's 4h–72h deadlines are round deadlines, §18, which only start once a match is `active` — a different clock). Inventing a default TTL here would be a product decision with no spec anchor, which is exactly the kind of guess D35's own discipline and this project's decision-log convention (cite sections, don't invent policy) argue against. `matches.status = 'lobby'` is already an independent, unconditional guard the join handler must apply regardless of any link (a `POST /m/{id}/join` after the match starts fails on that check alone, per the same invariant D16 relied on for `last_seen_round`'s seat-creation value) — so a `NULL` `expires_at` is not "no expiry at all," it is "no expiry beyond the one the match's own lifecycle already enforces." A host-set TTL becomes available the moment M5's lobby UI wants to offer one, with no schema change.
 
+**Why the `match_players` FK is composite, not just `invite_link_id REFERENCES invite_links(id)`.** `invite_links.id` alone is globally unique, so a plain FK on it only proves the referenced link *exists somewhere* — it does not prove the link belongs to the same match as the `match_players` row citing it. That gap directly undercuts the "single-match scope" property §19 asks this decision to guarantee: without it, a bug elsewhere (a copy-pasted `invite_link_id`, a query that joins the wrong match) could attribute a seat in match A to a link that only ever admitted match B, and Postgres would accept the write. `UNIQUE (id, match_id)` on `invite_links` plus `FOREIGN KEY (invite_link_id, match_id) REFERENCES invite_links(id, match_id)` on `match_players` makes that combination physically unrepresentable — the database enforces single-match scope, rather than every future caller having to remember to.
+
 **Why `revoked_at`/`expires_at` are flags, never a `DELETE`.** Matches the schema's existing convention (`auth_codes.consumed_at`, `matches.finished_at`) and keeps `match_players.invite_link_id`'s FK valid and attribution ("who did Ana's link let in") answerable after the link is dead — a `DELETE` would either cascade and destroy that history or orphan the FK, and gains nothing a flag doesn't already provide.
 
 ## Consequences
 
 - **RFC §7.2's schema** gains the `invite_links` table and `match_players.invite_link_id`, both shown above. `invite_links` is **not** a derived projection — unlike `events`/`match_summary`/`last_seen_round`, it is authoritative state with no order-log equivalent to rebuild it from, so `cmd/replay --rebuild`'s scope (M3, roadmap §4) is unchanged by this decision.
 - **RFC §19's "Invite links" row** gets a concrete spec instead of unbacked prose: 32-byte `crypto/rand` token, SHA-256 hash stored and indexed, raw token never persisted; revocation flags the link, never the match; admission-only, so concurrent joins on one link resolve as the ordinary lobby-capacity race.
-- **RFC §11's route table** — `GET /m/{id}/join` needs a carrier for the token (a query parameter is the natural fit; the exact shape, and whether the handler cross-checks the token's own `match_id` against the `{id}` path segment or resolves the match from the token alone, is link-copy UX and is M5's to design, per the issue's own "not in scope" boundary).
+- **RFC §11's route table** — `GET /m/{id}/join` needs a carrier for the token (a query parameter is the natural fit); `POST /m/{id}/join` re-validates it independently rather than trusting the earlier `GET`, cross-checks `invite_links.match_id` against the `{id}` path segment, and is the request that writes `match_players.invite_link_id` — see Reasoning's "GET-to-POST contract." The exact landing-page markup is still M5's to design, per the issue's own "not in scope" boundary; the contract above is what it has to satisfy.
+- **Token leakage via the query string (access logs, browser history, `Referer` headers) is a real surface D17 doesn't close** — it's a route-implementation concern (`Referrer-Policy`, log redaction, a clean GET→POST handoff), not a persistence one, so it's out of scope here per the same boundary and is tracked for M5 as [#335](https://github.com/garnizeh/cinzal/issues/335) instead of specified in this decision.
 - **M3's schema migration** (roadmap §4, M3 deliverables) gains `invite_links` and the `match_players.invite_link_id` column directly, no longer part of the undifferentiated "D17–D19 additions" placeholder.
 - **M5's lobby/join flow** can now be built: `POST /matches` (create) can mint the match's first `invite_links` row in the same transaction; the join handler's full check is `token_hash` found AND `revoked_at IS NULL` AND `(expires_at IS NULL OR expires_at > now())` AND `matches.status = 'lobby'` AND an open seat exists.
 - **Reversible at low cost.** A future product decision to bind a link to a specific seat, or to make links single-use, is a superseding decision, not a rewrite: `invite_links` already has the row-per-link granularity either shape would need, and `match_players.invite_link_id` already records attribution either way. The one property that would need to change under a "seat-bound" supersession is the join handler's seat-assignment logic, not the schema.
