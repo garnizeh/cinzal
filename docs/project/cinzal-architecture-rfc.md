@@ -243,7 +243,7 @@
 >
 > **Changelog r44 → r45** — rate-limit state had no home (issue [#306](https://github.com/garnizeh/cinzal/issues/306), [D20](../decisions/D20-rate-limit-storage.md))
 > - **New table, §7.2: `rate_limits`** — `scope TEXT`, `key TEXT`, `tokens DOUBLE PRECISION`, `updated_at TIMESTAMPTZ`, primary key `(scope, key)`, plus an index on `updated_at` for the cleanup sweep. Generic by design — `auth_email`/`auth_ip` are the only scopes in v1, but nothing here is auth-specific, so a future limit reuses the table with a new scope and no migration.
-> - **New §12.3** states the mechanism: a continuous-refill **token bucket**, one row per key, checked and consumed by one atomic `INSERT … ON CONFLICT DO UPDATE … WHERE … RETURNING` — chosen over a fixed window (lets double the limit through at a window seam) and a sliding window (its row and cleanup cost scale with request count, the exact thing an attacker controls). `auth_email`: capacity 3, refills 1/300s. `auth_ip`: capacity 20, refills 1/180s. Both `/auth/request` and `/auth/verify` draw on the same two buckets — one shared attempt budget per identity across the whole authentication surface, matching §19's single "OTP brute force" row, which already cited §12.2 for both endpoints without stating two separate pairs of numbers.
+> - **New §12.3** states the mechanism: a continuous-refill **token bucket**, one row per key, checked and consumed by one atomic `INSERT … ON CONFLICT DO UPDATE … WHERE … RETURNING` — chosen over a sliding window (its row and cleanup cost scale with request count, the exact thing an attacker controls), and sharing a fixed window's roughly-double-the-limit worst case (a full bucket drained, then drained again as fast as it refills) but requiring deliberate token-hoarding against one key's own clock rather than any client accidentally straddling a shared wall-clock boundary. `auth_email`: capacity 3, refills 1/300s. `auth_ip`: capacity 20, refills 1/180s. Both `/auth/request` and `/auth/verify` draw on the same two buckets — one shared attempt budget per identity across the whole authentication surface, matching §19's single "OTP brute force" row, which already cited §12.2 for both endpoints without stating two separate pairs of numbers.
 > - **IP key derivation is pinned, not assumed.** A new env var, `TRUSTED_PROXY_HOPS` (§18), default `1`, names how many hops of `X-Forwarded-For` are trusted; the key is read that many positions from the right, so nothing client-supplied left of that point can select a bucket. IPv4 keys on `/32`; **IPv6 keys on `/64`**, the usual single-customer allocation size — `/128` would let an attacker escape a bucket by requesting a new address inside a delegation they already hold.
 > - **Failure policy is fail-closed**, and costs less than it looks like: `/auth/request` already has to write `auth_codes` to do anything useful, so a Postgres outage severe enough to fail a `rate_limits` check already fails that write regardless of what the limiter decided. The fail-closed path also needs no new response shape — it reuses `/auth/request`'s existing identical-response path (§12.2), since a limiter error, a rate-limited real account, and an unknown email all take the same non-issuing branch already.
 > - **Cleanup is an in-process ticker**, the same shape as §8's deadline sweeper, deleting rows idle past `auth_ip`'s own hour-long window every 10 minutes — a row that old has certainly refilled to capacity regardless of its prior state, so deleting it is exactly equivalent to leaving it, per the consume statement's own `LEAST(capacity, …)` clamp.
@@ -1393,7 +1393,7 @@ A guest can bind an email later and keep their history. A guest session that exp
 
 ### 12.3 Rate limiting (D20)
 
-§12.2's two limits need a home the moment there are two app instances (§18's own ceiling) — an in-process counter is silently a limit of 6 per email and 40 per IP once a second instance exists. [D20](../decisions/D20-rate-limit-storage.md) puts them in Postgres as a **continuous-refill token bucket**, one row per key, checked and consumed by a single atomic statement — not a fixed window, which lets exactly double the limit through at a window seam, and not a sliding window, whose row and cleanup cost scale with request count, the one thing an attacker controls.
+§12.2's two limits need a home the moment there are two app instances (§18's own ceiling) — an in-process counter is silently a limit of 6 per email and 40 per IP once a second instance exists. [D20](../decisions/D20-rate-limit-storage.md) puts them in Postgres as a **continuous-refill token bucket**, one row per key, checked and consumed by a single atomic statement — not a sliding window, whose row and cleanup cost scale with request count, the one thing an attacker controls. Its worst case is bounded to roughly double the stated numbers within one rolling window (a full bucket drained, then drained again as fast as it refills), the same bound a fixed window has — D20's Reasoning covers why that's accepted here rather than chased away with a more exact algorithm.
 
 ```sql
 rate_limits(
@@ -1412,14 +1412,15 @@ Both `/auth/request` and `/auth/verify` draw on the same two buckets — one sha
 | `auth_ip` | 20 | 1 token / 180s (20 per 3600s) |
 
 ```sql
+-- $1=scope, $2=key, $3=capacity, $4=refill rate (tokens/second)
 INSERT INTO rate_limits (scope, key, tokens, updated_at)
-VALUES ($scope, $key, $capacity - 1, now())
+VALUES ($1, $2, $3 - 1, now())
 ON CONFLICT (scope, key) DO UPDATE
-  SET tokens = LEAST($capacity, rate_limits.tokens
-                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $rate) - 1,
+  SET tokens = LEAST($3, rate_limits.tokens
+                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $4) - 1,
       updated_at = now()
-  WHERE LEAST($capacity, rate_limits.tokens
-                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $rate) >= 1
+  WHERE LEAST($3, rate_limits.tokens
+                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $4) >= 1
 RETURNING tokens;
 ```
 
@@ -1435,7 +1436,7 @@ Zero rows returned means limited. Both buckets are checked inside the same trans
 DELETE FROM rate_limits WHERE updated_at < now() - INTERVAL '1 hour';
 ```
 
-An hour covers `auth_ip`'s own window, the longer of the two — by then a bucket has certainly refilled to capacity regardless of its prior state, so deleting it is exactly equivalent to leaving it, per the consume statement's own `LEAST(capacity, …)` clamp.
+An hour covers `auth_ip`'s own window, the longer of the two — by then a bucket has certainly refilled to capacity regardless of its prior state, so deleting it is exactly equivalent to leaving it, per the consume statement's own `LEAST($3, …)` clamp.
 
 `rate_limits` is scoped generically on purpose: no other RFC-stated surface has a rate limit today, but a future one reuses the same table, statement shape, and cleanup sweep with a new `(capacity, rate)` pair and no migration.
 

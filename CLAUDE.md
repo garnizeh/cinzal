@@ -12,7 +12,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```text
 docs/project/cinzal-gdd.md                  — Game Design Document (v2.32)
-docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r44)
+docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r45)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
 docs/decisions/                             — Decision log; D1–D20, D23–D31 (M1) and D32–D43 (M2) decided (D15 reclassified as a task, #40), D21–D22 open (block M5/M6)
 ```
