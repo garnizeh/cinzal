@@ -403,14 +403,14 @@ Not a code milestone. It is listed because skipping it is how the paper-playtest
 
 **Goal:** the mode that makes the product distinct.
 
-Blocked by: **D19** (decided).
+Blocked by: **D19** (§3.4, decided).
 
 **Deliverables**
 - Outbox table, worker goroutine, exponential backoff, dead-letter, `Sender` interface with one provider adapter.
 - All six templates (§13), with `round_resolved` generated from the **fog-projected** event stream.
 - Dedup as the **partial index** (§13.1), plus the send-time re-check for time-sensitive templates.
 - The Recap (GDD §18) on the D16 cursor.
-- Per-match email preferences and one-click unsubscribe on the D19 schema: the enqueue-time and send-time `email_pref` checks, and `GET|POST /m/{id}/unsubscribe`. `daily digest` stays out of scope — deferred by D19.
+- Per-match email preferences and one-click unsubscribe on the D19 schema: the enqueue-time and send-time `email_pref` checks, and `GET|POST /m/{id}/unsubscribe`. Plus the authenticated match-settings route that lets a seat pick `every_round`/`turn_only` or resubscribe from `none` — an ordinary session-scoped, CSRF-protected write D19 left for M5/M6 to name, not new machinery. `daily digest` stays out of scope — deferred by D19.
 - Deadline notifications and the `deadline_soon` race fix (§13.1).
 
 **Exit criteria**
