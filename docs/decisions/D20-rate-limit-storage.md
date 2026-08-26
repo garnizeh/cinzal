@@ -1,0 +1,122 @@
+# D20 — Rate-limit state has no home: the Postgres shape, the IP key, and what happens when the limiter fails
+
+**Status:** decided
+**Blocks:** the M3 rate-limit migration, and M5's auth handlers, which cannot enforce §12.2's limits without somewhere to keep the counters
+**Decided:** 2026-08-26
+**Issue:** [#306](https://github.com/garnizeh/cinzal/issues/306)
+
+## The question
+
+RFC §12.2 states two hard limits — **3 requests per email per 15 min, 20 per IP per hour** — and nowhere to keep them. An in-process counter is wrong the moment there are two app instances, which §18 names as the deployment ceiling this design is built for: a limit enforced in memory is silently a limit of 6 and 40 in production. The roadmap already rules out Redis (§4) and recommends Postgres, so the open part is the shape:
+
+1. **Fixed window, sliding window, or token bucket** — a fixed window lets double the limit through at a window seam; a sliding window needs a row per request; a token bucket is one row per key and one `UPDATE`.
+2. **What is the key**, and what does "per IP" mean behind a load balancer — `X-Forwarded-For` is attacker-controlled unless the trusted-hop count is pinned, and IPv6 needs a prefix rule, since limiting per `/128` limits nothing.
+3. **What happens when the limiter itself fails** — a timed-out check must not silently open the door, and the repo's own fail-closed posture has a real cost here: a database blip can lock everyone out of login.
+
+## Why it is open
+
+**Enumeration and rate limiting are the same control.** §12.2 also requires `/auth/request`'s response to be identical for known and unknown emails. A limiter that returns `429` for a rate-limited real account and `200` for an unknown one hands back exactly the distinction §12.2 removed — the limiter's response has to be identical too, which is easy to miss when it's written as generic middleware.
+
+**Cleanup is not optional and is not free.** Rows accumulate on the auth path forever unless something deletes them, and the deployment topology is "one binary + Postgres" (§18) — no cron, no scheduler beyond what the binary itself runs.
+
+**The write lands on the login hot path**, and the number that matters is its cost *under flood*, not at rest — the roadmap's "low-traffic by nature" is true and is also not the argument an attacker is making.
+
+## Options
+
+**1. Algorithm.**
+
+- **Fixed window** (`COUNT(*) WHERE window_start = current_bucket`, one row per key per window). Cheapest to reason about, but lets a client send its full quota at 14:59 and again at 15:00 — double the stated limit across the seam, for the same reason the in-memory counter is wrong.
+- **Sliding window** (one row per request, `COUNT(*)` over a trailing interval). Exact at the boundary, but its write volume — and its cleanup cost — scale with request count, which is exactly the number an attacker controls. A flood that is supposed to be made cheap to reject instead gets more expensive to store the harder it pushes.
+- **Token bucket** (one row per key, refilled continuously, one `UPDATE`/`INSERT ON CONFLICT`). Exact, no seam to double through, and its per-request cost is constant regardless of flood size — the row is reused, never multiplied.
+
+**2. IP key.**
+
+- **Trust `X-Forwarded-For` as given.** The leftmost entry is whatever the client sent; an attacker rotates it per request and the limit never engages. Not a rate limit — a rate limit with a documented bypass.
+- **Pin a trusted-hop count** and read the entry that many positions from the right, ignoring everything left of it. Costs one piece of deployment configuration (how many proxies sit in front of the app) in exchange for a key nothing client-supplied can select.
+
+**3. Failure policy.**
+
+- **Fail-open** (limiter error → allow). Never locks a real user out, but converts any transient Postgres hiccup into a rate-limiting bypass window, on the exact path (§19: OTP brute force) the limiter exists to close.
+- **Fail-closed** (limiter error → deny). Matches the repo's established gate posture, but the issue's own framing is right that this needs a stated reason, not just an appeal to precedent, since a runtime path failing shut has a live-user cost a CI gate never has.
+
+## Decision
+
+**A single generic table**, not auth-specific, storing a **token bucket** per key:
+
+```sql
+-- generic per-key rate limiting (D20). scope + key is the whole identity;
+-- auth is the only caller in v1, but nothing here is auth-specific.
+rate_limits(
+  scope TEXT NOT NULL,             -- 'auth_email' | 'auth_ip' in v1
+  key TEXT NOT NULL,               -- an email address, or an IP key per the derivation below
+  tokens DOUBLE PRECISION NOT NULL,
+  updated_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (scope, key)
+);
+CREATE INDEX rate_limits_updated_at_idx ON rate_limits (updated_at);  -- cleanup sweep only
+```
+
+Two buckets in v1, both drawn on by **both** `/auth/request` and `/auth/verify` — one shared attempt budget per email and per IP across the whole authentication surface, matching §19's single "OTP brute force" threat row, which already cites §12.2 for both endpoints together rather than naming two separate limit pairs:
+
+| Scope | Capacity | Refill |
+|---|---|---|
+| `auth_email` | 3 | 1 token / 300s (3 per 900s) |
+| `auth_ip` | 20 | 1 token / 180s (20 per 3600s) |
+
+**Algorithm: continuous-refill token bucket**, checked and consumed in one atomic statement:
+
+```sql
+INSERT INTO rate_limits (scope, key, tokens, updated_at)
+VALUES ($scope, $key, $capacity - 1, now())
+ON CONFLICT (scope, key) DO UPDATE
+  SET tokens = LEAST($capacity, rate_limits.tokens
+                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $rate) - 1,
+      updated_at = now()
+  WHERE LEAST($capacity, rate_limits.tokens
+                 + EXTRACT(EPOCH FROM (now() - rate_limits.updated_at)) * $rate) >= 1
+RETURNING tokens;
+```
+
+Zero rows returned means limited. `$capacity` and `$rate` are Go constants in `internal/auth`, one pair per scope — not `game.Config` fields, despite CONTRIBUTING's "a tunable number is a `Config` field" rule: `game.Config` is specifically the GDD's gameplay-balance dial surface (`internal/game/config.go`); these are RFC-fixed security thresholds with their own spec anchor (§12.2), not a design knob anyone tunes per match.
+
+Both buckets are checked inside the same transaction as the rest of the handler. Either returning zero rows rolls the whole transaction back: a request blocked on one axis spends nothing against the other, and no `auth_codes` row or outbox mail is written for a request that didn't clear both checks.
+
+**IP key derivation.** A new env var, `TRUSTED_PROXY_HOPS` (alongside `DATABASE_URL`/`MAIL_PROVIDER_KEY`/`BASE_URL`/`SESSION_KEY`, §18), default `1` — matching §18's own "two app instances behind a load balancer" as the ceiling this design needs, i.e. exactly one trusted hop in the common case. The key is the `X-Forwarded-For` entry `TRUSTED_PROXY_HOPS` positions from the **right**; everything left of that point is client-supplied and ignored, so no header content an attacker controls can pick their own bucket. Fewer entries than `TRUSTED_PROXY_HOPS + 1`, or no header at all, falls back to the raw connection's remote address — behind a correctly configured load balancer that is the balancer's own address, which funnels every request into one shared bucket: a stricter failure, not a bypass. IPv4 keys on the exact address (`/32`); **IPv6 keys on the `/64` prefix** — the usual single-customer allocation size, so an attacker who requests a fresh address inside their own delegated block doesn't get a fresh bucket for it. Limiting per `/128` limits nothing, since nothing stops that rotation.
+
+**Failure policy: fail-closed.** A `rate_limits` check that errors — timeout, connection failure, anything — is treated identically to a returned zero rows: limited, no code issued, no mail enqueued.
+
+**Cleanup.** An idle bucket sitting at full capacity is indistinguishable from a bucket that was never created — the consume statement's own `LEAST($capacity, …)` clamp recomputes the same result either way — so deleting it loses no state. An in-process ticker, the same shape as §8's deadline sweeper, runs every 10 minutes:
+
+```sql
+DELETE FROM rate_limits WHERE updated_at < now() - INTERVAL '1 hour';
+```
+
+One hour covers `auth_ip`'s own window, the longer of the two configured in v1 — by then either bucket has certainly refilled to capacity regardless of where it stood when the interval started, so the delete is exactly equivalent to leaving the row alone. No separate connection pool the way §8.3 gives the sweeper its own: this is a single indexed-range delete, not a per-round contended lock, and `rate_limits_updated_at_idx` is what keeps it cheap.
+
+**Response shape: identical, reusing the existing enumeration rule.** §12.2 already requires `/auth/request`'s response to be the same for known and unknown emails. A limiter error, a rate-limited real account, a rate-limited unknown account, and an unrate-limited unknown account all take that same path and produce that same response — the fail-closed policy above adds no new branch, because the branch it would have needed already exists for a different reason. `/auth/verify` carries no such constraint (the caller already holds a code to get this far), so its rate-limited or fail-closed response can say so plainly — "too many attempts, try again later" — rather than disguise itself.
+
+**Scope: auth-only by design, table shape kept generic.** No other RFC-stated surface has a rate limit today — order submission and invite redemption are both unlimited per spec. `(scope, key)` costs nothing to leave general: a future scope reuses the same table, the same consume statement, and the same cleanup sweep with one new `(capacity, rate)` pair in the caller, no migration. It is not built now because nothing cites a number to build it against — inventing one would be product policy with no spec anchor, the same discipline D35 and this project's decision-log convention already hold to elsewhere.
+
+## Reasoning
+
+**Why token bucket over the other two.** A fixed window's boundary problem is stated in the issue and not disputable — a client sending 3 requests at 14:59:59 and 3 more at 15:00:00 sees 6 in under a second, twice the stated limit, and "fixed window" is only ever chosen for its simplicity, which a `LEAST(...)` clamp gets for free anyway. A sliding window is exact, but its cost model is backwards for what a rate limiter is *for*: its row count, write volume, and cleanup burden all scale with request count, which is precisely the variable an attacker controls — a limiter is supposed to make a flood cheap to reject, and a sliding window makes a flood expensive to store instead. A token bucket's cost is one row and one upsert per key, forever, independent of how hard any one key is hit; refilling continuously (via the elapsed-time expression in the `UPDATE`) rather than on a fixed clock tick removes the boundary case a fixed window has without the growth a sliding window has.
+
+**Why the trusted-hop count is configuration, not a hardcoded assumption.** RFC §18 leaves the exact platform open — "Fly.io, Railway, or a VM with systemd all work" — each of which puts a different number of hops between the client and the app (a platform edge proxy, an operator's own load balancer, sometimes both). Hardcoding "read the first entry" or "read the last entry" bakes in a specific topology the RFC deliberately doesn't commit to. `TRUSTED_PROXY_HOPS` costs one more env var, matching the four §18 already lists, and turns "how many hops do I trust" into an operational fact set once per deployment rather than a code change.
+
+**Why `/64` and not `/128` or `/56`.** The issue's own framing is the test: "limiting per `/128` limits nothing" for an attacker who can request a new IPv6 address inside a delegation they already control, which residential and hosting ISPs alike typically hand out in `/64` blocks per customer. `/64` is the smallest prefix that still forces an attacker to acquire a genuinely new allocation — not just a new address inside one they already have — to escape a bucket, without being so coarse (`/56`, `/48`) that it risks bucketing unrelated customers of the same upstream ISP together on shared infrastructure that hands out finer-grained blocks.
+
+**Why fail-closed doesn't cost what it looks like it costs.** The issue frames this as "the repo's own fail-closed rule applied to a runtime path... and it has a cost: a database blip locks everyone out of login." That's true of the rule in isolation, but not of this specific application: `/auth/request` already has to write `auth_codes` (§12) — a bcrypt hash and an expiry — to do anything useful at all. If Postgres is unreachable or timing out badly enough to fail a `rate_limits` upsert, it is unreachable or timing out badly enough to fail the `auth_codes` insert three lines later regardless of what the limiter decided. Fail-closed on the limiter doesn't introduce a new single point of failure on the login path; it fails at the point that was already there, slightly earlier. The one case this doesn't cover — the `rate_limits` row specifically contended (not Postgres broadly down) — is exactly the flood scenario the limiter exists to handle, and denying during contention on one key is the correct behavior, not a false failure: contention on `(scope, key)` is isolated to that one email or IP, so it costs nothing to callers not being flooded.
+
+**Why the response doesn't need new machinery for enumeration-safety.** §12.2's identical-response requirement was written for the account-existence question, not the rate-limit question, but the two collapse into the same mechanism for free: whatever code path already renders the same "check your email" body for a real and a fake address is the same code path a rate-limited or fail-closed request falls into, since none of those three cases proceeds to send mail. There is no second response shape to design or keep in sync with the first.
+
+**Why the same buckets cover both `/auth/request` and `/auth/verify`.** RFC §12.2's code block lists "rate limit per email and per IP" under `/auth/verify` separately from its "max 5 attempts per code" line — the two are different mechanisms at different scopes (one per-code, one per-identity), and nothing in the RFC states two separate numeric pairs for the two endpoints. §19's threat table also names one row, "OTP brute force," citing §12.2 for the whole authentication surface rather than splitting it. Reading the limits as shared avoids inventing a second unstated pair of numbers, and it's the more defensible posture regardless: an attacker hammering `/auth/verify` with a stolen or guessed code is exactly as much the threat §12.2 exists to close as one hammering `/auth/request`, and giving them a separate budget per endpoint would double their effective attempt rate against one email or IP.
+
+## Consequences
+
+- **RFC §7.2's schema** gains `rate_limits(scope, key, tokens, updated_at)`, primary key `(scope, key)`, plus its `updated_at` index — a fifth table alongside `invite_links`/`board_notes`/`match_players`'s new columns in the "not derived from `orders`" category, though for a different reason: it isn't authoritative game state at all, and carries nothing `cmd/replay --rebuild` would ever need to touch.
+- **RFC §12 gains a new §12.3** stating the algorithm, the two buckets' capacity/refill numbers, the consume statement, the IP key derivation and `TRUSTED_PROXY_HOPS`, the fail-closed policy, and the cleanup sweep.
+- **RFC §18's env list** gains `TRUSTED_PROXY_HOPS`.
+- **RFC §19's security table** gains a "Rate limiting" row with the concrete mechanism; the existing "OTP brute force" row is unchanged in substance, now backed by something instead of a bare citation.
+- **M3's schema migration** gains `rate_limits` directly, no longer part of an undifferentiated "D20 rate-limit table" placeholder in the roadmap.
+- **M5's auth handlers** can now be built against a real contract: check both buckets inside the request transaction before any `auth_codes`/outbox write, treat a check error identically to a denial, and reuse `/auth/request`'s existing identical-response path for every non-`200`-worthy outcome.
+- **Reversible at low cost.** A future decision to change the algorithm, the numbers, or add a scope is a superseding decision, not a rewrite: `(scope, key)` already has the granularity any of those changes would need, and only the consume statement's constants or its `WHERE`/refill expression would move.
