@@ -212,6 +212,8 @@ Four, all decided before M2 opened. Unlike §3.2's, none of these were found by 
 
 **D20 · Rate-limit state has no home.** RFC §12.2 specifies per-email and per-IP limits. In-process counters are wrong across two app instances (the deployment target in §18). Options: a Postgres table (simple, consistent, one more write path on the auth hot path — which is low-traffic by nature) or a fixed-window counter in the DB with a cleanup job. Recommendation: Postgres. Redis is explicitly out of the stack (§4) and adding it for rate limiting would be the most expensive line in the deployment topology.
 
+**Resolved by [D20](../decisions/D20-rate-limit-storage.md): a generic `rate_limits(scope, key, tokens, updated_at)` table, keyed as a continuous-refill token bucket.** Chosen over a sliding window (its row/cleanup cost scales with request count, the exact thing an attacker controls); shares a fixed window's roughly-double-the-limit worst case, but only for a client who deliberately hoards and drains a single key's own bucket, not one who happens to straddle a shared wall-clock boundary by accident; one row per key, checked and consumed by a single atomic `INSERT … ON CONFLICT DO UPDATE … WHERE … RETURNING`. Both `/auth/request` and `/auth/verify` draw the same two buckets (`auth_email`: capacity 3, refills 1/300s; `auth_ip`: capacity 20, refills 1/180s) — one shared budget per identity across the whole auth surface. The IP key comes from a new `TRUSTED_PROXY_HOPS` env var pinning how deep into `X-Forwarded-For` to trust, `/32` for IPv4 and `/64` for IPv6 (`/128` would let an attacker escape a bucket inside their own delegation). The limiter fails closed on error, at no added practical cost — `/auth/request` already needs Postgres for `auth_codes` — and reuses §12.2's own identical-response requirement rather than a new response shape. An in-process ticker, matching §8's sweeper, deletes idle-and-certainly-refilled rows every 10 minutes. The table shape is generic (`scope`, not auth-specific) so a later limit reuses it with no migration, but nothing else is built now, since no other surface has a stated limit to build against.
+
 **D21 · i18n is in scope and has no design.** RFC §1's non-goals exclude "i18n beyond the two languages already in play" — i.e. English and Portuguese are **in**. GDD §2.3 names the Portuguese edition. RFC §11.5 makes localisation possible by forbidding prose in `Event`, but nothing specifies the catalogue format, the locale-selection rule, or who owns the ~60 card/item/contract strings. Must be decided before `render` grows a hundred hard-coded English strings. Options: `golang.org/x/text/message` catalogues, or a simple embedded map keyed by `{locale, key}` given the small string count and zero pluralisation complexity in card text. Recommendation: the simple map, upgraded only if the string count grows.
 
 **D22 · Match abandonment is undefined.** `matches.status` includes `abandoned` (RFC §7.2) and nothing says what produces it. Autopilot means a match never stalls, so the plausible trigger is "every seat on autopilot for N rounds" or a host action. Needs a rule, or the status is dead.
@@ -318,7 +320,7 @@ Plus: a bot could be written **competently against `PlayerView` alone** (RFC §1
 **Goal:** matches survive a restart and reproduce exactly.
 
 **Deliverables**
-- Schema per RFC §7.2 — which now includes D16's `last_seen_round`, D17's `invite_links` table (plus `match_players.invite_link_id`), D18's `board_notes` table, and D19's `match_players.email_pref`/`unsubscribe_token_hash` columns directly — plus the D20 rate-limit table.
+- Schema per RFC §7.2 — which now includes D16's `last_seen_round`, D17's `invite_links` table (plus `match_players.invite_link_id`), D18's `board_notes` table, D19's `match_players.email_pref`/`unsubscribe_token_hash` columns, and D20's `rate_limits` table, directly.
 - `sqlc` queries, `goose` migrations embedded and run at startup behind the **advisory lock** (§7.5).
 - `fold()` — `state = fold(Resolve, initial(seed, cfg), orderLog)`.
 - `cmd/replay`, including `--rebuild` for the derived `events` / `match_summary` / `match_players.last_seen_round` projections.
@@ -358,7 +360,7 @@ Plus: a bot could be written **competently against `PlayerView` alone** (RFC §1
 
 **Goal:** people can play the game.
 
-Blocked by: **D2, D16–D18, D21**.
+Blocked by: **D2, D16–D18, D20, D21**.
 
 **Deliverables**
 - `templ` components, one per fragment, each taking `PlayerView` — full page render composes the same components (§11).

@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r44 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r45 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -240,6 +240,15 @@
 > - **§19's security table** gains an "Email unsubscribe" row, mirroring the Invite links and Board notes rows' shape, plus one named exception on the existing CSRF row: the one-click `POST` is authorized by the seat-scoped query token rather than a session-bound form token, since a mail client's automated request carries neither.
 > - **Setting `every_round`/`turn_only`, or resubscribing from `none`, is not this decision's route to design.** D19 specifies the one path (`none`) that needs new machinery, because only lowering the preference has to survive an unauthenticated `GET`/prefetch. Raising it is an ordinary authenticated, session-scoped, CSRF-protected write — the same shape `POST /m/{id}/note/{slot}` already has — and the concrete route is left for M5/M6, the same boundary D17 drew around its own join-landing markup.
 > - No GDD text change: email volume control has no GDD anchor at all. Companion doc stays at v2.32.
+>
+> **Changelog r44 → r45** — rate-limit state had no home (issue [#306](https://github.com/garnizeh/cinzal/issues/306), [D20](../decisions/D20-rate-limit-storage.md))
+> - **New table, §7.2: `rate_limits`** — `scope TEXT`, `key TEXT`, `tokens DOUBLE PRECISION`, `updated_at TIMESTAMPTZ`, primary key `(scope, key)`, plus an index on `updated_at` for the cleanup sweep. Generic by design — `auth_email`/`auth_ip` are the only scopes in v1, but nothing here is auth-specific, so a future limit reuses the table with a new scope and no migration.
+> - **New §12.3** states the mechanism: a continuous-refill **token bucket**, one row per key, checked and consumed by one atomic `INSERT … ON CONFLICT DO UPDATE … WHERE … RETURNING` — chosen over a sliding window (its row and cleanup cost scale with request count, the exact thing an attacker controls), and sharing a fixed window's roughly-double-the-limit worst case (a full bucket drained, then drained again as fast as it refills) but requiring deliberate token-hoarding against one key's own clock rather than any client accidentally straddling a shared wall-clock boundary. `auth_email`: capacity 3, refills 1/300s. `auth_ip`: capacity 20, refills 1/180s. Both `/auth/request` and `/auth/verify` draw on the same two buckets — one shared attempt budget per identity across the whole authentication surface, matching §19's single "OTP brute force" row, which already cited §12.2 for both endpoints without stating two separate pairs of numbers.
+> - **IP key derivation is pinned, not assumed.** A new env var, `TRUSTED_PROXY_HOPS` (§18), default `1`, names how many hops of `X-Forwarded-For` are trusted; the key is read that many positions from the right, so nothing client-supplied left of that point can select a bucket. IPv4 keys on `/32`; **IPv6 keys on `/64`**, the usual single-customer allocation size — `/128` would let an attacker escape a bucket by requesting a new address inside a delegation they already hold.
+> - **Failure policy is fail-closed**, and costs less than it looks like: `/auth/request` already has to write `auth_codes` to do anything useful, so a Postgres outage severe enough to fail a `rate_limits` check already fails that write regardless of what the limiter decided. The fail-closed path also needs no new response shape — it reuses `/auth/request`'s existing identical-response path (§12.2), since a limiter error, a rate-limited real account, and an unknown email all take the same non-issuing branch already.
+> - **Cleanup is an in-process ticker**, the same shape as §8's deadline sweeper, deleting rows idle past `auth_ip`'s own hour-long window every 10 minutes — a row that old has certainly refilled to capacity regardless of its prior state, so deleting it is exactly equivalent to leaving it, per the consume statement's own `LEAST(capacity, …)` clamp.
+> - **§19's security table** gains a "Rate limiting" row with the concrete mechanism.
+> - No GDD text change: rate limiting has no GDD anchor. Companion doc stays at v2.32.
 
 ---
 
@@ -723,6 +732,14 @@ users(id, email UNIQUE NULL, display_name, is_guest, created_at)
 auth_codes(id, email, code_hash, expires_at, consumed_at, attempts)
 sessions(id PK, user_id, expires_at, created_at, last_seen_at)
 
+-- generic per-key rate limiting (D20, §12.3); auth_email/auth_ip are the
+-- only scopes in v1, nothing here is auth-specific
+rate_limits(
+  scope TEXT NOT NULL, key TEXT NOT NULL,   -- PK; e.g. 'auth_email' / an email, or 'auth_ip' / an IP key
+  tokens DOUBLE PRECISION NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (scope, key)
+)
+
 -- matches
 matches(
   id, status,                 -- lobby | active | finished | abandoned
@@ -800,6 +817,8 @@ outbox(id, to_email, template, payload JSONB, attempts,
 `board_notes` is the same kind of exception, for the same reason — a pin or note leaves no trace in `orders`, so there is nothing to rebuild it from. It is also seat-private in a way nothing else in this schema is: every query against it is scoped to `(match_id, seat)` with `seat` taken from the session, never from a path or form parameter, and no query the store package exposes can return another seat's rows. See [D18](../decisions/D18-board-notes-storage.md).
 
 `match_players.email_pref` and `.unsubscribe_token_hash` are likewise directly-written state, not derived — nothing in `orders` determines a preference or a token, so `cmd/replay --rebuild`'s scope is unaffected. The unsubscribe token is generated once, at seat creation, and never rotated; unlike `invite_links.token_hash` it is never looked up by value alone (the row is already found by `(match_id, seat)`), so it carries no `UNIQUE` constraint. See [D19](../decisions/D19-email-preference-storage.md).
+
+`rate_limits` is not match state at all, derived or otherwise — it carries nothing about any match, has no order-log equivalent, and is entirely out of `cmd/replay`'s scope in either direction. Its rows are also the only ones in this schema meant to disappear on their own: §12.3's cleanup sweep deletes an idle bucket once it's certainly refilled to capacity, which is exactly equivalent to the row never having existed. See [D20](../decisions/D20-rate-limit-storage.md).
 
 ### 7.3 On not building a cache — with the arithmetic
 
@@ -1369,8 +1388,61 @@ A guest can bind an email later and keep their history. A guest session that exp
 
 - Codes are single-use and burned on success, expiry, or fifth failure.
 - The `/auth/request` response is identical for known and unknown emails; enumeration is not free.
-- Rate limits: 3 requests per email per 15 min, 20 per IP per hour.
+- Rate limits: 3 requests per email per 15 min, 20 per IP per hour — the sustained rate a well-behaved client sees; §12.3 gives the mechanism and its stated worst case under a hoarding attacker.
 - Magic links are **not** offered alongside codes. Email clients prefetch links, which silently consumes single-use tokens and generates support tickets that are miserable to diagnose. A code the user types has no prefetch problem.
+
+### 12.3 Rate limiting (D20)
+
+§12.2's two limits need a home the moment there are two app instances (§18's own ceiling) — an in-process counter is silently a limit of 6 per email and 40 per IP once a second instance exists. [D20](../decisions/D20-rate-limit-storage.md) puts them in Postgres as a **continuous-refill token bucket**, one row per key, checked and consumed by a single atomic statement — not a sliding window, whose row and cleanup cost scale with request count, the one thing an attacker controls. Its worst case is bounded to roughly double the stated numbers within one rolling window (a full bucket drained, then drained again as fast as it refills), the same bound a fixed window has — D20's Reasoning covers why that's accepted here rather than chased away with a more exact algorithm.
+
+```sql
+rate_limits(
+  scope TEXT NOT NULL, key TEXT NOT NULL,   -- 'auth_email'/email, or 'auth_ip'/an IP key below
+  tokens DOUBLE PRECISION NOT NULL, updated_at TIMESTAMPTZ NOT NULL,
+  PRIMARY KEY (scope, key)
+)
+CREATE INDEX rate_limits_updated_at_idx ON rate_limits (updated_at);  -- cleanup sweep only
+```
+
+Both `/auth/request` and `/auth/verify` draw on the same two buckets — one shared attempt budget per email and per IP, matching §19's single "OTP brute force" row, which already covers both endpoints:
+
+| Scope | Capacity | Refill |
+|---|---|---|
+| `auth_email` | 3 | 1 token / 300s (3 per 900s) |
+| `auth_ip` | 20 | 1 token / 180s (20 per 3600s) |
+
+```sql
+-- $1=scope, $2=key, $3=capacity, $4=refill rate (tokens/second)
+-- clock_timestamp(), not now(): now() is pinned to this transaction's start,
+-- and this check runs inside the same transaction as the rest of the handler
+-- — a transaction held open by lock contention would write a backdated
+-- updated_at, letting a later check over-credit the refill.
+INSERT INTO rate_limits (scope, key, tokens, updated_at)
+VALUES ($1, $2, $3 - 1, clock_timestamp())
+ON CONFLICT (scope, key) DO UPDATE
+  SET tokens = LEAST($3, rate_limits.tokens
+                 + EXTRACT(EPOCH FROM (clock_timestamp() - rate_limits.updated_at)) * $4) - 1,
+      updated_at = clock_timestamp()
+  WHERE LEAST($3, rate_limits.tokens
+                 + EXTRACT(EPOCH FROM (clock_timestamp() - rate_limits.updated_at)) * $4) >= 1
+RETURNING tokens;
+```
+
+Zero rows returned means limited — but not automatically: a zero-row `RETURNING` is not an error to Postgres and rolls nothing back on its own. The handler checks each consume call's row count and returns an error from the transaction closure on zero, the same `m.tx(ctx, func(q *store.Queries) error { … })` idiom §7.4/§8's `Tick()` already uses to turn a non-nil return into a real `ROLLBACK`. Both buckets are checked inside that one transaction, so a request blocked on one axis spends nothing against the other, and no `auth_codes` row or outbox mail is written for a request that didn't clear both.
+
+**IP key.** `TRUSTED_PROXY_HOPS` (§18), default `1`, names how many `X-Forwarded-For` hops are trusted; the key is read that many positions from the **right**, so nothing left of that point — client-supplied — can select a bucket. This needs **at least `TRUSTED_PROXY_HOPS` entries** — a single trusted hop that appends rather than replaces (NGINX's `$proxy_add_x_forwarded_for`, HAProxy's `option forwardfor`) produces exactly one entry when the client sent none, which is already the real client address, not a case to fall back from. Fewer entries than that — a misconfiguration, or a connection bypassing the expected proxy chain — is what falls back to the raw connection address, which behind a correctly configured load balancer funnels every request into one shared bucket: stricter, not a bypass. IPv4 keys on `/32`; **IPv6 keys on `/64`**, the usual single-customer allocation — `/128` would let an attacker escape a bucket by requesting a fresh address inside a delegation they already control.
+
+**Failure policy: fail-closed.** A `rate_limits` check that errors is treated identically to zero rows returned — limited, nothing issued. This costs less than it looks like: `/auth/request` already has to write `auth_codes` to do anything useful, so a Postgres failure severe enough to break the limiter check already breaks that write regardless. And it needs no new response shape — a limiter error takes the same identical-response path §12.2 already mandates for a rate-limited or unknown-email request, so the enumeration guarantee and the fail-closed guarantee are the same code path. `/auth/verify` carries no enumeration constraint (the caller already holds a code), so its limited/failed response can say so plainly.
+
+**Cleanup.** An in-process ticker, the same shape as §8's deadline sweeper, every 10 minutes:
+
+```sql
+DELETE FROM rate_limits WHERE updated_at < now() - INTERVAL '1 hour';
+```
+
+An hour is `auth_ip`'s own full-refill time, the longer of the two — by then a bucket has certainly refilled to capacity regardless of its prior state, so deleting it is exactly equivalent to leaving it, per the consume statement's own `LEAST($3, …)` clamp. That equivalence holds only while the retention covers every active scope's own full-refill time; a scope added later with a slower refill needs this constant widened to match, not left at `auth_ip`'s.
+
+`rate_limits` is scoped generically on purpose: no other RFC-stated surface has a rate limit today, but a future one reuses the same table and statement shape with a new `(capacity, rate)` pair and no migration. The cleanup sweep's retention constant is the one exception — it has to widen to cover the new scope's own full-refill time if that's longer than `auth_ip`'s hour, or a slower-refilling bucket gets swept before it's actually earned a full reset.
 
 ---
 
@@ -1664,7 +1736,7 @@ Single static binary, `embed.FS` for templates, static assets, WASM, and migrati
 
 ```text
 docker build → one binary + one image
-env: DATABASE_URL, MAIL_PROVIDER_KEY, BASE_URL, SESSION_KEY
+env: DATABASE_URL, MAIL_PROVIDER_KEY, BASE_URL, SESSION_KEY, TRUSTED_PROXY_HOPS
 start: migrate (advisory lock) → serve
 ```
 
@@ -1685,6 +1757,7 @@ Fly.io, Railway, or a VM with systemd all work. Two app instances behind a load 
 | Seat impersonation | Session → seat mapping checked per request, never taken from the payload |
 | Replay-before-end | The replay bundle is served only for `status='finished'` |
 | OTP brute force | 5 attempts per code, rate limits per email and per IP (§12.2) |
+| Rate limiting | Postgres token bucket, one row per key, checked atomically; `X-Forwarded-For` trusted only `TRUSTED_PROXY_HOPS` hops deep, IPv6 keyed on `/64`; fails closed on error, reusing `/auth/request`'s identical-response path rather than a new one (D20, §12.3) |
 | Enumeration | Identical response for known and unknown emails |
 | CSRF | Same-site cookies plus a token on every mutating form. **One named exception:** `POST /m/{id}/unsubscribe` (D19) — a mail client's `List-Unsubscribe-Post` carries no session cookie and no form token to check, so that route is authorized by the seat-scoped query token instead, accepted only when the body is exactly `List-Unsubscribe=One-Click`; the confirmation page's own button still goes through the ordinary session+CSRF-token form like every other mutation |
 | Invite links | 32-byte `crypto/rand` token, SHA-256 hash stored and indexed, raw token never persisted (D17); revocation flags the link (`revoked_at`), never the match; admission-only, so concurrent joins on one link resolve as the ordinary lobby-capacity race, not a link-specific one |
