@@ -208,6 +208,8 @@ Four, all decided before M2 opened. Unlike §3.2's, none of these were found by 
 
 **D19 · Per-match email preferences have no storage.** RFC §13 specifies four preference levels plus one-click unsubscribe per match. No table.
 
+**Resolved by [D19](../decisions/D19-email-preference-storage.md): `match_players.email_pref TEXT NOT NULL DEFAULT 'turn_only' CHECK (email_pref IN ('every_round', 'turn_only', 'none'))` plus `unsubscribe_token_hash BYTEA NOT NULL`.** `daily digest` is deferred, not one of v1's three levels — it's a scheduled aggregation over rows never individually enqueued, not a predicate the outbox write can express, and would need bookkeeping this decision doesn't specify. The default is a plain column `DEFAULT`, not a per-user setting — nothing in GDD or RFC anchors cross-match preference memory. The unsubscribe token is generated once at seat creation, SHA-256-hashed like `invite_links.token_hash` (D17) but with no `UNIQUE` constraint, since the row is found by `(match_id, seat)` first rather than by the token alone; `GET /m/{id}/unsubscribe` only renders, `POST` (including a mail client's `List-Unsubscribe-Post`) is the only write path. The preference is checked at enqueue (so a filtered-out template is never written) and again at send time, as a second check orthogonal to §13.1's existing content re-check. `autopilot` and `otp` are exempt from the preference entirely — Autopilot's mail is the one notice a `none` seat must still receive to stay recoverable (§8.2).
+
 **D20 · Rate-limit state has no home.** RFC §12.2 specifies per-email and per-IP limits. In-process counters are wrong across two app instances (the deployment target in §18). Options: a Postgres table (simple, consistent, one more write path on the auth hot path — which is low-traffic by nature) or a fixed-window counter in the DB with a cleanup job. Recommendation: Postgres. Redis is explicitly out of the stack (§4) and adding it for rate limiting would be the most expensive line in the deployment topology.
 
 **D21 · i18n is in scope and has no design.** RFC §1's non-goals exclude "i18n beyond the two languages already in play" — i.e. English and Portuguese are **in**. GDD §2.3 names the Portuguese edition. RFC §11.5 makes localisation possible by forbidding prose in `Event`, but nothing specifies the catalogue format, the locale-selection rule, or who owns the ~60 card/item/contract strings. Must be decided before `render` grows a hundred hard-coded English strings. Options: `golang.org/x/text/message` catalogues, or a simple embedded map keyed by `{locale, key}` given the small string count and zero pluralisation complexity in card text. Recommendation: the simple map, upgraded only if the string count grows.
@@ -316,7 +318,7 @@ Plus: a bot could be written **competently against `PlayerView` alone** (RFC §1
 **Goal:** matches survive a restart and reproduce exactly.
 
 **Deliverables**
-- Schema per RFC §7.2 — which now includes D16's `last_seen_round`, D17's `invite_links` table (plus `match_players.invite_link_id`), and D18's `board_notes` table directly — plus the D19 addition (email preferences) and the D20 rate-limit table.
+- Schema per RFC §7.2 — which now includes D16's `last_seen_round`, D17's `invite_links` table (plus `match_players.invite_link_id`), D18's `board_notes` table, and D19's `match_players.email_pref`/`unsubscribe_token_hash` columns directly — plus the D20 rate-limit table.
 - `sqlc` queries, `goose` migrations embedded and run at startup behind the **advisory lock** (§7.5).
 - `fold()` — `state = fold(Resolve, initial(seed, cfg), orderLog)`.
 - `cmd/replay`, including `--rebuild` for the derived `events` / `match_summary` / `match_players.last_seen_round` projections.
@@ -401,14 +403,14 @@ Not a code milestone. It is listed because skipping it is how the paper-playtest
 
 **Goal:** the mode that makes the product distinct.
 
-Blocked by: **D19**.
+Blocked by: **D19** (§3.4, decided).
 
 **Deliverables**
 - Outbox table, worker goroutine, exponential backoff, dead-letter, `Sender` interface with one provider adapter.
 - All six templates (§13), with `round_resolved` generated from the **fog-projected** event stream.
 - Dedup as the **partial index** (§13.1), plus the send-time re-check for time-sensitive templates.
 - The Recap (GDD §18) on the D16 cursor.
-- Per-match email preferences and one-click unsubscribe (D19).
+- Per-match email preferences and one-click unsubscribe (§13, D19): the enqueue-time and send-time `email_pref` checks, and `GET|POST /m/{id}/unsubscribe`. Plus the authenticated match-settings route that lets a seat pick `every_round`/`turn_only` or resubscribe from `none` — §13 names the four levels as a player-chosen preference, which is only reachable with a route to choose them; D19 left the ordinary session-scoped, CSRF-protected write for M5/M6 to name, not new machinery. `daily digest` stays out of scope — deferred by D19.
 - Deadline notifications and the `deadline_soon` race fix (§13.1).
 
 **Exit criteria**

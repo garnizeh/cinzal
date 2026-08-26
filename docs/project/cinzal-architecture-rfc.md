@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r43 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r44 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -229,6 +229,17 @@
 > - **§19's security table** gains a "Board notes" row: fetched only by `(match_id, seat)` with `seat` from the session, never a path or query parameter — no query the store package exposes can return another seat's notes.
 > - **Deletion is a real `DELETE`, not a flag**, unlike `invite_links.revoked_at`/`auth_codes.consumed_at` — nothing references a `board_notes` row and no other seat has an attribution interest in one surviving its author's delete.
 > - No GDD text change: GDD §7.5's four-tool description and §17's v1 scope bullet were already correct: this decision was about whether the schema catches up to them, not about what they say. Companion doc stays at v2.32.
+>
+> **Changelog r43 → r44** — email preferences had no storage, and 'daily digest' was not a filter (issue [#305](https://github.com/garnizeh/cinzal/issues/305), [D19](../decisions/D19-email-preference-storage.md))
+> - **`match_players` gains `email_pref TEXT NOT NULL DEFAULT 'turn_only' CHECK (email_pref IN ('every_round', 'turn_only', 'none'))` and `unsubscribe_token_hash BYTEA NOT NULL`.** Both are directly-written state, not derived — `cmd/replay --rebuild`'s scope is unaffected, matching `invite_link_id`'s own classification (D17). `daily digest` is **deferred**, not one of v1's three levels — it is a scheduled aggregation over rows never individually enqueued, not a predicate `Tick()`'s own outbox write can express, and would need its own send-window and dedup bookkeeping nothing here specifies.
+> - **§13's volume-control paragraph** now names the three v1 levels and states the digest deferral explicitly. The six-template table is unaffected — `daily digest` was never one of the six.
+> - **§13.1 gains a second, orthogonal send-time check.** The enqueue `INSERT` filters on `email_pref` so a filtered-out template is never written; the worker re-checks that preference again at send time for every match-scoped template, including `round_resolved`/`match_finished`. This is not a widening of the existing content re-check those two templates are correctly exempt from (whether the asserted fact is still true) — preference staleness is a different axis (whether the recipient still wants any mail for this match), and the two checks compose independently.
+> - **`autopilot` and `otp` are exempt from `email_pref` entirely**, `none` included — Autopilot's mail is the one notice whose suppression would convert a recoverable game state (§8.2, a returning player retakes their seat) into a silent one, and neither GDD nor RFC gives a basis for treating that as an acceptable cost of `none`. The unsubscribe link still rides on the `autopilot` mail; it just doesn't stop that template itself.
+> - **§11's route table gains `GET|POST /m/{id}/unsubscribe`.** `GET` validates the seat+token against `match_players` and renders a confirmation, never mutating; `POST` — from the confirmation page's own button, or a mail client's `List-Unsubscribe-Post` (RFC 8058) hitting the header URL directly — is the only request that writes `email_pref = 'none'`. Unlike D17's join flow, both verbs read seat+token from the same query string on the same URL: RFC 8058's one-click POST can't be made to also submit a form field the way `POST /m/{id}/join` receives its token, so the GET/POST split that keeps the two requests independently validated is narrower here by necessity, not by a smaller application of the same pattern.
+> - **The token is hashed (SHA-256, 32 `crypto/rand` bytes) like `invite_links.token_hash`, but carries no `UNIQUE` constraint** — the URL already supplies `(match_id, seat)`, so the row is found by primary key first and the token is only ever compared against that one row's stored hash, never used as a standalone lookup key the way an invite token is.
+> - **§19's security table** gains an "Email unsubscribe" row, mirroring the Invite links and Board notes rows' shape, plus one named exception on the existing CSRF row: the one-click `POST` is authorized by the seat-scoped query token rather than a session-bound form token, since a mail client's automated request carries neither.
+> - **Setting `every_round`/`turn_only`, or resubscribing from `none`, is not this decision's route to design.** D19 specifies the one path (`none`) that needs new machinery, because only lowering the preference has to survive an unauthenticated `GET`/prefetch. Raising it is an ordinary authenticated, session-scoped, CSRF-protected write — the same shape `POST /m/{id}/note/{slot}` already has — and the concrete route is left for M5/M6, the same boundary D17 drew around its own join-landing markup.
+> - No GDD text change: email volume control has no GDD anchor at all. Companion doc stays at v2.32.
 
 ---
 
@@ -729,6 +740,9 @@ match_players(
   faction, joined_at, missed_deadlines INT,
   last_seen_round INT NOT NULL DEFAULT 0,   -- Recap cursor (D16), derived from orders
   invite_link_id NULL,                      -- which link admitted this seat (D17); NULL for the host's own seat or a bot fill
+  email_pref TEXT NOT NULL DEFAULT 'turn_only'
+    CHECK (email_pref IN ('every_round', 'turn_only', 'none')),  -- D19; daily_digest deferred, not one of these three
+  unsubscribe_token_hash BYTEA NOT NULL,    -- sha256(32 random bytes); generated at seat creation, same shape as invite_links' token (D17)
   FOREIGN KEY (invite_link_id, match_id) REFERENCES invite_links(id, match_id),  -- composite: same-match scope enforced in the DB, not just by convention
   PRIMARY KEY (match_id, seat)
 )
@@ -784,6 +798,8 @@ outbox(id, to_email, template, payload JSONB, attempts,
 `invite_links` is **not** a derived projection, despite sitting next to `match_players` above — it is authoritative state with no order-log equivalent to fold it back from (a revoked or expired link leaves no trace in `orders`), so it is out of `cmd/replay --rebuild`'s scope entirely. See [D17](../decisions/D17-invite-link-storage.md).
 
 `board_notes` is the same kind of exception, for the same reason — a pin or note leaves no trace in `orders`, so there is nothing to rebuild it from. It is also seat-private in a way nothing else in this schema is: every query against it is scoped to `(match_id, seat)` with `seat` taken from the session, never from a path or form parameter, and no query the store package exposes can return another seat's rows. See [D18](../decisions/D18-board-notes-storage.md).
+
+`match_players.email_pref` and `.unsubscribe_token_hash` are likewise directly-written state, not derived — nothing in `orders` determines a preference or a token, so `cmd/replay --rebuild`'s scope is unaffected. The unsubscribe token is generated once, at seat creation, and never rotated; unlike `invite_links.token_hash` it is never looked up by value alone (the row is already found by `(match_id, seat)`), so it carries no `UNIQUE` constraint. See [D19](../decisions/D19-email-preference-storage.md).
 
 ### 7.3 On not building a cache — with the arithmetic
 
@@ -1193,6 +1209,9 @@ POST /m/{id}/note/{slot}        write/replace a pinned note in that slot (D18)
 POST /m/{id}/note/{slot}/delete delete a pinned note (D18)
 GET  /m/{id}/events             SSE stream
 GET  /m/{id}/replay             finished only: {seed, config, log} bundle
+GET  /m/{id}/unsubscribe        validates seat+token, renders a confirmation — never mutates (D19)
+POST /m/{id}/unsubscribe        same seat+token in the query string; sets email_pref='none' — the
+                                 List-Unsubscribe-Post target as well as the confirm page's own button (D19)
 ```
 
 **Fragment discipline.** Every fragment is a templ component taking `PlayerView` and rendering a self-contained `<div id="…">`. The full page render composes the same components. There is exactly one code path per piece of UI, whether it arrives as a page load or a swap.
@@ -1403,7 +1422,9 @@ Two rules, therefore:
 -- Insert only if still true, in the transaction that read the deadline.
 INSERT INTO outbox (…)
 SELECT … FROM matches m
+JOIN match_players mp ON mp.match_id = m.id AND mp.seat = $3
 WHERE m.id = $1 AND m.round = $2
+  AND mp.email_pref <> 'none'   -- D19: deadline_soon is filtered out entirely under 'none'
   AND NOT EXISTS (SELECT 1 FROM orders o
                   WHERE o.match_id = m.id AND o.round = m.round AND o.seat = $3)
 ON CONFLICT DO NOTHING;
@@ -1411,9 +1432,11 @@ ON CONFLICT DO NOTHING;
 
 And **the worker re-checks time-sensitive templates at send time**, discarding a queued `deadline_soon` whose round has since closed or been submitted. Anything that asserts a fact about *current* state gets this treatment; `round_resolved` and `match_finished` describe the past and never need it.
 
+**Every match-scoped template's own enqueue path gains the analogous `email_pref` predicate (D19)** — shown above for `deadline_soon` as `mp.email_pref <> 'none'`; `round_resolved`'s enqueue (fired from `Tick()`, not the sweeper) and `match_finished`'s use the same join, filtered per D19's template-to-level mapping rather than a flat `<> 'none'`. A second, independent check re-applies that predicate at send time for every match-scoped template — not a widening of the content re-check just above, which stays scoped to time-sensitive templates: that check asks whether the asserted fact is still true, this one asks whether the recipient still wants any mail for this match at all, and the two compose without one substituting for the other. `autopilot` and `otp` are exempt from the preference check entirely — D19.
+
 **On the Autopilot case specifically:** a player who returns shortly after the `autopilot` mail was queued still receives it, and that is correct — it did happen, and the message tells them how to come back. It describes a past event, so it is not re-checked. What must not happen is the mail firing *without* the round having advanced, and that is guaranteed by the shared transaction in §7.4 rather than by any constraint.
 
-**Volume control.** An async match with a 24h deadline generates up to 15 `round_resolved` emails per player. That is a lot of mail. Per-match preferences: *every round* / *only when it's my turn and I haven't moved* / *daily digest* / *none*. Default is the second. Every email carries one-click unsubscribe per match.
+**Volume control.** An async match with a 24h deadline generates up to 15 `round_resolved` emails per player. That is a lot of mail. Per-match preferences: *every round* / *only when it's my turn and I haven't moved* / *none* — `match_players.email_pref`, default the second (D19). **`daily digest` is deferred**, not a v1 level: it is a scheduled aggregation over rows that were never individually enqueued, not a predicate over the outbox row `Tick()` already writes, and would need its own send-window and dedup bookkeeping that nothing here specifies (D19). Every match-scoped email carries `List-Unsubscribe`/`List-Unsubscribe-Post` (RFC 8058) pointing at `GET|POST /m/{id}/unsubscribe` — `otp` is the one exception, since it isn't match-scoped and has no target `email_pref` to unsubscribe from. `autopilot` carries the link too even though the template itself is exempt from the preference the link sets — see D19.
 
 Provider: Resend or Postmark for v1 behind a `Sender` interface. SES is cheaper at volume and worse at deliverability out of the box; it is the migration target, not the starting point.
 
@@ -1663,9 +1686,10 @@ Fly.io, Railway, or a VM with systemd all work. Two app instances behind a load 
 | Replay-before-end | The replay bundle is served only for `status='finished'` |
 | OTP brute force | 5 attempts per code, rate limits per email and per IP (§12.2) |
 | Enumeration | Identical response for known and unknown emails |
-| CSRF | Same-site cookies plus a token on every mutating form |
+| CSRF | Same-site cookies plus a token on every mutating form. **One named exception:** `POST /m/{id}/unsubscribe` (D19) — a mail client's `List-Unsubscribe-Post` carries no session cookie and no form token to check, so that route is authorized by the seat-scoped query token instead, accepted only when the body is exactly `List-Unsubscribe=One-Click`; the confirmation page's own button still goes through the ordinary session+CSRF-token form like every other mutation |
 | Invite links | 32-byte `crypto/rand` token, SHA-256 hash stored and indexed, raw token never persisted (D17); revocation flags the link (`revoked_at`), never the match; admission-only, so concurrent joins on one link resolve as the ordinary lobby-capacity race, not a link-specific one |
 | Board notes | Fetched only by `(match_id, seat)` with `seat` from the session, never a path or query parameter — no query the store package exposes can return another seat's notes (D18) |
+| Email unsubscribe | 32-byte `crypto/rand` token, SHA-256 hash stored, generated once at seat creation; row found by `(match_id, seat)` first, so the hash is never a standalone lookup key, unlike invite links; `GET` validates and renders only, `POST` is the only write path (D19) |
 | Timing | Constant-time comparison on OTP hashes and session tokens |
 
 ---
