@@ -17,13 +17,13 @@ Annotation is also structurally unlike the other three tools. The Log, Attributi
 
 ## Options
 
-**Option A — Add the storage in M3.** A new table, scoped per seat per match, with a length cap and a per-match count cap enforced declaratively. Cost: one more table, one more thing to get the fog-scoping of right (never render one seat's notes to another).
+**Option A — Add the storage in M3.** A new table, scoped per seat per match, with a length cap and a per-seat count cap enforced declaratively. Cost: one more table, one more thing to get the fog-scoping of right (never render one seat's notes to another).
 
 **Option B — Defer to v1.1.** Correct GDD §7.5 to describe three tools and §17 to drop pins from the v1 scope bullet; decide what, if anything, M5's Board UI shows in the tool's place so the absence reads as deliberate rather than missing.
 
 ## Decision
 
-**Option A.** A new `board_notes` table, seat-private, with the count cap expressed as a bounded slot number rather than a counted `CHECK`:
+**Option A.** A new `board_notes` table, seat-private, with the per-seat count cap expressed as a bounded slot number rather than a counted `CHECK`:
 
 ```sql
 -- manual annotation: the Board's fourth tool (GDD §7.5, D18). Authoritative
@@ -43,7 +43,7 @@ board_notes(
 
 - **Grain:** per seat per match, optionally attached to a node (`node_id`) via GDD's own object vocabulary; a `NULL` node is a freeform note, not tied to a location. No edge or round attachment beyond the `round` stamp that mirrors the Log's own round/node filter — a route-shaped annotation is already the Heat Map's job.
 - **Length cap:** `CHECK (char_length(body) BETWEEN 1 AND 500)`. 500 has no spec anchor; it is a placeholder product parameter, changeable by editing one constant, not a schema shape.
-- **Count cap:** a `slot` column bounded `1..20` under the table's own primary key, not a counted `CHECK` (Postgres cannot express "at most N sibling rows" declaratively) and not a trigger. Writing note *N* is `INSERT ... ON CONFLICT (match_id, seat, slot) DO UPDATE`, matching `orders`'s own resubmission shape (RFC §7.2). 20 is equally a placeholder.
+- **Count cap:** a `slot` column bounded `1..20` under the table's own primary key, not a counted `CHECK` (Postgres cannot express "at most N sibling rows" declaratively) and not a trigger — so the cap is **per seat per match** (up to 20 rows for *each* seat in a match), not 20 rows shared across the whole match. Writing note *N* is `INSERT ... ON CONFLICT (match_id, seat, slot) DO UPDATE SET node_id = EXCLUDED.node_id, round = EXCLUDED.round, body = EXCLUDED.body, updated_at = now()`, matching `orders`'s own resubmission shape (RFC §7.2). `updated_at = now()` has to be named explicitly in the `SET` clause — a plain `DEFAULT now()` only fires on `INSERT`, so a conflict that hits `DO UPDATE` without it would silently leave a stale timestamp on every edit after the first. 20 is equally a placeholder.
 - **Index:** none beyond the primary key. `PRIMARY KEY (match_id, seat, slot)` already makes `WHERE match_id = $1 AND seat = $2` a prefix-indexed lookup — "my annotations for this match" is the PK's own leading columns, not a separate index.
 - **Retention:** notes survive a match finishing — a player may want to revisit their own analysis — but are **never** part of the replay bundle. `{seed, config, orderLog}` (RFC §10.4/§15.4) is shared between every player in the match; `board_notes` is seat-private and has no place in a bundle built to be handed to an opponent.
 - **Deletion:** a real `DELETE FROM board_notes WHERE match_id = $1 AND seat = $2 AND slot = $3`. Not a soft-delete flag — unlike `invite_links.revoked_at` or `auth_codes.consumed_at`, nothing else references a `board_notes` row and no other party has an attribution interest in a note surviving its own author's delete.
@@ -54,7 +54,7 @@ board_notes(
 
 **Why not Option B.** The technical objections the issue raises — fog exposure, unbounded text, no deletion path — are all real, but each has a small, declarative answer (a `CHECK`, a bounded `slot`, an ordinary `DELETE`, a query scoped by construction). None of them is a reason the *feature* is expensive; they're reasons the *schema entry* needs four extra lines, which M3 can afford. Weighed against that: P6 already names the Board as underestimated and the four-tool count as the thing that makes P3 land, and the GDD, RFC roadmap (line 366, "pins/notes per D18"), and M3's own deliverable bullet (line 317, "the D18–D19 additions (pins...)") all already write as though annotation ships — Option B would mean walking back a design pillar's own tool count on cost grounds that don't hold up once the schema is actually drawn.
 
-**Why a bounded slot, not a trigger or an app-level count.** A per-match cap needs either procedural enforcement (a trigger, invisible at the schema level and bolted onto one table for one column) or a declarative bound. `slot SMALLINT CHECK (slot BETWEEN 1 AND 20)` under the table's primary key makes the cap physically true rather than application-remembered — the same shape this schema already prefers ([D17](D17-invite-link-storage.md)'s composite FK exists for exactly this reason: "the database enforces X, rather than every future caller having to remember to"). It also gives the client a natural, stable address for editing or replacing one note (`POST /m/{id}/note/{slot}`) instead of needing a generated note ID round-tripped through a form.
+**Why a bounded slot, not a trigger or an app-level count.** A per-seat cap needs either procedural enforcement (a trigger, invisible at the schema level and bolted onto one table for one column) or a declarative bound. `slot SMALLINT CHECK (slot BETWEEN 1 AND 20)` under the table's primary key makes the cap physically true rather than application-remembered — the same shape this schema already prefers ([D17](D17-invite-link-storage.md)'s composite FK exists for exactly this reason: "the database enforces X, rather than every future caller having to remember to"). It also gives the client a natural, stable address for editing or replacing one note (`POST /m/{id}/note/{slot}`) instead of needing a generated note ID round-tripped through a form.
 
 **Why `node_id INT` with no foreign key.** `game.NodeID` is a plain `int` (`internal/game/ids.go`), and the map itself is never a stored table — nodes are generated at runtime from `seed`/`config`, the same reason `orders.payload` encodes route node IDs with no FK to reference. `board_notes.node_id` follows the existing convention rather than inventing a `nodes` table this schema has never needed.
 
