@@ -1440,9 +1440,9 @@ Zero rows returned means limited — but not automatically: a zero-row `RETURNIN
 DELETE FROM rate_limits WHERE updated_at < now() - INTERVAL '1 hour';
 ```
 
-An hour covers `auth_ip`'s own window, the longer of the two — by then a bucket has certainly refilled to capacity regardless of its prior state, so deleting it is exactly equivalent to leaving it, per the consume statement's own `LEAST($3, …)` clamp.
+An hour is `auth_ip`'s own full-refill time, the longer of the two — by then a bucket has certainly refilled to capacity regardless of its prior state, so deleting it is exactly equivalent to leaving it, per the consume statement's own `LEAST($3, …)` clamp. That equivalence holds only while the retention covers every active scope's own full-refill time; a scope added later with a slower refill needs this constant widened to match, not left at `auth_ip`'s.
 
-`rate_limits` is scoped generically on purpose: no other RFC-stated surface has a rate limit today, but a future one reuses the same table, statement shape, and cleanup sweep with a new `(capacity, rate)` pair and no migration.
+`rate_limits` is scoped generically on purpose: no other RFC-stated surface has a rate limit today, but a future one reuses the same table and statement shape with a new `(capacity, rate)` pair and no migration. The cleanup sweep's retention constant is the one exception — it has to widen to cover the new scope's own full-refill time if that's longer than `auth_ip`'s hour, or a slower-refilling bucket gets swept before it's actually earned a full reset.
 
 ---
 
