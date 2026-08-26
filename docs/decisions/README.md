@@ -106,6 +106,14 @@ The row stays, struck through, because the numbering is cited elsewhere and a si
 | D21 | i18n is in scope and has no design | open |
 | D22 | Match abandonment is undefined, so `matches.status = 'abandoned'` is unreachable | open |
 
+### Blocks M3 — Persistence
+
+| # | Question | Status |
+|---|---|---|
+| [D44](D44-config-order-jsonb-encoding.md) | `matches.config` and `orders.payload` are the whole system's authoritative input and neither `game.Config` nor `game.Order` carries a single struct tag — does `game` grow tags or does `store` own a codec, what happens to an unknown or missing field on read, is the encoding versioned, and what are the named integer/enum types on the wire? — filed as [#307](https://github.com/garnizeh/cinzal/issues/307) | **decided** — a hybrid: wire vocabulary (struct tags, and `MarshalJSON`/`UnmarshalJSON` on every `iota` enum reachable from `Order`, encoding through `String()` rather than the ordinal) lives in `internal/game`, costing D01's enforced import check nothing; trust and versioning live in `internal/store`. `Config` is frozen and never reinterpreted (RFC §6.2), so it gets an explicit version int, a frozen key-set and struct type per version, and a hard decode error — never a default — on any version mismatch or incomplete/extra field. `Order` is designed to be reread by newer code (RFC §7.1's whole event-sourcing argument), so it stays unversioned and append-only: `DisallowUnknownFields` catches corruption, a missing field's zero value must already be a legal historical meaning, and every new field ships with a frozen pre-addition fixture proving old rows still fold correctly. `NodeID`/`SeatID`/`RoundNumber`/`ContractID` stay bare integers — they are match-scoped indices, not `iota` enums, so the reordering hazard doesn't apply |
+| D45 | RFC §17 names the fold metrics and no metrics system; §18 names one binary and one Postgres, and M3's fourth exit criterion needs a dashboard that topology doesn't have | open |
+| D46 | RFC §16.1 needs real Postgres in a container, and this repo has already ruled out `t.Skip` as the shape for "no Postgres available" twice | open |
+
 ## Also open, from RFC §20
 
 Carried from the RFC's own list, with the point at which each needs an answer:

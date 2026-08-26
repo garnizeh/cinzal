@@ -1,0 +1,91 @@
+# D44 — What is the wire encoding of `matches.config` and `orders.payload`?
+
+**Status:** decided
+**Blocks:** the order-log append (#317), match creation and reload (#318), `fold()` (#319), `cmd/replay` (#322–#323), and every golden fixture that will ever be stored rather than computed (#328, #330)
+**Decided:** 2026-08-26
+**Issue:** [#307](https://github.com/garnizeh/cinzal/issues/307)
+
+## The question
+
+RFC §7.2 puts two JSONB columns on the authoritative path:
+
+```sql
+matches(… config JSONB, seed BYTEA …)   -- the frozen Config (§6.2)
+orders(…, payload JSONB, …)             -- THE LOG
+```
+
+`state = fold(Resolve, initial(seed, cfg), orderLog)`. Those columns *are* `cfg` and `orderLog`. Everything else in the schema is rebuildable from them; they are rebuildable from nothing. Neither `game.Config` nor `game.Order` carries a single struct tag today — `grep -c 'json:' internal/game/config.go internal/game/order.go` returns `0 0` — so the current encoding is "whatever `encoding/json` does with exported field names," a default, not a decision, about to be frozen into rows that must still decode in 2030.
+
+Four sub-questions, per the issue: does `game` grow struct tags or does `store` own a codec; what happens to an unknown field on read; is the encoding versioned; and what are the named integer/enum types on the wire.
+
+## Why it is open
+
+**§7.3 already made this argument about snapshots, with the escape hatch removed.** RFC §7.3 declines snapshots partly because *"a snapshot is only valid for the code and config that produced it. Change a rule, and every stored snapshot silently encodes the old one."* Its answer was a `code_version` and a fallback to a full fold on a miss. A stored `Config` has the identical property — and there is no fallback, because there is nothing behind it to fall back to.
+
+**The failure is silent by construction, and the codebase already has a fresh, concrete example of the exact mechanism.** `internal/game/event.go`'s own comment on `EventGasLeakTruncated` states the hazard in so many words: *"EventKind's numeric value is not stable across a code version… but nothing is gained by moving it either… no persisted schema anywhere yet reads it as a raw int"* — a deliberate appended-at-the-end placement, justified specifically because nothing durable depends on the ordinal *yet*. D44 is the decision that ends that grace period for `orders.payload`. The same iota-reordering hazard that costs an in-repo golden-fixture re-hash today (Anchor.Kind, worked out live on #274/D40) costs a silently misinterpreted historical order forever once it is on disk.
+
+**`Config` and `Order` do not share the same risk shape, which is the crux of this decision.** RFC §6.2 is explicit that a `Config` is frozen at match creation and *never reinterpreted*: "a match created under v1 rules finishes under v1 rules, including its replay six months later." A stored `Config` is only ever supposed to hand back the exact numbers that produced the match — closer to a `code_version`-keyed snapshot than to the order log. `Order`, by contrast, is *designed* to be reread by newer code: RFC §7.1's whole event-sourcing argument is that `fold(Resolve, initial(seed, cfg), orderLog)` reconstructs a match under the `Resolve` that exists today, regardless of which `Resolve` accepted each historical order. Cross-version reads of `Order` are the normal operating mode, not a hazard to firewall against. The two columns therefore need different answers to "what does a missing field mean," not one shared policy.
+
+**`Config` is also the one guaranteed to keep changing shape.** Roadmap §5's "Config as data" workstream promises the struct keeps growing — every tunable dial is a field, never a constant — so a missing-field policy is not a one-time question, it recurs with every future tuning pass, including the M5.5 re-tuning that will run against matches created before the tuning existed.
+
+**`seed BYTEA` needs a sentence too.** `rules.NewRNG` and `rules.NewBotRNG` both take a fixed `[32]byte`; `BYTEA` is variable-length, and a 31-byte row has to fail loudly rather than pad or truncate.
+
+## Options
+
+**Q1 — tags in `game`, or a codec in `store`?**
+
+- *Codec in `store`:* mirrored DTO structs, one per persisted type, converted at the boundary. Keeps `game` untouched by a persistence concern, but every future `Config` field (guaranteed by roadmap §5) is now a field that must be added in two places, and a forgotten mirror is exactly the class of silent failure this decision exists to close.
+- *Tags in `game`:* `json:"..."` on `Config`/`Order` and their nested types directly, plus `MarshalJSON`/`UnmarshalJSON` on the enum types the wire format needs to protect. D01's own enforced boundary is a `go list` import check — a struct tag and a call to the standard library's `encoding/json` add no import edge, so this costs the leaf-package rule nothing that is actually checked, only an aesthetic one. `game` already imports the standard library freely (`fmt`, `slices`, `strconv`); `encoding/json` is the same kind of dependency.
+
+**Q2/Q3 — unknown fields, missing fields, and versioning.**
+
+- *Rely on `encoding/json` defaults:* ignore unknown fields, zero-fill missing ones. This is the status quo and is exactly the danger named in the issue — `LeaseCostPerBlock` silently becomes `0`.
+- *`DisallowUnknownFields` only:* catches an unexpected key, but a struct field with no corresponding JSON key is simply zero-filled by `encoding/json` — this guards one direction and not the other, which is the wrong half to leave open for `Config`.
+- *A version int in the payload, dispatched to a per-version decode path, missing/extra fields rejected structurally for each version.* Heavier, but it is the only option that gives an actual answer to "does an incomplete `Config` fail or default" (it fails), and it composes with the append-only default for `Order` rather than forcing one mechanism onto both columns.
+
+**Q4 — wire representation of named integer/enum types.**
+
+- *Bare integers for everything reachable from `Order`/`Config`* (status quo). Reintroduces the `EventKind` hazard onto a persisted column: reordering an `iota` block silently rewrites the meaning of every historical row using a later constant, with no error anywhere.
+- *Strings, via each closed enum's existing `String()`* for every type whose value set is a fixed `iota` block, decoded strictly against the known names. Structural indices (`NodeID`, `SeatID`, `RoundNumber`, `ContractID`) are not `iota` enums — they are match-scoped counts — and reordering is not a hazard that applies to them, so they stay bare integers.
+
+## Decision
+
+**A hybrid, because Q1 and Q2/Q3/Q4 are different concerns with different natural owners.**
+
+**1. Wire vocabulary lives in `internal/game`.** `Config`, `Order`, and every nested type (`ContractTier`, `MapSpec`, `ScavengingTable`, `PressureConfig`, `SubsystemSuppression`, `PushingOn`, `ActionOrder`, `StanceOrder`, `ItemDiscard`, `AddOns`) get `json:"..."` struct tags — snake_case, matching the field's Go name, chosen once and then frozen the same way the Go field name already is. `internal/game` imports nothing but the standard library either way; `encoding/json` changes that not at all.
+
+Every `iota`-based enum type reachable from `Order` gets a `MarshalJSON`/`UnmarshalJSON` pair that encodes/decodes through its existing `String()` name, not its ordinal: `ActionKind`, `Stance`, `ItemID` (via both `ItemDiscard.Item` and `AddOns.OpenDoorsItem`), and `Sector` (via `PushingOn.Bias`, a pointer — `nil` encodes as JSON `null`). `Config` carries no enum-typed field today (every dial is a plain int, map, or nested all-int struct), so nothing in `Config` needs this treatment yet — if a future dial becomes an enum, the same rule applies at that point. `UnmarshalJSON` on each of these types is strict: an unrecognized string is a decode error, never a silent fall-through to the zero/invalid sentinel these types already reserve by convention (`enums.go`'s stated rule: "every enum in this file reserves its zero value as invalid"). Falling through to that sentinel would convert "the wire says something I don't recognize" into "the wire says nothing," which is precisely the silent-reinterpretation failure mode this decision exists to close.
+
+`NodeID`, `SeatID`, `RoundNumber`, and `ContractID` stay bare JSON numbers, decided consciously rather than by default: they are indices into one match's own graph/seat/contract-slot space, never `iota` blocks, and a string encoding would protect against a hazard that does not apply to them.
+
+**2. Trust, versioning, and rejection live in `internal/store`.**
+
+**`Config`:** the JSONB payload carries an explicit version field (e.g. `"v": 1`) alongside the config data. Decoding is two steps, both mandatory: (a) unmarshal into `map[string]json.RawMessage`, and assert its key set is *exactly* the frozen key list `store` maintains for that declared version — not a superset, not a subset — rejecting the payload outright on any mismatch; (b) re-marshal and decode into that version's own frozen struct type with `DisallowUnknownFields` set, as a second, redundant check on the nested types (`ContractTier`, `MapSpec`, …). An unrecognized version number is a hard decode error with no fallback — RFC §7.3's own snapshot argument already established there is nothing to fall back to. This mirrors the CLAUDE.md-documented house rule that gates fail closed: a `Config` decode that cannot prove it read exactly what version N wrote refuses rather than guesses.
+
+Every future field added to `Config` (roadmap §5 guarantees there will be more) is a version bump: a new frozen key list, a new frozen struct type, and — if the field is genuinely additive with a value equivalent to prior behavior — an explicit migration function stating that default in writing, never left to `encoding/json`'s implicit zero-fill. `DefaultConfig()` is not that list; it is today's tuning, and it will keep changing where the frozen per-version migration must not.
+
+**`Order`:** no version field. The order log is append-only and its rows are *meant* to be reread by newer `Resolve` code — that is what replay is (RFC §7.1). `DisallowUnknownFields` still applies, to catch corruption or a genuinely removed field, but a field absent from an older row is the ordinary case, not an error: its zero value must already be a legal historical meaning ("this concept did not exist when the order was submitted"), the same pattern `ContractChoice == nil` and `PushingOn{Steps: 0}` already use for "not declared." The enforcement mechanism is a written rule plus a required regression, not a decode-time check: whenever a field is added to `Order`, the adding PR must include a frozen, pre-existing fixture (an order log captured before the field existed) that still folds to its original golden result — the same discipline the repo already applies to `EventKind` placement, aimed at the payload instead of the ordinal. A GDD §9 rules change large enough to require a *mandatory* new order field (not safely zero-defaultable) is out of this decision's scope; it is a bigger event than an additive tuning pass and would need its own decision when it happens.
+
+**`seed`:** decode-time length check, `len(seed) != 32` is a hard error, never padded or truncated; conversion to `[32]byte` happens only after that check passes.
+
+**3. The round-trip property M3's tasks assert.** For arbitrary generated values, `decode(encode(x))` must equal `x` — `Order` already has `Equal` for this; `Config` needs one, or `reflect.DeepEqual` is sufficient since it holds no pointers. Separately, for a payload written by a previous format, `decode(row)` must equal what that version was defined to mean, checked against fixture files that are hand-frozen text, not generated from the live struct — the only way a Go-side rename or reordering that isn't mirrored in a migration gets caught loudly instead of passing by construction.
+
+## Reasoning
+
+**Why not a pure codec in `store` (rejecting the DTO-mirror option outright).** `Config` is the one struct in this codebase with a standing promise to keep growing. A mirrored DTO makes every future addition a two-place edit, and the entire point of D44 is to stop trusting an implicit, easy-to-forget mechanism — building a new one of the same shape one layer up does not fix that, it relocates it.
+
+**Why the split between Q1 (`game`) and Q2/Q3 (`store`) rather than one owner for everything.** The wire *vocabulary* — field names, and which enum values are stable strings versus which integers are safe as bare numbers — is a property of the type itself, exactly like the type's Go name; it belongs where the type is declared, next to the comment that already explains each field's meaning. The wire *trust boundary* — is this version recognized, is this key set complete, does this length check out — is a property of what the database is allowed to hand back to the engine, which is `internal/store`'s job by the same logic that already puts every other persistence concern there. D01 doesn't have to be reopened for this: the enforced rule is an import edge, and this decision adds none.
+
+**Why `Config` gets full versioning and `Order` gets a lighter append-only discipline instead of one mechanism for both.** This is the decision's central asymmetry, and it falls directly out of RFC §6.2 and §7.1 disagreeing about what a stored value is *for*. A `Config` is a frozen snapshot of dials that must never be reinterpreted — decoding it under a new shape without knowing which shape produced it is exactly the failure the snapshot argument in §7.3 already refused to accept, with no fallback available. An `Order` is a fact that different code versions are *supposed* to fold differently over time as `Resolve` itself evolves — that is what "the order log is the truth" means. Forcing a version tag onto `Order` would either be inert (every version decodes the same way `Resolve` already handles gracefully) or would quietly reintroduce reinterpretation-by-fallback for the one column where reinterpretation is the intended behavior.
+
+**Why the missing-field check for `Config` needs an exact key-set comparison and not just `DisallowUnknownFields`.** `DisallowUnknownFields` only rejects a JSON key that doesn't exist in the struct — a struct field with no corresponding key is invisible to it, and simply reads as the Go zero value. That is precisely the `LeaseCostPerBlock` scenario the issue names. The only way to answer "does an incomplete `Config` fail or default" with "it fails" is to check completeness explicitly, against a list frozen at the time that version shipped — not derived from whatever the live struct happens to look like today.
+
+**Why enum strings are scoped to what's reachable from `Order`, and `Config` is left alone for now.** Auditing both structs field by field: every `Config` field is a plain int, a map of ints, or a nested all-int struct — none of today's tunable dials is an `iota` enum. `Order` carries four enum-typed fields (`ActionKind`, `Stance`, two `ItemID` sites, one `Sector` behind a pointer). Applying the string-encoding rule only where it currently matters keeps the change reviewable against the actual risk, while stating the rule generally enough that a future enum-typed `Config` field (or a future persisted `EventKind`, should `events` ever need to be authoritative rather than rebuildable) follows the same pattern without a fresh decision.
+
+## Consequences
+
+- `internal/game/config.go`, `order.go`, and the four enum types it touches (`enums.go`) gain struct tags and, for those four types, `MarshalJSON`/`UnmarshalJSON`. No import outside the standard library is added; D01's CI check is unaffected.
+- `internal/store` gains: the `Config` version-dispatch codec (frozen key lists and frozen struct types, one set per shipped version), the `Order` codec (`DisallowUnknownFields`, no version), and the `seed` length check — this is #317/#318's "the codec, round-tripped over every field" line in the M3 tracking issue.
+- Every future `Config` field addition is a version bump with a frozen migration, not a silent shape change; every future `Order` field addition ships with a frozen pre-existing fixture proving old rows still fold correctly.
+- The round-trip property (arbitrary `decode(encode(x)) == x`, plus `decode(frozen fixture) == expected`) becomes a required M3 test, not an incidental one — it is the thing #328's golden-fixture exit demonstration and #330's `--rebuild` byte-identity exit demonstration both rest on.
+- Reversible, but not cheap: the enum string encoding and the `Config` version scheme both become part of what a real database row means the moment the first match is persisted under them. Changing either after that point is itself a version bump with a migration, exactly the machinery this decision mandates for every other future change.
