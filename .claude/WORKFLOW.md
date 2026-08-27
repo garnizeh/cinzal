@@ -187,6 +187,24 @@ milestone tracking issue, sync `main`, file anything deferred, and close the
 pass with one summary — what was built, what it took to get through review,
 what landed, what (if anything) is still open.
 
+**The summary also names any harness lesson this pass surfaced** — a gap
+between what a skill claimed and what actually happened, a rule that only
+lived in an agent's memory instead of the skill file, a check that turned
+out to need a real command instead of "read it back" or "eyeball it." Naming
+it in the summary without fixing it is how the same gap gets rediscovered on
+the next task instead of the one after that. **Fix it the same pass, tracked
+like everything else here:** file a plain issue for it — no GDD/RFC spec
+anchor, since a harness/process fix isn't about game content and doesn't
+have one; every other field in CONTRIBUTING's "what every issue must carry"
+table still applies — then land the fix as its **own follow-up PR closing
+that issue**, never bundled into the task's own PR, since a content change
+and a process fix are different things reviewed for different reasons (the
+precedent already in use: #368's Postgres fix and #370's workflow fix landed
+as two PRs, not one — #370 itself should have had an issue behind it and did
+not, which is the gap this paragraph closes). This repeats for as long as a
+pass keeps surfacing gaps — there is no cap on how many harness-fix issues
+and PRs one task's pass produces, only on bundling them with the content PR.
+
 ---
 
 ## The principle underneath all of it
@@ -241,6 +259,7 @@ Most sessions do not start at Intake. Locate yourself by what exists:
 
 | What you have | Enter at |
 |---|---|
+| No issue number — "start next issue" was said | `issue-intake` §0, which picks one (harness issues first, then the current milestone's next unblocked row) |
 | An issue number and nothing else | `issue-intake` |
 | A brief, no edits yet | `task-plan` |
 | A plan, no diff | the matching Execute skill |
