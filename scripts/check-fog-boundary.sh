@@ -21,6 +21,15 @@
 # from a package you do not import directly, so a direct-import check is exactly
 # congruent with the property §3 wants.
 #
+# That congruence has a precondition this header did not use to state: it holds
+# only if every exported function reachable through an ALLOWED import itself
+# returns nothing from a FORBIDDEN package. An import check alone does not give
+# you that for free — internal/match is an allowed import for web, so a
+# rules.MatchState-returning export placed directly in internal/match would let
+# a handler write `state, _, _ := match.Fold(...)` and hold a full match state
+# without ever naming internal/rules. internal/match/fold exists, and is on the
+# FORBIDDEN list below, precisely to keep this precondition true (D49).
+#
 # WHY TEST IMPORTS ARE INCLUDED — the opposite choice from the purity gate.
 #
 # All three of .Imports, .TestImports and .XTestImports are checked. A render
@@ -50,7 +59,15 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # leaving the guarantee to depend on what telemetry.Match's signature
 # happens to require today (D01's own rejected "what does this expose"
 # reasoning).
-FORBIDDEN=("$MODULE/internal/rules" "$MODULE/internal/telemetry")
+#
+# internal/match/fold does not exist yet (it lands with #319) but is listed
+# here in advance: internal/match itself is NOT forbidden — web must import
+# it, per D01 — so any rules.MatchState-returning export placed directly in
+# internal/match would be reachable from web with no forbidden edge to
+# catch it. internal/match/fold is where Fold/FoldMeasured live instead
+# (D49), specifically so this array is what stops web from reaching them,
+# rather than a doc comment in internal/match/doc.go.
+FORBIDDEN=("$MODULE/internal/rules" "$MODULE/internal/telemetry" "$MODULE/internal/match/fold")
 GUARDED="./internal/render/... ./internal/web/..."
 
 fail() { echo "check-fog-boundary: FAIL: $*" >&2; exit 1; }
