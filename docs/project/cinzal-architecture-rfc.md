@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r49 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r50 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -270,6 +270,9 @@
 > - No GDD text change: this is a persistence-and-eligibility correction to D19, not a rule change. Companion doc stays at v2.32.
 >
 > **Changelog r48 → r49** — `TIMESTAMPTZ` normalizes storage, but nothing pinned the session, process, or log timezone around it (issue [#359](https://github.com/garnizeh/cinzal/issues/359), [D55](../decisions/D55-timezone-handling.md))
+>
+> **Changelog r49 → r50** — the stack's Postgres pin was never argued for (issue [#368](https://github.com/garnizeh/cinzal/issues/368))
+> - **§4's stack block named Postgres 16 with no accompanying rationale for that specific major version** — inherited prose from when the RFC was first drafted, never revisited. Corrected to **Postgres 18.6**, the current stable release: nothing in `internal/store` or any decision document depends on a 16-specific behaviour, M3 has not yet built anything against the pinned version (no digest constant, no fixtures, no CI image), and 18 carries roughly two more years of upstream support than 16 (EOL 2030-11 vs 2028-11). A wrong-numeral correction, not a reversed decision — D46's reasoning about *how* the Postgres-backed test layer runs (testcontainers-go, digest-pinning over a floating tag, session-scoped locking) never argued for version 16 over any alternative.
 > - **§7.5 gains a session-timezone pin.** The `*pgxpool.Config` returned by `pgxpool.ParseConfig` sets `ConnConfig.RuntimeParams["timezone"] = "UTC"` before `NewWithConfig`, sent in each connection's own startup packet rather than a per-connection `AfterConnect` round trip — pinning only connections made through this pool config, not a separate `psql` session sharing the same DSN. Defense-in-depth, not a correctness fix for anything reading today's schema: `pgx` v5's binary-protocol `timestamptz` decode already returns a UTC-labeled, instant-correct `time.Time` regardless of the session's negotiated timezone, and no query in RFC §7.2/§8.1 uses a session-timezone-sensitive expression (`date_trunc`, `EXTRACT` of a calendar field, `to_char`, `::date`). The pin closes the gap before a future timezone-sensitive query (a `daily_digest` rollup, D19's deferred fourth email level) can silently inherit whichever Postgres default each environment happens to have.
 > - **§17 gains a `slog` timestamp fix.** `HandlerOptions.ReplaceAttr` forces the emitted time attribute through `.UTC()`, since `slog`'s default handler otherwise timestamps in whatever `Location` the process's `time.Now()` carries.
 > - **§18's Docker image gains `ENV TZ=UTC`**, stated explicitly as a backstop nothing depends on — no new required env var joins `DATABASE_URL`/`MAIL_PROVIDER_KEY`/`BASE_URL`/`SESSION_KEY`/`TRUSTED_PROXY_HOPS`, since no code branches on whether it's set. The actual process-timezone answer is a `.UTC()`-at-format/log discipline, scoped to the one surface where a `time.Time`'s `Location` is observable: Go's comparison operators (`Before`/`After`/`Sub`) and every `pgx` read/write are already `Location`-independent, so §8's `Tick()` deadline check needs no change.
@@ -337,7 +340,7 @@ HTMX 2.x + SSE extension  — interactivity
 sqlc                      — typed queries from SQL
 goose                     — migrations, embedded, run at startup
 pgx/v5                    — Postgres driver
-Postgres 16
+Postgres 18.6
 
 Deferred to RFC-002:
 Go→WASM                   — client-side rules
