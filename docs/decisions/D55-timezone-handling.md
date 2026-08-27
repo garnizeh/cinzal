@@ -105,15 +105,19 @@ development rendering in the connecting operator's own local default,
 which is a debugging-friction cost paid continuously, not a one-time one.
 
 **Session pin — B: pin every `pgx` connection's session timezone to UTC.**
-One field, `pgconn.Config.RuntimeParams["timezone"] = "UTC"` (exposed
-through `pgxpool.ParseConfig`'s returned `*pgxpool.Config`), sent in the
-connection's own startup packet — no extra round trip, unlike an
-`AfterConnect` hook issuing `SET TIME ZONE 'UTC'` as a separate statement
-per new connection. Costs one line at pool construction, closes the latent
-gap before it can open, and makes `psql $DATABASE_URL` during development
-show the same values the application computes with, at no cost given
+One field, `config.ConnConfig.RuntimeParams["timezone"] = "UTC"` on the
+`*pgxpool.Config` `pgxpool.ParseConfig` returns — `RuntimeParams` lives on
+the nested `pgconn.Config` (`pgxpool.Config.ConnConfig`), not on
+`pgxpool.Config` itself — sent in the connection's own startup packet, no
+extra round trip, unlike an `AfterConnect` hook issuing `SET TIME ZONE
+'UTC'` as a separate statement per new connection. Costs one line at pool
+construction and closes the latent gap before it can open, at no cost given
 Option A's finding that nothing currently depends on the *unpinned* default
-either.
+either. **It pins only connections made through this specific pool config**
+— a `psql $DATABASE_URL` session, or any other client connecting with the
+same DSN, opens its own connection with its own session default and is
+unaffected; Option A's debugging-friction cost for ad hoc `psql` inspection
+stands regardless of which session option is chosen here.
 
 **Process timezone — A: require `TZ=UTC` in every environment.** Matches a
 common convention (a Dockerfile `ENV TZ=UTC`) and needs no code change
@@ -146,8 +150,8 @@ every project rule needing a linter to be real.
 
 ## Decision
 
-**Session: Option B, pinned via `pgconn.Config.RuntimeParams["timezone"] =
-"UTC"`** on the `pgxpool.Config` #310's pool construction returns from
+**Session: Option B, pinned via `config.ConnConfig.RuntimeParams["timezone"]
+= "UTC"`** on the `*pgxpool.Config` #310's pool construction returns from
 `pgxpool.ParseConfig(databaseURL)`, before `pgxpool.NewWithConfig` is
 called — sent in every connection's own startup packet, not a per-connection
 `AfterConnect` round trip. This closes the latent gap identified above
@@ -177,12 +181,12 @@ silently mislabeling in production specifically — but no code path is
 allowed to depend on it being set, and CI/local dev run with no such
 guarantee, which is the environment the discipline has to hold in anyway.
 
-**`slog`: `HandlerOptions.ReplaceAttr` forces the timestamp to UTC.**
+**`slog`: `HandlerOptions.ReplaceAttr` forces the timestamp to UTC.** The `Kind() == slog.KindTime` guard is load-bearing, not defensive style: a user-supplied attribute keyed `"time"` (the same string as `slog.TimeKey`) reaches this branch too, and `Value.Time()` panics on a `Value` that isn't `KindTime`.
 
 ```go
 handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
     ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
-        if a.Key == slog.TimeKey {
+        if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
             a.Value = slog.TimeValue(a.Value.Time().UTC())
         }
         return a

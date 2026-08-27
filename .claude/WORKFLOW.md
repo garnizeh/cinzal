@@ -38,17 +38,20 @@ at Intake, the default is to run Intake → Execute → Verify → Land through
 `pr-publish` in one continuous pass — read the task, plan it, do it, review
 it until it's clean, publish it as a PR — with no pause between stages to
 ask "should I keep going?" The gate at the end of each stage in this
-document (a closed blocker, a complete diff, a green check, a clean
-`delivery-review`) is what decides readiness to move on, not a check-in.
+document (a closed blocker, a complete diff, a green check — or, for a
+docs-only diff, the documented substitute verification Stage 3 already
+allows — a clean `delivery-review`) is what decides readiness to move on,
+not a check-in.
 
 **Stop and ask only when the answer depends on the user's decision** —
 Stage 1's own test for it: an unknown that would make the work useless if
 guessed wrong, a genuinely ambiguous product or scope call the GDD/RFC don't
 settle, or one of the confirm-first actions below. Everything else —
-brief to plan, plan to diff, diff to green check, green check to open PR —
-is the pipeline doing what it exists for, not a decision point. Landing on
-a red `make check` or an unanswered standing obligation is a bug in the
-work to go fix, not a reason to pause and check in.
+brief to plan, plan to diff, diff to a green check (or its documented
+substitute), that to an open PR — is the pipeline doing what it exists for,
+not a decision point. Landing on a red `make check` with no substitute
+written down, or an unanswered standing obligation, is a bug in the work to
+go fix, not a reason to pause and check in.
 
 `merge-closeout` is the one stage this doesn't reach on its own — merging is
 a separate, explicit ask, gated on a real review having landed, not on
