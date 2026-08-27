@@ -26,6 +26,14 @@ import (
 // pgxpool falls back to one) does not trip it — only actual source-level
 // use of the forbidden substrings does.
 //
+// The bare scheme prefixes "postgres://" and "postgresql://" are exempted
+// as exact-match literals: requireExplicitHost (pool.go) legitimately needs
+// them to recognize a URL-form DSN before validating it has a host, and
+// that recognition check is the opposite of a fallback — it is what makes
+// the fallback impossible. Anything containing "postgres://" as part of a
+// *longer* string (a real host, a full connection string) still trips this,
+// since only an exact match to the allowed set is exempted.
+//
 // This fails closed: an unreadable package directory, a file that fails to
 // parse, or zero .go files found are all test failures, not skips — the
 // same property scripts/check-packages.sh's own header explains for the CI
@@ -37,6 +45,10 @@ func TestNoFallbackDSN(t *testing.T) {
 	}
 
 	forbidden := []string{"postgres://", "localhost"}
+	allowedExact := map[string]bool{
+		"postgres://":   true,
+		"postgresql://": true,
+	}
 	fset := token.NewFileSet()
 	checked := 0
 	for _, e := range entries {
@@ -58,6 +70,9 @@ func TestNoFallbackDSN(t *testing.T) {
 			val, err := strconv.Unquote(lit.Value)
 			if err != nil {
 				val = lit.Value
+			}
+			if allowedExact[val] {
+				return true
 			}
 			for _, needle := range forbidden {
 				if strings.Contains(val, needle) {

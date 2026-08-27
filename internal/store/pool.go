@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"strings"
 	"time"
 
@@ -20,6 +21,25 @@ import (
 // and no 'run without a database' mode." Open therefore rejects an empty
 // DSN itself, before pgxpool ever sees it.
 var ErrEmptyDSN = errors.New("store: DSN is empty")
+
+// ErrDSNMissingHost is returned by Open when cfg.DSN is not a
+// "postgres://" or "postgresql://" URL naming an explicit host, or when it
+// names a libpq service/servicefile.
+//
+// Verified directly against pgx v5.10.0 (internal/store/probe_dsn_test.go
+// during review, not committed): with PGHOST set in the environment,
+// pgxpool.ParseConfig("postgres:///cinzal") and even
+// ParseConfig("postgres://user:pass@/cinzal") both silently resolve to
+// PGHOST's value — a non-empty but hostless DSN reaches the exact ambient
+// fallback ErrEmptyDSN's own doc comment describes, which a bare
+// "is cfg.DSN empty" check does not catch. A "service=" (or "servicefile=")
+// parameter is the same fallback reached a different way: pgx reads a
+// service file and can supply the host, and every other connection detail,
+// from outside the DSN entirely. RFC-001 §18 never names any form but
+// DATABASE_URL, so a non-URL (keyword/value) DSN is rejected outright here
+// rather than hand-parsing libpq's keyword grammar to look for an explicit
+// host= this project has no use for.
+var ErrDSNMissingHost = errors.New("store: DSN has no explicit host")
 
 // The RFC-001 §8.3 numbers this package makes available as named defaults,
 // each quoted verbatim from its own code sample. None of these are applied
@@ -99,8 +119,12 @@ type Store struct {
 // the app pool and the deadline sweeper's own pool (RFC-001 §8.3) are two
 // such calls, not two branches of one.
 func Open(ctx context.Context, cfg Config) (*Store, error) {
-	if strings.TrimSpace(cfg.DSN) == "" {
+	dsn := strings.TrimSpace(cfg.DSN)
+	if dsn == "" {
 		return nil, ErrEmptyDSN
+	}
+	if err := requireExplicitHost(dsn); err != nil {
+		return nil, err
 	}
 
 	pgxCfg, err := pgxpool.ParseConfig(cfg.DSN)
@@ -129,7 +153,11 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 	// the nested pgconn.Config, not on pgxpool.Config itself.
 	pgxCfg.ConnConfig.RuntimeParams["timezone"] = "UTC"
 
-	if stmts := sessionTimeoutStatements(cfg); len(stmts) > 0 {
+	stmts, err := sessionTimeoutStatements(cfg)
+	if err != nil {
+		return nil, err
+	}
+	if len(stmts) > 0 {
 		pgxCfg.AfterConnect = func(ctx context.Context, conn *pgx.Conn) error {
 			// One Exec per statement, not one joined string: pgx's default
 			// QueryExecMode prepares the query (extended protocol), and
@@ -157,21 +185,69 @@ func Open(ctx context.Context, cfg Config) (*Store, error) {
 	return &Store{pool: pool}, nil
 }
 
+// requireExplicitHost rejects a DSN that is not a "postgres://"/"postgresql://"
+// URL naming an explicit host, or that names a libpq service/servicefile —
+// see ErrDSNMissingHost's doc comment for why both are the same ambient
+// fallback RFC-001 §18 rules out. dsn is assumed already trimmed and
+// non-empty.
+func requireExplicitHost(dsn string) error {
+	lower := strings.ToLower(dsn)
+	if strings.Contains(lower, "service=") || strings.Contains(lower, "servicefile=") {
+		return ErrDSNMissingHost
+	}
+	if !strings.HasPrefix(lower, "postgres://") && !strings.HasPrefix(lower, "postgresql://") {
+		return ErrDSNMissingHost
+	}
+
+	u, err := url.Parse(dsn)
+	if err != nil {
+		// Malformed as a URL; let pgxpool.ParseConfig produce the real,
+		// more specific parse error instead of masking it here.
+		return nil
+	}
+	if u.Hostname() == "" {
+		return ErrDSNMissingHost
+	}
+	return nil
+}
+
+// ErrInvalidTimeout is returned by Open when a non-zero LockTimeout,
+// StatementTimeout or IdleInTransactionSessionTimeout is not a whole,
+// positive number of milliseconds.
+//
+// Two failure shapes, both caught here rather than at connection time: a
+// negative duration produces an invalid Postgres setting, and — the
+// non-obvious one — a positive but sub-millisecond duration such as
+// 500*time.Microsecond passes a bare "!= 0" check and then silently
+// truncates to 0 under time.Duration.Milliseconds(), producing
+// "SET lock_timeout = '0ms'" — which *disables* the timeout instead of
+// setting it, the opposite of what a non-zero Config field asked for.
+var ErrInvalidTimeout = errors.New("store: timeout must be zero (disabled) or at least 1ms")
+
 // sessionTimeoutStatements builds one RFC-001 §8.3 SET statement per
-// non-zero timeout field in cfg, in a fixed order. An empty result means
-// Open installs no AfterConnect hook at all.
-func sessionTimeoutStatements(cfg Config) []string {
+// non-zero timeout field in cfg, in a fixed order. An empty, nil-error
+// result means Open installs no AfterConnect hook at all.
+func sessionTimeoutStatements(cfg Config) ([]string, error) {
+	settings := []struct {
+		name string
+		d    time.Duration
+	}{
+		{"lock_timeout", cfg.LockTimeout},
+		{"statement_timeout", cfg.StatementTimeout},
+		{"idle_in_transaction_session_timeout", cfg.IdleInTransactionSessionTimeout},
+	}
+
 	var stmts []string
-	if cfg.LockTimeout != 0 {
-		stmts = append(stmts, fmt.Sprintf("SET lock_timeout = '%dms'", cfg.LockTimeout.Milliseconds()))
+	for _, s := range settings {
+		if s.d == 0 {
+			continue
+		}
+		if s.d < time.Millisecond {
+			return nil, fmt.Errorf("%w: %s = %s", ErrInvalidTimeout, s.name, s.d)
+		}
+		stmts = append(stmts, fmt.Sprintf("SET %s = '%dms'", s.name, s.d.Milliseconds()))
 	}
-	if cfg.StatementTimeout != 0 {
-		stmts = append(stmts, fmt.Sprintf("SET statement_timeout = '%dms'", cfg.StatementTimeout.Milliseconds()))
-	}
-	if cfg.IdleInTransactionSessionTimeout != 0 {
-		stmts = append(stmts, fmt.Sprintf("SET idle_in_transaction_session_timeout = '%dms'", cfg.IdleInTransactionSessionTimeout.Milliseconds()))
-	}
-	return stmts
+	return stmts, nil
 }
 
 // Close closes the pool and releases every connection. It is safe to call on

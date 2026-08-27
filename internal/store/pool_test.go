@@ -146,7 +146,10 @@ func TestSessionTimeoutStatements(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got := sessionTimeoutStatements(tt.cfg)
+			got, err := sessionTimeoutStatements(tt.cfg)
+			if err != nil {
+				t.Fatalf("sessionTimeoutStatements() unexpected error: %v", err)
+			}
 			if len(got) != len(tt.want) {
 				t.Fatalf("sessionTimeoutStatements() = %v, want %v", got, tt.want)
 			}
@@ -154,6 +157,89 @@ func TestSessionTimeoutStatements(t *testing.T) {
 				if got[i] != tt.want[i] {
 					t.Errorf("sessionTimeoutStatements()[%d] = %q, want %q", i, got[i], tt.want[i])
 				}
+			}
+		})
+	}
+}
+
+// TestSessionTimeoutStatementsRejectsInvalidDurations covers the case a bare
+// "!= 0" check misses: a positive but sub-millisecond duration truncates to
+// "0ms" under time.Duration.Milliseconds(), which *disables* the Postgres
+// timeout instead of setting it — the opposite of what a non-zero Config
+// field asked for. A negative duration is rejected the same way.
+func TestSessionTimeoutStatementsRejectsInvalidDurations(t *testing.T) {
+	tests := []struct {
+		name string
+		cfg  Config
+	}{
+		{"negative lock timeout", Config{LockTimeout: -1 * time.Second}},
+		{"sub-millisecond lock timeout", Config{LockTimeout: 500 * time.Microsecond}},
+		{"negative statement timeout", Config{StatementTimeout: -1 * time.Millisecond}},
+		{"sub-millisecond idle-in-transaction timeout", Config{IdleInTransactionSessionTimeout: 1 * time.Microsecond}},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stmts, err := sessionTimeoutStatements(tt.cfg)
+			if !errors.Is(err, ErrInvalidTimeout) {
+				t.Fatalf("sessionTimeoutStatements(%+v) error = %v, want ErrInvalidTimeout", tt.cfg, err)
+			}
+			if stmts != nil {
+				t.Errorf("sessionTimeoutStatements(%+v) = %v, want nil on error", tt.cfg, stmts)
+			}
+		})
+	}
+}
+
+// TestOpenRejectsMissingHost is the connection-string half of the
+// no-fallback-DSN guarantee: a DSN that parses successfully but omits an
+// explicit host resolves ambiently (PGHOST, a service file, or a platform
+// default) rather than failing — verified directly against pgx v5.10.0
+// during review. requireExplicitHost must reject every DSN shape that
+// reaches that fallback, not just the wholly-empty one ErrEmptyDSN already
+// covers.
+func TestOpenRejectsMissingHost(t *testing.T) {
+	tests := []struct {
+		name string
+		dsn  string
+	}{
+		{"hostless URL, no auth", "postgres:///cinzal"},
+		{"hostless URL, with auth", "postgres://user:placeholder@/cinzal"},
+		{"keyword form, even with an explicit host=", "host=myhost dbname=cinzal"},
+		{"keyword form, no host at all", "dbname=cinzal"},
+		{"bare service reference", "service=myservice"},
+		{"service query param on an otherwise-valid URL", "postgres://user:placeholder@realhost/cinzal?service=myservice"},
+		{"servicefile query param on an otherwise-valid URL", "postgres://user:placeholder@realhost/cinzal?servicefile=/tmp/svc.conf"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s, err := Open(context.Background(), Config{DSN: tt.dsn})
+			if s != nil {
+				t.Errorf("Open(%q) returned a non-nil *Store", tt.dsn)
+			}
+			if !errors.Is(err, ErrDSNMissingHost) {
+				t.Fatalf("Open(%q) error = %v, want ErrDSNMissingHost", tt.dsn, err)
+			}
+		})
+	}
+}
+
+// TestOpenAcceptsExplicitHostRegardlessOfEnvironment is
+// TestOpenRejectsMissingHost's positive counterpart: a DSN that does name a
+// host must not be rejected merely because PGHOST also happens to be set to
+// something else in the environment — requireExplicitHost checks the DSN's
+// own text, not ambient state.
+func TestOpenAcceptsExplicitHostRegardlessOfEnvironment(t *testing.T) {
+	t.Setenv("PGHOST", "env-supplied-host-should-be-irrelevant")
+
+	tests := []string{
+		"postgres://user:placeholder@realhost/cinzal",
+		"postgres://user:placeholder@[::1]/cinzal",
+		"postgresql://user:placeholder@realhost:5433/cinzal",
+	}
+	for _, dsn := range tests {
+		t.Run(dsn, func(t *testing.T) {
+			if err := requireExplicitHost(dsn); err != nil {
+				t.Errorf("requireExplicitHost(%q) = %v, want nil", dsn, err)
 			}
 		})
 	}
