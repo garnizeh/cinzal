@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r47 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r48 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -260,6 +260,14 @@
 > - **D16's column, type, default, and update point (`POST /m/{id}/order`, never a `GET`) are unchanged** — only the arithmetic and its trigger condition move.
 > - **§7.2's rebuild expression corrected.** D16's `COALESCE((SELECT MAX(round) FROM orders …) − 1, 0)` was only ever correct because the old `GREATEST` update was a pure function of the latest submitted round. The new update is a genuine ordered fold over distinct submitted rounds, so the rebuild is now stated as replaying that same fold — ascending over a seat's distinct human-submitted rounds, applying `cursor = LEAST(cursor + 1, round − 1)` from `cursor = 0` — rather than a single aggregate, which would silently overshoot for any seat that ever had a gap.
 > - No GDD text change: this is a persistence-and-timing correction, not a rule change. Companion doc stays at v2.32.
+>
+> **Changelog r47 → r48** — `match_players` holds bot and email-less guest seats D19's columns and enqueue predicate never accounted for (issue [#350](https://github.com/garnizeh/cinzal/issues/350), [D53](../decisions/D53-mail-eligible-seats.md))
+> - **§13.1's enqueue predicate gains a join and an eligibility check, no new `match_players` column.** Every match-scoped template's enqueue query adds `JOIN users u ON u.id = mp.user_id` and `AND u.email IS NOT NULL`. The inner join alone excludes a bot seat (`user_id IS NULL`, §14.2 — no `users` row has a `NULL` id, so the join contributes no row regardless of any other predicate); the column check excludes a guest seat that hasn't bound an email (§12.1). `autopilot` keeps D19's exemption from `email_pref` but gains this eligibility guard — it is a physical fact ("does an address exist"), not a preference, and no exemption can route mail to an address that doesn't exist. `otp` is untouched: it has no `match_id` and never joins `match_players`/`users` by this path.
+> - **`match_players.email_pref`/`unsubscribe_token_hash` are unchanged from D19.** The token stays `NOT NULL`, minted unconditionally at seat creation regardless of whether an address is known yet — cheaper than branching seat creation on address availability, and it means a guest who later binds an email (§12.1) needs no reseed of either column: the row already carries both, and the next enqueue's join simply starts finding `u.email IS NOT NULL` true.
+> - **New column, §7.2: `users.email_suppressed_at TIMESTAMPTZ NULL`.** Set only from the unsubscribe confirmation page's human-rendered path — never the automated RFC 8058 one-click body, which is fixed to exactly `List-Unsubscribe=One-Click` and cannot carry the extra signal — via a second control on that page, "stop all Cinzal mail," authorized the same way the page's existing per-match button already is (the seat-scoped query token). Checked in the same `users` join as eligibility, for every match-scoped template; `autopilot` and `otp` are exempt from it for the identical reason D19 exempts them from `email_pref` — both are about a player's ability to continue playing or log in, not about match content a volume preference governs.
+> - **§11's route table**: `POST /m/{id}/unsubscribe`'s human-rendered confirmation page gains the second form action described above; the automated one-click path is unchanged and structurally cannot reach it.
+> - **§19's security table**: the "Email unsubscribe" row now names both mutations the confirmation page's token-authorized path can make — per-match `email_pref = 'none'`, or all-matches `email_suppressed_at` — under the same authorization D19 already established; the CSRF row's named exception is unchanged.
+> - No GDD text change: this is a persistence-and-eligibility correction to D19, not a rule change. Companion doc stays at v2.32.
 
 ---
 
@@ -739,7 +747,10 @@ This falls out of the determinism requirement rather than being an independent c
 
 ```sql
 -- identity
-users(id, email UNIQUE NULL, display_name, is_guest, created_at)
+users(id, email UNIQUE NULL, display_name, is_guest, created_at,
+      email_suppressed_at TIMESTAMPTZ NULL)  -- all-matches unsubscribe (D53); set only from the
+                                              -- unsubscribe confirmation page's human path, never the
+                                              -- automated one-click body (fixed to a narrower, per-match effect)
 auth_codes(id, email, code_hash, expires_at, consumed_at, attempts)
 sessions(id PK, user_id, expires_at, created_at, last_seen_at)
 
@@ -827,7 +838,7 @@ outbox(id, to_email, template, payload JSONB, attempts,
 
 `board_notes` is the same kind of exception, for the same reason — a pin or note leaves no trace in `orders`, so there is nothing to rebuild it from. It is also seat-private in a way nothing else in this schema is: every query against it is scoped to `(match_id, seat)` with `seat` taken from the session, never from a path or form parameter, and no query the store package exposes can return another seat's rows. See [D18](../decisions/D18-board-notes-storage.md).
 
-`match_players.email_pref` and `.unsubscribe_token_hash` are likewise directly-written state, not derived — nothing in `orders` determines a preference or a token, so `cmd/replay --rebuild`'s scope is unaffected. The unsubscribe token is generated once, at seat creation, and never rotated; unlike `invite_links.token_hash` it is never looked up by value alone (the row is already found by `(match_id, seat)`), so it carries no `UNIQUE` constraint. See [D19](../decisions/D19-email-preference-storage.md).
+`match_players.email_pref` and `.unsubscribe_token_hash` are likewise directly-written state, not derived — nothing in `orders` determines a preference or a token, so `cmd/replay --rebuild`'s scope is unaffected. The unsubscribe token is generated once, at seat creation, and never rotated; unlike `invite_links.token_hash` it is never looked up by value alone (the row is already found by `(match_id, seat)`), so it carries no `UNIQUE` constraint. See [D19](../decisions/D19-email-preference-storage.md). Neither column alone makes a seat mail-eligible — a bot seat (`user_id IS NULL`) and a guest seat with no bound email both get the same `email_pref` default and the same minted token, and it is §13.1's enqueue join against `users.email`, not anything stored on `match_players`, that keeps mail from being enqueued for either. See [D53](../decisions/D53-mail-eligible-seats.md).
 
 `rate_limits` is not match state at all, derived or otherwise — it carries nothing about any match, has no order-log equivalent, and is entirely out of `cmd/replay`'s scope in either direction. Its rows are also the only ones in this schema meant to disappear on their own: §12.3's cleanup sweep deletes an idle bucket once it's certainly refilled to capacity, which is exactly equivalent to the row never having existed. See [D20](../decisions/D20-rate-limit-storage.md).
 
@@ -1249,7 +1260,10 @@ GET  /m/{id}/events             SSE stream
 GET  /m/{id}/replay             finished only: {seed, config, log} bundle
 GET  /m/{id}/unsubscribe        validates seat+token, renders a confirmation — never mutates (D19)
 POST /m/{id}/unsubscribe        same seat+token in the query string; sets email_pref='none' — the
-                                 List-Unsubscribe-Post target as well as the confirm page's own button (D19)
+                                 List-Unsubscribe-Post target as well as the confirm page's own button (D19).
+                                 The confirmation page's own button alone (never the fixed one-click body,
+                                 which cannot carry this) may instead set users.email_suppressed_at,
+                                 stopping match-scoped mail across every match the seat's user_id has (D53)
 ```
 
 **Fragment discipline.** Every fragment is a templ component taking `PlayerView` and rendering a self-contained `<div id="…">`. The full page render composes the same components. There is exactly one code path per piece of UI, whether it arrives as a page load or a swap.
@@ -1518,8 +1532,12 @@ Two rules, therefore:
 INSERT INTO outbox (…)
 SELECT … FROM matches m
 JOIN match_players mp ON mp.match_id = m.id AND mp.seat = $3
+JOIN users u ON u.id = mp.user_id        -- D53: also excludes bot seats (user_id IS NULL, §14.2) — no
+                                          -- users row has a NULL id, so a bot seat joins to nothing
 WHERE m.id = $1 AND m.round = $2
-  AND mp.email_pref <> 'none'   -- D19: deadline_soon is filtered out entirely under 'none'
+  AND u.email IS NOT NULL             -- D53: eligibility — a guest with no bound email joins but fails here
+  AND u.email_suppressed_at IS NULL   -- D53: the all-matches unsubscribe
+  AND mp.email_pref <> 'none'         -- D19: deadline_soon is filtered out entirely under 'none'
   AND NOT EXISTS (SELECT 1 FROM orders o
                   WHERE o.match_id = m.id AND o.round = m.round AND o.seat = $3)
 ON CONFLICT DO NOTHING;
@@ -1528,6 +1546,10 @@ ON CONFLICT DO NOTHING;
 And **the worker re-checks time-sensitive templates at send time**, discarding a queued `deadline_soon` whose round has since closed or been submitted. Anything that asserts a fact about *current* state gets this treatment; `round_resolved` and `match_finished` describe the past and never need it.
 
 **Every match-scoped template's own enqueue path gains the analogous `email_pref` predicate (D19)** — shown above for `deadline_soon` as `mp.email_pref <> 'none'`; `round_resolved`'s enqueue (fired from `Tick()`, not the sweeper) and `match_finished`'s use the same join, filtered per D19's template-to-level mapping rather than a flat `<> 'none'`. A second, independent check re-applies that predicate at send time for every match-scoped template — not a widening of the content re-check just above, which stays scoped to time-sensitive templates: that check asks whether the asserted fact is still true, this one asks whether the recipient still wants any mail for this match at all, and the two compose without one substituting for the other. `autopilot` and `otp` are exempt from the preference check entirely — D19.
+
+**Every match-scoped template's own enqueue path also gains the `users` join and D53's eligibility predicate, `u.email IS NOT NULL`**, shown above alongside `email_pref`. This one is never exempted, `autopilot` included: a bot seat can never reach Autopilot (§8.2 already requires `user_id IS NOT NULL`), but a synchronous guest seat that never bound an email and later meets the two-missed-deadline condition has no address to put in `to_email`, and no exemption changes that. `otp` joins neither table — it is keyed directly by the email address its own request supplied, never by `match_players`.
+
+**`u.email_suppressed_at IS NULL` (D53's all-matches unsubscribe) is a second, separate predicate at the same enqueue call site, and it follows `email_pref`'s exemption pattern, not eligibility's.** It applies to every match-scoped template *except* `autopilot`, exactly as `email_pref` does and for the identical reason: a player who clicked "stop all Cinzal mail" has still asked, by that same click, to keep hearing about a seat going to Autopilot — global suppression is a wider preference, not a different kind of fact than `email_pref`, and `otp` is untouched by it for the same reason it's untouched by `email_pref`. The send-time re-check that §13.1 already runs for `email_pref` on every match-scoped template extends the same way: it re-checks `email_suppressed_at` too, for every template except `autopilot`, composing with the existing `email_pref` re-check rather than replacing it.
 
 **On the Autopilot case specifically:** a player who returns shortly after the `autopilot` mail was queued still receives it, and that is correct — it did happen, and the message tells them how to come back. It describes a past event, so it is not re-checked. What must not happen is the mail firing *without* the round having advanced, and that is guaranteed by the shared transaction in §7.4 rather than by any constraint.
 
@@ -1785,7 +1807,7 @@ Fly.io, Railway, or a VM with systemd all work. Two app instances behind a load 
 | CSRF | Same-site cookies plus a token on every mutating form. **One named exception:** `POST /m/{id}/unsubscribe` (D19) — a mail client's `List-Unsubscribe-Post` carries no session cookie and no form token to check, so that route is authorized by the seat-scoped query token instead, accepted only when the body is exactly `List-Unsubscribe=One-Click`; the confirmation page's own button still goes through the ordinary session+CSRF-token form like every other mutation |
 | Invite links | 32-byte `crypto/rand` token, SHA-256 hash stored and indexed, raw token never persisted (D17); revocation flags the link (`revoked_at`), never the match; admission-only, so concurrent joins on one link resolve as the ordinary lobby-capacity race, not a link-specific one |
 | Board notes | Fetched only by `(match_id, seat)` with `seat` from the session, never a path or query parameter — no query the store package exposes can return another seat's notes (D18) |
-| Email unsubscribe | 32-byte `crypto/rand` token, SHA-256 hash stored, generated once at seat creation; row found by `(match_id, seat)` first, so the hash is never a standalone lookup key, unlike invite links; `GET` validates and renders only, `POST` is the only write path (D19) |
+| Email unsubscribe | 32-byte `crypto/rand` token, SHA-256 hash stored, generated once at seat creation for every seat regardless of whether it has a deliverable address yet; row found by `(match_id, seat)` first, so the hash is never a standalone lookup key, unlike invite links; `GET` validates and renders only, `POST` is the only write path — either per-match (`email_pref = 'none'`, D19) or, from the confirmation page's own button only, all-matches (`users.email_suppressed_at`, D53) |
 | Timing | Constant-time comparison on OTP hashes and session tokens |
 
 ---
