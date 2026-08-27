@@ -84,6 +84,15 @@ else states this revision number."
 New `EventKind`? Confirm it **appends at the end of the `iota` block** — a
 mid-block insert shifts later ordinals into `Anchor.Kind`.
 
+Touched `docs/project/cinzal-gdd.md` or `docs/project/cinzal-architecture-rfc.md`?
+Confirm the changelog entry and the revision line at the top (`v2.xx` / `rNN`)
+actually moved, not just the prose below it — `docs-change` mandates the bump
+on the way in, this is the check that catches it if it didn't land. A
+substantive body edit with a stale header is the same silent-drift failure
+this section exists to catch, just inside one document instead of across
+several, and it applies whether the PR's own kind is `docs-change` or a task
+that edited the spec first per Stage 2's "documents change first" rule.
+
 ## 5. Self-consistency — does the new prose say what the new decision says?
 
 When a PR carries both a `docs/decisions/Dnn-*.md` and the RFC/GDD prose it
