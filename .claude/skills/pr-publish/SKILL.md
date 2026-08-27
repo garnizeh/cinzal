@@ -62,6 +62,17 @@ Fixes #<n>
 🤖 Generated with [Claude Code](https://claude.com/claude-code)
 ```
 
+**No manual line-wrap inside a paragraph or bullet.** One physical line per
+paragraph, per bullet — let the renderer wrap it, never a hand-inserted
+newline at ~80 columns. GitHub (and `git log`) render a soft-wrapped
+paragraph as the intended block; a paragraph hard-wrapped in the source
+renders as broken, ragged lines instead. This has recurred more than once —
+write the body as long single lines, then read it back rendered (`rtk gh pr
+view <n> --json body --jq .body` won't show the rendering; check the PR page
+itself, or at minimum eyeball the raw text for embedded `\n` inside what
+should be one sentence) before publishing. Tables and code blocks are
+exempt — they need their own literal line breaks.
+
 **The literal `Fixes #<n>` line is what auto-closes the issue.** It has been
 missing at creation and dropped by a later edit — both left the issue open after
 merge. Put it in, and verify it is still there after any body edit.
