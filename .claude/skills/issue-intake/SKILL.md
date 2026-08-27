@@ -128,6 +128,11 @@ spec anchor and no demonstrable acceptance criterion will not survive review.
 Out-of-scope findings from a code review get filed too — a reply saying
 "pre-existing" is not enough on its own; track it as a real issue and link it.
 
+**No manual line-wrap inside a paragraph or bullet** — one physical line per
+paragraph, same rule `pr-publish` states for PR bodies, and it has already
+been violated here too (#368, 2026-08-27). Run `pr-publish`'s mechanical
+check against `/tmp/issue.md` before `gh issue create`, not an eyeball read.
+
 ```bash
 rtk gh issue create --title "<area>: <what>" --body-file /tmp/issue.md --label task
 ```

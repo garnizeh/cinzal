@@ -66,12 +66,28 @@ Fixes #<n>
 paragraph, per bullet — let the renderer wrap it, never a hand-inserted
 newline at ~80 columns. GitHub (and `git log`) render a soft-wrapped
 paragraph as the intended block; a paragraph hard-wrapped in the source
-renders as broken, ragged lines instead. This has recurred more than once —
-write the body as long single lines, then read it back rendered (`rtk gh pr
-view <n> --json body --jq .body` won't show the rendering; check the PR page
-itself, or at minimum eyeball the raw text for embedded `\n` inside what
-should be one sentence) before publishing. Tables and code blocks are
-exempt — they need their own literal line breaks.
+renders as broken, ragged lines instead. This has recurred more than
+once — "eyeball the raw text" is not enough, it has already failed twice.
+Run a mechanical check before every publish or body edit, not just a read-through:
+
+```bash
+rtk python3 -c "
+lines = open('/tmp/pr-body.md').read().split(chr(10))
+run = maxrun = 0
+for l in lines:
+    if l.strip() and 60 <= len(l) <= 100 and not l.strip().startswith(('-', '*', '#', '\`\`\`')):
+        run += 1; maxrun = max(maxrun, run)
+    else:
+        run = 0
+print('longest wrapped-looking run:', maxrun, '(3+ means still wrapped)')
+"
+```
+
+A result of 3 or more means the file is still hard-wrapped — fix it before
+`gh pr create`/`gh pr edit` ever runs, not after. Tables and code blocks are
+exempt — they need their own literal line breaks, and will trip this
+heuristic harmlessly if they happen to fall in that length range; use
+judgement on those, not the raw number.
 
 **The literal `Fixes #<n>` line is what auto-closes the issue.** It has been
 missing at creation and dropped by a later edit — both left the issue open after
