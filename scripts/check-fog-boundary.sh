@@ -30,6 +30,33 @@
 # without ever naming internal/rules. internal/match/fold exists, and is on the
 # FORBIDDEN list below, precisely to keep this precondition true (D49).
 #
+# WHAT "TEACH THIS SCRIPT TO PARSE THEM" TURNED OUT TO MEAN (D54).
+#
+# D46 puts //go:build integration on every Integration- and Concurrency-layer
+# test file, and states plainly that the tagged set grows to include
+# internal/web once M5 builds the HTTP layer — squarely inside GUARDED. Under
+# the default build configuration those files are exactly the IgnoredGoFiles
+# this script already refuses to be blind about, and D46 is right that the
+# tests belong there.
+#
+# The fix is not a bespoke import parser: go list itself can enumerate a
+# package's imports under a build configuration that includes the tag, so the
+# mechanism this whole script already trusts is asked twice instead of once —
+# under the default configuration, and under every other build tag set this
+# repository actually uses — rather than reimplementing what go list already
+# does. BUILD_TAG_SETS below is that explicit allow-list; a file gated by a
+# tag not named there is never compiled under ANY entry, so it still fails
+# IgnoredGoFiles exactly as before. That is deliberate — this is a list of
+# known configurations to inspect, not a blanket "-tags anything" escape
+# hatch that would defeat the refusal above.
+#
+# A file being ignored under ONE tag set is not itself a failure — that is
+# exactly what a //go:build integration file is supposed to report under the
+# default configuration, since a later entry in BUILD_TAG_SETS is what
+# compiles it instead. The failure condition is the INTERSECTION: a file
+# still ignored under every configured tag set has genuinely never been
+# compiled by anything this script runs, and only that is unchecked.
+#
 # WHY TEST IMPORTS ARE INCLUDED — the opposite choice from the purity gate.
 #
 # All three of .Imports, .TestImports and .XTestImports are checked. A render
@@ -70,45 +97,75 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FORBIDDEN=("$MODULE/internal/rules" "$MODULE/internal/telemetry" "$MODULE/internal/match/fold")
 GUARDED="./internal/render/... ./internal/web/..."
 
+# Every non-default build configuration this repository actually uses (D54).
+# "" is the default configuration; each other entry is a comma-separated tag
+# set passed to `go list -tags`. A file gated by a tag not listed here still
+# hard-fails via IgnoredGoFiles below, in whichever configuration is active
+# when it does — extending this list is the fix, never a silent skip.
+BUILD_TAG_SETS=("" "integration")
+
 fail() { echo "check-fog-boundary: FAIL: $*" >&2; exit 1; }
 
 command -v go >/dev/null 2>&1 || fail "the go toolchain is not on PATH"
+
+violations=""
+inspected=0
 
 # shellcheck disable=SC2086
 pkgs="$(cd "$ROOT" && go list $GUARDED)" \
     || fail "go list $GUARDED did not succeed"
 [ -n "$pkgs" ] || fail "go list $GUARDED reported no packages — nothing was inspected"
 
-violations=""
-
 while IFS= read -r pkg; do
     [ -n "$pkg" ] || continue
 
-    # go list reports only the files selected by the ACTIVE build configuration,
-    # so a forbidden import inside render_windows.go would sail through Linux CI
-    # unseen. Rather than parse constrained files, refuse to be blind.
-    ignored="$(cd "$ROOT" && go list -f '{{join .IgnoredGoFiles " "}}' "$pkg")" \
-        || fail "could not list the build-constrained files of $pkg"
-    if [ -n "$ignored" ]; then
-        fail "$pkg has build-constrained files this gate cannot inspect: $ignored
-                    Their imports are invisible to go list under the active build
-                    configuration. Remove the constraint or teach this script to
-                    parse them - do not leave them unchecked."
+    # go list reports only the files selected by the ACTIVE build
+    # configuration, so a forbidden import inside a constrained file would
+    # sail through unseen under any configuration this loop does not also
+    # run. Rather than parse constrained files by hand, ask go list again
+    # under every configuration BUILD_TAG_SETS names, and only fail on a file
+    # that is ignored under ALL of them — the intersection, not any single
+    # pass's result, since a //go:build integration file is SUPPOSED to be
+    # ignored under the default configuration and inspected under a later one.
+    common_ignored=""
+    first_tags=1
+    for tags in "${BUILD_TAG_SETS[@]}"; do
+        ignored="$(cd "$ROOT" && go list -tags "$tags" -f '{{join .IgnoredGoFiles "\n"}}' "$pkg" | sort -u)" \
+            || fail "could not list the build-constrained files of $pkg under tags '$tags'"
+        if [ "$first_tags" -eq 1 ]; then
+            common_ignored="$ignored"
+            first_tags=0
+        elif [ -n "$common_ignored" ] && [ -n "$ignored" ]; then
+            common_ignored="$(comm -12 <(printf '%s\n' "$common_ignored") <(printf '%s\n' "$ignored"))"
+        else
+            common_ignored=""
+        fi
+    done
+    if [ -n "$common_ignored" ]; then
+        fail "$pkg has build-constrained files this gate cannot inspect under any configured tag set: $common_ignored
+                    Their imports are invisible to go list under every entry in
+                    BUILD_TAG_SETS. Add the tag that selects them to
+                    BUILD_TAG_SETS above, or remove the constraint - do not
+                    leave them unchecked."
     fi
 
-    for field in Imports TestImports XTestImports; do
-        imports="$(cd "$ROOT" && go list -f "{{join .$field \"\\n\"}}" "$pkg")" \
-            || fail "could not list the $field of $pkg"
+    for tags in "${BUILD_TAG_SETS[@]}"; do
+        inspected=$((inspected + 1))
 
-        while IFS= read -r imp; do
-            [ -n "$imp" ] || continue
-            for forbidden in "${FORBIDDEN[@]}"; do
-                case "$imp" in
-                    "$forbidden"|"$forbidden"/*)
-                        violations="$violations  $pkg ($field) -> $imp"$'\n' ;;
-                esac
-            done
-        done <<< "$imports"
+        for field in Imports TestImports XTestImports; do
+            imports="$(cd "$ROOT" && go list -tags "$tags" -f "{{join .$field \"\\n\"}}" "$pkg")" \
+                || fail "could not list the $field of $pkg under tags '$tags'"
+
+            while IFS= read -r imp; do
+                [ -n "$imp" ] || continue
+                for forbidden in "${FORBIDDEN[@]}"; do
+                    case "$imp" in
+                        "$forbidden"|"$forbidden"/*)
+                            violations="$violations  $pkg [tags=$tags] ($field) -> $imp"$'\n' ;;
+                    esac
+                done
+            done <<< "$imports"
+        done
     done
 done <<< "$pkgs"
 
@@ -133,4 +190,4 @@ if [ -n "$violations" ]; then
     exit 1
 fi
 
-echo "check-fog-boundary: OK — $(printf '%s\n' "$pkgs" | wc -l | tr -d ' ') guarded packages, no path to internal/rules"
+echo "check-fog-boundary: OK — $inspected package/build-tag pairs across ${#BUILD_TAG_SETS[@]} configuration(s), no path to internal/rules"
