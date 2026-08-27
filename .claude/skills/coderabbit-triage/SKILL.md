@@ -93,16 +93,33 @@ finding against the specs.
 - **Out-of-scope findings become issues.** A reply saying "pre-existing" is not
   enough on its own — file it and link the issue in the reply.
 
-## 4. Fix, push, then reply — in that order, same turn
+## 4. Verify, gate, push, then reply — in that order, same turn
+
+**Before pushing: verify the fix against real behavior, then rerun `make
+check` locally.** §3's verification is about the finding's *premise* — is
+CodeRabbit right that there's a problem; this is about the *fix* — reproduce
+the specific behavior the finding claims (a throwaway probe test, a doc
+lookup, tracing the actual code path) rather than trusting the suggested diff
+or the review's own reasoning at face value, and confirm the full gate suite
+is still green before the commit goes out. This is deliberately **not** a
+re-run of `delivery-review`'s full checklist — that is calibrated for opening
+a PR, and repeating its fan-out/self-consistency/hygiene passes on every small
+fixup would be ceremony, not signal. It is narrower: did you confirm this fix
+actually does what you are about to claim it does, in the reply, to the
+maintainer. Found on PR #366: the missing-host DSN gap (`postgres:///cinzal`
+silently resolving through `PGHOST`) was confirmed with a throwaway probe test
+against pgx's real `ParseConfig` behavior before `pool.go` was ever touched,
+not by pattern-matching CodeRabbit's suggested diff.
 
 **Reply right after pushing the fix. Do not wait for a second review pass
 first** — that gate is for merging, not for replying.
 
 For each finding:
 
-1. Push the fix.
-2. Check whether the finding is still raised against the head.
-3. If not, and you believe the fix is right: **resolve the thread and say *why*
+1. Verify the fix for real, and rerun `make check`.
+2. Push the fix.
+3. Check whether the finding is still raised against the head.
+4. If not, and you believe the fix is right: **resolve the thread and say *why*
    in the reply.** That is your judgement closing it rather than a confirmation,
    and the difference is worth putting on the record.
 
