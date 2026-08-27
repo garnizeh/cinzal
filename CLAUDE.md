@@ -14,7 +14,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```text
 docs/project/cinzal-gdd.md                  — Game Design Document (v2.32)
-docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r49)
+docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r50)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
 docs/decisions/                             — Decision log; D1–D14, D16–D20 and D23–D55 decided
                                               (D15 reclassified as a task, #40); D21–D22 open, block M5/M6
@@ -52,7 +52,7 @@ Before implementing anything: does this leak state past the fog boundary? The RF
 
 ## Planned architecture (specified, not yet implemented)
 
-- **Stack:** Go 1.27.0, `templ`, HTMX 2.x + SSE, `sqlc` + `goose` + `pgx/v5` on Postgres 16. Zero hand-written JS in v1; WASM and rich map interaction deferred to RFC-002 (RFC §4, §10).
+- **Stack:** Go 1.27.0, `templ`, HTMX 2.x + SSE, `sqlc` + `goose` + `pgx/v5` on Postgres 18.6. Zero hand-written JS in v1; WASM and rich map interaction deferred to RFC-002 (RFC §4, §10).
 - **State model:** event sourcing, no snapshots — `state = fold(Resolve, initial(seed, cfg), orderLog)`. The order log is the only source of truth; `events`/`match_summary` are rebuildable caches, never authority (RFC §7.1–7.3).
 - **Determinism:** `seed + order log` must reproduce a match forever. Avoid: map-range order, floats, `time.Now()`, concurrency inside `Resolve` (RFC §6.3). All RNG draws go through one seeded `*RNG` with a consumption table (RFC §6.4) — conditional/early-terminated draws must stay lazy or replays desync.
 - **Round tick:** one `Tick()` guarded by `SELECT ... FOR UPDATE`, triggered by full submission or a deadline sweeper — no broker, no queue (RFC §8). Bot orders generate inside the tick, never ahead of it.
