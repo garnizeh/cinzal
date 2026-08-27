@@ -31,6 +31,31 @@ silently.
 
 ---
 
+## Running it end to end
+
+The four stages are not four approval gates. Once a work item is classified
+at Intake, the default is to run Intake → Execute → Verify → Land through
+`pr-publish` in one continuous pass — read the task, plan it, do it, review
+it until it's clean, publish it as a PR — with no pause between stages to
+ask "should I keep going?" The gate at the end of each stage in this
+document (a closed blocker, a complete diff, a green check, a clean
+`delivery-review`) is what decides readiness to move on, not a check-in.
+
+**Stop and ask only when the answer depends on the user's decision** —
+Stage 1's own test for it: an unknown that would make the work useless if
+guessed wrong, a genuinely ambiguous product or scope call the GDD/RFC don't
+settle, or one of the confirm-first actions below. Everything else —
+brief to plan, plan to diff, diff to green check, green check to open PR —
+is the pipeline doing what it exists for, not a decision point. Landing on
+a red `make check` or an unanswered standing obligation is a bug in the
+work to go fix, not a reason to pause and check in.
+
+`merge-closeout` is the one stage this doesn't reach on its own — merging is
+a separate, explicit ask, gated on a real review having landed, not on
+publishing having happened.
+
+---
+
 ## Stage 1 — Intake
 
 **Receives:** an issue number, or a description of untracked work.
@@ -109,7 +134,7 @@ verification.
 | Skill | Gate before it |
 |---|---|
 | `delivery-review` | Read the whole diff; walk all five standing obligations; ask the fog question in writing |
-| `pr-publish` | The user has agreed to publish. The body **is** the commit message. `Fixes #<n>` is present, literally |
+| `pr-publish` | `delivery-review` came back clean — that is the approval to publish, no separate one needed. The body **is** the commit message. `Fixes #<n>` is present, literally |
 | `coderabbit-triage` | Every finding fixed or answered — **including the ones that live only in the review body** |
 | `merge-closeout` | A real review has landed, and no finding is still raised against the head |
 
@@ -141,17 +166,22 @@ skipped check is written down as skipped rather than counted as passed.
 
 - **`rtk` prefixes every shell command** — `git`, `gh`, `make`, everything
   chained with `&&`. It passes through transparently where it has no filter.
-- **Everything committed is English** — code, comments, docs, commit messages,
-  PR and issue text — whatever language the request came in. Conversation with
-  the user is not.
+- **Everything is English** — code, comments, docs, commit messages, PR and
+  issue text, and replies to the user — whatever language the request came
+  in (CLAUDE.md). The one exception is the bilingual trigger phrases in
+  `.claude/skills/*/SKILL.md` frontmatter, matching what the maintainer
+  actually types.
 - **One task = one PR = one commit on `main`.** `git bisect` is the diagnostic
   tool when the determinism check fires weeks later, and it only works if every
   commit is coherent and buildable alone.
 - **Read the changelog before trusting a spec section.** Later entries correct
   earlier ones.
-- **Confirm before irreversible or outward-facing actions** — pushing a branch,
-  opening a PR, merging, editing an issue. Approval on one does not carry to the
-  next.
+- **Confirm before actions outside the pipeline's own shape** — merging (a
+  separate, explicit ask per Stage 4), force-pushing, deleting a branch,
+  pushing straight to `main`, or editing/closing an issue the current task
+  isn't the one mandated to touch. Pushing your own feature branch and
+  opening its PR are the normal output of `pr-publish`, not on this list —
+  see "Running it end to end" above.
 - **Report faithfully.** Failed tests get quoted. Skipped steps get named. Done
   and verified gets stated plainly without hedging.
 
