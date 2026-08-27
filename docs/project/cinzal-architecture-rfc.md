@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r48 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r49 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -268,6 +268,12 @@
 > - **§11's route table**: `POST /m/{id}/unsubscribe`'s human-rendered confirmation page gains the second form action described above; the automated one-click path is unchanged and structurally cannot reach it.
 > - **§19's security table**: the "Email unsubscribe" row now names both mutations the confirmation page's token-authorized path can make — per-match `email_pref = 'none'`, or all-matches `email_suppressed_at` — under the same authorization D19 already established; the CSRF row's named exception is unchanged.
 > - No GDD text change: this is a persistence-and-eligibility correction to D19, not a rule change. Companion doc stays at v2.32.
+>
+> **Changelog r48 → r49** — `TIMESTAMPTZ` normalizes storage, but nothing pinned the session, process, or log timezone around it (issue [#359](https://github.com/garnizeh/cinzal/issues/359), [D55](../decisions/D55-timezone-handling.md))
+> - **§7.5 gains a session-timezone pin.** The `*pgxpool.Config` returned by `pgxpool.ParseConfig` sets `ConnConfig.RuntimeParams["timezone"] = "UTC"` before `NewWithConfig`, sent in each connection's own startup packet rather than a per-connection `AfterConnect` round trip — pinning only connections made through this pool config, not a separate `psql` session sharing the same DSN. Defense-in-depth, not a correctness fix for anything reading today's schema: `pgx` v5's binary-protocol `timestamptz` decode already returns a UTC-labeled, instant-correct `time.Time` regardless of the session's negotiated timezone, and no query in RFC §7.2/§8.1 uses a session-timezone-sensitive expression (`date_trunc`, `EXTRACT` of a calendar field, `to_char`, `::date`). The pin closes the gap before a future timezone-sensitive query (a `daily_digest` rollup, D19's deferred fourth email level) can silently inherit whichever Postgres default each environment happens to have.
+> - **§17 gains a `slog` timestamp fix.** `HandlerOptions.ReplaceAttr` forces the emitted time attribute through `.UTC()`, since `slog`'s default handler otherwise timestamps in whatever `Location` the process's `time.Now()` carries.
+> - **§18's Docker image gains `ENV TZ=UTC`**, stated explicitly as a backstop nothing depends on — no new required env var joins `DATABASE_URL`/`MAIL_PROVIDER_KEY`/`BASE_URL`/`SESSION_KEY`/`TRUSTED_PROXY_HOPS`, since no code branches on whether it's set. The actual process-timezone answer is a `.UTC()`-at-format/log discipline, scoped to the one surface where a `time.Time`'s `Location` is observable: Go's comparison operators (`Before`/`After`/`Sub`) and every `pgx` read/write are already `Location`-independent, so §8's `Tick()` deadline check needs no change.
+> - No GDD text change: this is a persistence-and-observability decision with no game-rule content. Companion doc stays at v2.32.
 
 ---
 
@@ -926,6 +932,8 @@ func Migrate(ctx context.Context, db *sql.DB) error {
 **The advisory lock is not optional.** Two instances booting simultaneously after a deploy will otherwise both try to apply the same migration, and goose's own version table will not save you from a partially-applied DDL. The lock costs one line and removes the failure entirely.
 
 The process refuses to serve traffic until migration completes, and exits non-zero on failure so the orchestrator restarts rather than serving against a half-migrated schema.
+
+**Session timezone is pinned to UTC (D55).** The `*pgxpool.Config` returned by `pgxpool.ParseConfig(databaseURL)` sets `config.ConnConfig.RuntimeParams["timezone"] = "UTC"` before `pgxpool.NewWithConfig` is called — `RuntimeParams` lives on the nested `pgconn.Config`, not on `pgxpool.Config` itself — carried in each connection's own startup packet, no extra round trip. This pins only connections made through this pool config; a `psql $DATABASE_URL` session or any other client sharing the same DSN opens its own connection with its own session default and is unaffected. This is defense-in-depth rather than a fix for a live bug: `pgx` v5's default binary-protocol decode of `timestamptz` already returns a UTC-labeled, instant-correct `time.Time` regardless of the session's negotiated timezone (session timezone only shapes `timestamptz`'s *text* rendering — `to_char`, `date_trunc`, `EXTRACT` of a calendar field, `::date`, or a bare `SELECT` in `psql` — none of which any query in this schema uses today). The pin exists so a future timezone-sensitive query (D19's deferred `daily_digest` email level, an analytics rollup) inherits UTC rather than whatever each environment's own Postgres default happens to be.
 
 ---
 
@@ -1765,6 +1773,19 @@ Caveat worth writing down: bot play is not human play, and a sweep tells you abo
 
 `slog` to stdout as JSON, with `match_id` and `round` on every game-related line.
 
+**Timestamps are forced to UTC (D55).** `slog`'s handler is constructed with `HandlerOptions.ReplaceAttr` intercepting `slog.TimeKey` and rewriting its value through `.UTC()`, since the default handler otherwise timestamps each record in whatever `Location` the process's `time.Now()` carries at the call site. The `Kind() == slog.KindTime` guard matters: a user-supplied attribute keyed `"time"` (`slog.TimeKey`'s own string value) reaches this branch too, and `Value.Time()` panics on any `Value` that isn't `KindTime`:
+
+```go
+handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+    ReplaceAttr: func(groups []string, a slog.Attr) slog.Attr {
+        if a.Key == slog.TimeKey && a.Value.Kind() == slog.KindTime {
+            a.Value = slog.TimeValue(a.Value.Time().UTC())
+        }
+        return a
+    },
+})
+```
+
 **Metrics that matter operationally:** tick duration, **fold duration (p50/p99)**, **fold allocation as a share of heap churn**, outbox depth and age, deadline sweeper lag, **sweeper pool saturation and lock-timeout count**, SSE subscriber count, determinism-check mismatches.
 
 The two fold metrics exist to make §7.3's no-cache decision falsifiable rather than permanent — they are the trigger, and without them the question would be reopened on vibes every few months.
@@ -1780,10 +1801,15 @@ The one alert worth waking someone for is a **determinism-check mismatch**. Ever
 Single static binary, `embed.FS` for templates, static assets, WASM, and migrations. Postgres. That is the entire production topology.
 
 ```text
-docker build → one binary + one image
+docker build → one binary + one image (ENV TZ=UTC)
 env: DATABASE_URL, MAIL_PROVIDER_KEY, BASE_URL, SESSION_KEY, TRUSTED_PROXY_HOPS
 start: migrate (advisory lock) → serve
 ```
+
+`ENV TZ=UTC` is a harmless backstop, not a dependency (D55) — no code path
+branches on the process's `TZ`; §7.5's session pin and §17's `slog` fix are
+what correctness actually rests on, and both hold identically whether or
+not this is set.
 
 Fly.io, Railway, or a VM with systemd all work. Two app instances behind a load balancer is the ceiling this design needs; the row lock (§8) and `LISTEN/NOTIFY` (§11.3) already handle that case.
 
