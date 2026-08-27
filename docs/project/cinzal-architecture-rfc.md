@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r45 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r46 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -249,6 +249,11 @@
 > - **Cleanup is an in-process ticker**, the same shape as §8's deadline sweeper, deleting rows idle past `auth_ip`'s own hour-long window every 10 minutes — a row that old has certainly refilled to capacity regardless of its prior state, so deleting it is exactly equivalent to leaving it, per the consume statement's own `LEAST(capacity, …)` clamp.
 > - **§19's security table** gains a "Rate limiting" row with the concrete mechanism.
 > - No GDD text change: rate limiting has no GDD anchor. Companion doc stays at v2.32.
+>
+> **Changelog r45 → r46** — a rolled-back consume refunds the token it just spent (issue [#347](https://github.com/garnizeh/cinzal/issues/347), [D50](../decisions/D50-rate-limit-consume-durability.md))
+> - **§12.3 corrected.** D20's own text said the `rate_limits` consume runs "inside the same transaction as the rest of the handler" — true as far as it went, but that transaction can still abort *after* a consume succeeds (a later insert failing, or a client disconnecting), silently refunding the token with no trace left in the table. Case in point: `/auth/verify`'s wrong-code path needs `auth_codes.attempts` to survive the exact outcome — a failed verification — that D20's stated idiom signals by rolling back.
+> - **The two buckets stay coupled to each other, in a new `TX_limits` transaction, but split from everything after them.** `TX_limits` holds only the `auth_email`/`auth_ip` consumes — a non-nil closure return there still rolls back both, preserving the cross-axis guarantee — and nothing else shares its commit, so a later write failing (or a client disconnecting) can no longer reach back and un-consume a token `TX_limits` already committed. `auth_codes.attempts`'s increment on a wrong code gets a different fix, not the same one: a standalone statement on a context built with `context.WithoutCancel`, since by the time it runs the code has already been compared in memory and only a caller's own cancellation, not a sibling write, can still take it back. The rest of each handler — `auth_codes` insert plus outbox enqueue for `/auth/request`; the code check, and on a match, session creation for `/auth/verify` — stays in one ordinary, cancellable transaction after `TX_limits` commits, since neither is a counter and a rollback there costs nothing but a retry.
+> - No GDD text change: same reason as r44 → r45. Companion doc stays at v2.32.
 
 ---
 
@@ -1413,10 +1418,12 @@ Both `/auth/request` and `/auth/verify` draw on the same two buckets — one sha
 
 ```sql
 -- $1=scope, $2=key, $3=capacity, $4=refill rate (tokens/second)
--- clock_timestamp(), not now(): now() is pinned to this transaction's start,
--- and this check runs inside the same transaction as the rest of the handler
--- — a transaction held open by lock contention would write a backdated
--- updated_at, letting a later check over-credit the refill.
+-- clock_timestamp(), not now(): now() is pinned to this transaction's start.
+-- This statement runs inside TX_limits (D50) — a short transaction holding
+-- only the two bucket consumes, never the rest of the handler — but that
+-- transaction can still be held open by lock contention on this row from a
+-- concurrent request against the same key; a backdated updated_at from
+-- now() would let a later check over-credit the refill.
 INSERT INTO rate_limits (scope, key, tokens, updated_at)
 VALUES ($1, $2, $3 - 1, clock_timestamp())
 ON CONFLICT (scope, key) DO UPDATE
@@ -1428,7 +1435,9 @@ ON CONFLICT (scope, key) DO UPDATE
 RETURNING tokens;
 ```
 
-Zero rows returned means limited — but not automatically: a zero-row `RETURNING` is not an error to Postgres and rolls nothing back on its own. The handler checks each consume call's row count and returns an error from the transaction closure on zero, the same `m.tx(ctx, func(q *store.Queries) error { … })` idiom §7.4/§8's `Tick()` already uses to turn a non-nil return into a real `ROLLBACK`. Both buckets are checked inside that one transaction, so a request blocked on one axis spends nothing against the other, and no `auth_codes` row or outbox mail is written for a request that didn't clear both.
+Zero rows returned means limited — but not automatically: a zero-row `RETURNING` is not an error to Postgres and rolls nothing back on its own.
+
+**Durability requirement (D50):** this consume must commit before the handler does anything else, and must never be the return value of a transaction closure that something *unrelated* in the same transaction could roll back. Reusing `Tick()`'s `m.tx(ctx, func(q *store.Queries) error { … })` idiom to couple it to the request-specific write that follows — return an error to signal denial, let the non-nil return trigger `ROLLBACK` — would un-do the consume itself the moment that later write fails for reasons that have nothing to do with the rate limit, which a spent token must survive instead. But the idiom is still exactly right for coupling the consume to its **own sibling**: both `/auth/request` and `/auth/verify` run `TX_limits`, one `m.tx` holding only the `auth_email` and `auth_ip` consumes, where a non-nil return on either still rolls back both — that coupling is the cross-axis guarantee itself, not the bug. Nothing has been granted yet at that point, so an abort there, from any cause including a client disconnect, is a clean denial rather than a refund. `TX_limits` committing is what gates everything else: the request-specific write (`auth_codes` insert + outbox enqueue for `/auth/request`; the code check and, on a match, session creation for `/auth/verify`) runs afterward in its own ordinary, cancellable `m.tx`, since nothing durable is lost if it rolls back — a retry costs another already-committed token, not a free one. `/auth/verify`'s wrong-code branch is the one write that needs a different shape again: `auth_codes.attempts` increments as a standalone statement on a context built with `context.WithoutCancel`, because by the time it runs the code has already been compared in memory, so a disconnect there would let an attacker discard the record of an attempt whose outcome they already have — a gap `TX_limits`'s all-or-nothing failure mode doesn't share. See D50 for the full per-outcome enumeration and why the two counters need different treatment despite both being durability-critical.
 
 **IP key.** `TRUSTED_PROXY_HOPS` (§18), default `1`, names how many `X-Forwarded-For` hops are trusted; the key is read that many positions from the **right**, so nothing left of that point — client-supplied — can select a bucket. This needs **at least `TRUSTED_PROXY_HOPS` entries** — a single trusted hop that appends rather than replaces (NGINX's `$proxy_add_x_forwarded_for`, HAProxy's `option forwardfor`) produces exactly one entry when the client sent none, which is already the real client address, not a case to fall back from. Fewer entries than that — a misconfiguration, or a connection bypassing the expected proxy chain — is what falls back to the raw connection address, which behind a correctly configured load balancer funnels every request into one shared bucket: stricter, not a bypass. IPv4 keys on `/32`; **IPv6 keys on `/64`**, the usual single-customer allocation — `/128` would let an attacker escape a bucket by requesting a fresh address inside a delegation they already control.
 
