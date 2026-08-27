@@ -103,8 +103,17 @@ real review has to have landed.
 
 ---
 
-## Confirm before pushing
+## Confirm before pushing — unless the repo's own gate already ran
 
-Opening a PR is outward-facing. Unless the user has already said to publish,
-show them the title and body and get a yes first. Approval to open one PR is not
-approval for the next.
+Opening a PR is outward-facing. **The exception: once this change has gone
+through the repo's own review/verification steps** — `delivery-review`'s
+checklist run and clean, or `make check` green where it applies — that *is*
+the approval, and it is enough to push and open the PR without a separate
+yes/no. The maintainer said so explicitly (issue #350/D53, 2026-08-27): asking
+again on top of a passed `delivery-review` is friction, not safety.
+
+Ask first only when publishing **without** having gone through that gate —
+skipping straight from an edit to a PR with no review step in between.
+Approval to open one PR under this rule is not blanket approval to skip
+`delivery-review` itself; the gate still has to run, it just doesn't also
+need a chat confirmation once it has.

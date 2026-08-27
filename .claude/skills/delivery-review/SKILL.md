@@ -17,6 +17,16 @@ rtk git status
 Read the **whole** diff, not the summary. Most defects caught here are in a file
 you did not intend to touch.
 
+**This review is meant to be meticulous, not a confidence check.** "I traced
+the logic and it's sound" is a different claim from "I reread the words I
+wrote and they say that." Both misses that motivated §4's and §5's checks below
+happened because the reasoning was right and nobody reread the literal
+sentence or ran the literal grep against it — being satisfied that you
+understand the change is exactly the moment this review exists to not trust.
+Every step below is a concrete action (grep this, reread that sentence against
+that source), not a vibe check — if a step doesn't leave something you could
+show someone else, it wasn't done.
+
 ---
 
 ## 1. Does it answer the issue?
@@ -60,10 +70,44 @@ twice, on this repo, also lived in another document or issue. Check:
 "Repository state" paragraph, `CONTRIBUTING.md`'s gate table, `Makefile` target
 comments, code comments quoting a spec sentence.
 
+**This covers more than wrong statements — it covers every fact you changed,
+including bare numbers.** A revision bump, a decision count, an issue range: if
+one file states it, grep the whole repo for the old value before calling the
+PR done, not just the files you already know cite it. `rtk grep -rn "<old
+value>"` is one command; missing a second citation site is a second review
+round. Found on PR #362 (D53): the RFC's own header was bumped r47 → r48, but
+`CLAUDE.md`'s document index cites the same revision number on its own line,
+one line away from the decision-range line that *was* checked — and it was
+missed because the check was scoped to "what quotes D19's shape," not to "what
+else states this revision number."
+
 New `EventKind`? Confirm it **appends at the end of the `iota` block** — a
 mid-block insert shifts later ordinals into `Anchor.Kind`.
 
-## 5. Hygiene
+## 5. Self-consistency — does the new prose say what the new decision says?
+
+When a PR carries both a `docs/decisions/Dnn-*.md` and the RFC/GDD prose it
+mandates, these are two independently-written artifacts, and *tracing the
+decision's own logic against a scenario is not the same check as confirming
+the RFC sentence you wrote states that logic correctly.* Reread every new RFC/GDD
+sentence against the decision's own Decision/Consequences section, literally,
+looking for a clause that quietly widens or drops an exemption the decision
+stated.
+
+The failure shape to watch for: a sentence that bundles two predicates or two
+axes together ("gains predicates X and Y, exempting Z from the reasoning given
+for X") and only states the exemption reasoning for one of them, silently
+implying the other applies unconditionally. Found on PR #362 (D53): the
+decision doc correctly stated `autopilot` is exempt from *both*
+`email_pref` and the new `email_suppressed_at`; the RFC §13.1 paragraph
+describing the same enqueue predicate bundled both under one exemption clause
+that only justified the eligibility half, so as literally worded it applied
+`email_suppressed_at` to `autopilot` too. The scenario trace that would have
+caught this ("does Autopilot still fire after a global unsubscribe?") had
+already been run correctly against the *decision* — it was never rerun against
+the *sentence*.
+
+## 6. Hygiene
 
 - **Probe edits reverted.** Anything you patched to test a gate or hypothesis is
   gone. `rtk git diff main...HEAD -- internal/` should contain nothing you cannot
@@ -75,13 +119,13 @@ mid-block insert shifts later ordinals into `Anchor.Kind`.
 - **Comments say why**, and cite the decision or spec section, matching the
   density of the surrounding code.
 
-## 6. Is it one commit?
+## 7. Is it one commit?
 
 **One task = one pull request = one commit on `main`.** Sizing test: *does this
 land as one PR that leaves `main` green by itself?* If not, split it now — after
 the PR is open it is more expensive.
 
-## 7. Verification is real
+## 8. Verification is real
 
 `make check` green (`gates-run`), or — for a docs-only diff — explicitly skipped
 with what you verified instead written down. Report the outcome faithfully: if
