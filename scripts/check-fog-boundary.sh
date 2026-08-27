@@ -45,9 +45,17 @@
 # under the default configuration, and under every other build tag set this
 # repository actually uses — rather than reimplementing what go list already
 # does. BUILD_TAG_SETS below is that explicit allow-list; a file gated by a
-# tag not named there still fails IgnoredGoFiles exactly as before. That is
-# deliberate — this is a list of known configurations to inspect, not a
-# blanket "-tags anything" escape hatch that would defeat the refusal above.
+# tag not named there is never compiled under ANY entry, so it still fails
+# IgnoredGoFiles exactly as before. That is deliberate — this is a list of
+# known configurations to inspect, not a blanket "-tags anything" escape
+# hatch that would defeat the refusal above.
+#
+# A file being ignored under ONE tag set is not itself a failure — that is
+# exactly what a //go:build integration file is supposed to report under the
+# default configuration, since a later entry in BUILD_TAG_SETS is what
+# compiles it instead. The failure condition is the INTERSECTION: a file
+# still ignored under every configured tag set has genuinely never been
+# compiled by anything this script runs, and only that is unchecked.
 #
 # WHY TEST IMPORTS ARE INCLUDED — the opposite choice from the purity gate.
 #
@@ -103,30 +111,46 @@ command -v go >/dev/null 2>&1 || fail "the go toolchain is not on PATH"
 violations=""
 inspected=0
 
-for tags in "${BUILD_TAG_SETS[@]}"; do
-    # shellcheck disable=SC2086
-    pkgs="$(cd "$ROOT" && go list -tags "$tags" $GUARDED)" \
-        || fail "go list -tags '$tags' $GUARDED did not succeed"
-    [ -n "$pkgs" ] || fail "go list -tags '$tags' $GUARDED reported no packages — nothing was inspected"
+# shellcheck disable=SC2086
+pkgs="$(cd "$ROOT" && go list $GUARDED)" \
+    || fail "go list $GUARDED did not succeed"
+[ -n "$pkgs" ] || fail "go list $GUARDED reported no packages — nothing was inspected"
 
-    while IFS= read -r pkg; do
-        [ -n "$pkg" ] || continue
-        inspected=$((inspected + 1))
+while IFS= read -r pkg; do
+    [ -n "$pkg" ] || continue
 
-        # go list reports only the files selected by the ACTIVE build
-        # configuration, so a forbidden import inside a constrained file would
-        # sail through unseen under any configuration this loop does not also
-        # run. Rather than parse constrained files by hand, ask go list again
-        # under every configuration BUILD_TAG_SETS names, and refuse to be
-        # blind about whatever is left over after that (D54).
-        ignored="$(cd "$ROOT" && go list -tags "$tags" -f '{{join .IgnoredGoFiles " "}}' "$pkg")" \
+    # go list reports only the files selected by the ACTIVE build
+    # configuration, so a forbidden import inside a constrained file would
+    # sail through unseen under any configuration this loop does not also
+    # run. Rather than parse constrained files by hand, ask go list again
+    # under every configuration BUILD_TAG_SETS names, and only fail on a file
+    # that is ignored under ALL of them — the intersection, not any single
+    # pass's result, since a //go:build integration file is SUPPOSED to be
+    # ignored under the default configuration and inspected under a later one.
+    common_ignored=""
+    first_tags=1
+    for tags in "${BUILD_TAG_SETS[@]}"; do
+        ignored="$(cd "$ROOT" && go list -tags "$tags" -f '{{join .IgnoredGoFiles "\n"}}' "$pkg" | sort -u)" \
             || fail "could not list the build-constrained files of $pkg under tags '$tags'"
-        if [ -n "$ignored" ]; then
-            fail "$pkg has build-constrained files this gate cannot inspect under tags '$tags': $ignored
-                        Their imports are invisible to go list under this build
-                        configuration. Add the tag to BUILD_TAG_SETS above, or
-                        remove the constraint - do not leave them unchecked."
+        if [ "$first_tags" -eq 1 ]; then
+            common_ignored="$ignored"
+            first_tags=0
+        elif [ -n "$common_ignored" ] && [ -n "$ignored" ]; then
+            common_ignored="$(comm -12 <(printf '%s\n' "$common_ignored") <(printf '%s\n' "$ignored"))"
+        else
+            common_ignored=""
         fi
+    done
+    if [ -n "$common_ignored" ]; then
+        fail "$pkg has build-constrained files this gate cannot inspect under any configured tag set: $common_ignored
+                    Their imports are invisible to go list under every entry in
+                    BUILD_TAG_SETS. Add the tag that selects them to
+                    BUILD_TAG_SETS above, or remove the constraint - do not
+                    leave them unchecked."
+    fi
+
+    for tags in "${BUILD_TAG_SETS[@]}"; do
+        inspected=$((inspected + 1))
 
         for field in Imports TestImports XTestImports; do
             imports="$(cd "$ROOT" && go list -tags "$tags" -f "{{join .$field \"\\n\"}}" "$pkg")" \
@@ -142,8 +166,8 @@ for tags in "${BUILD_TAG_SETS[@]}"; do
                 done
             done <<< "$imports"
         done
-    done <<< "$pkgs"
-done
+    done
+done <<< "$pkgs"
 
 # The import rule proves render and web cannot NAME the match state. It does not
 # stop a state VALUE travelling inside a type they can name, so D01 also forbids
