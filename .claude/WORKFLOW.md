@@ -34,28 +34,68 @@ silently.
 ## Running it end to end
 
 The four stages are not four approval gates. Once a work item is classified
-at Intake, the default is to run Intake → Execute → Verify → Land through
-`pr-publish` in one continuous pass — read the task, plan it, do it, review
-it until it's clean, publish it as a PR — with no pause between stages to
-ask "should I keep going?" The gate at the end of each stage in this
-document (a closed blocker, a complete diff, a green check — or, for a
-docs-only diff, the documented substitute verification Stage 3 already
-allows — a clean `delivery-review`) is what decides readiness to move on,
-not a check-in.
+at Intake, the default is to run the **whole pipeline in one continuous
+pass, unattended**: read the task, understand it, plan it, execute it,
+review-and-fix it until `make check` is clean, publish it as a PR, watch for
+and answer CodeRabbit — fix, verify, push, reply, repeat — until no finding
+is still raised against the head, merge, delete the branch, close the issue,
+update the milestone tracking issue, and end with one summary of everything
+that happened. No pause between any of these to ask "should I keep going?" —
+the gate at the end of each stage in this document (a closed blocker, a
+complete diff, a green check, a clean review) is what decides readiness to
+move on, not a check-in.
 
-**Stop and ask only when the answer depends on the user's decision** —
-Stage 1's own test for it: an unknown that would make the work useless if
-guessed wrong, a genuinely ambiguous product or scope call the GDD/RFC don't
-settle, or one of the confirm-first actions below. Everything else —
-brief to plan, plan to diff, diff to a green check (or its documented
-substitute), that to an open PR — is the pipeline doing what it exists for,
-not a decision point. Landing on a red `make check` with no substitute
-written down, or an unanswered standing obligation, is a bug in the work to
-go fix, not a reason to pause and check in.
+**Stop and ask only when something out of the ordinary surfaces** — Stage
+1's own test for it: an unknown that would make the work useless if guessed
+wrong, a genuinely ambiguous product or scope call the GDD/RFC don't settle,
+a CodeRabbit finding that would expand scope beyond the one-PR plan, or one
+of the confirm-first actions below (force-push, pushing straight to `main`,
+deleting a branch other than the feature branch this task itself opened and
+just merged, or touching an issue this task wasn't mandated to touch).
+Everything else — brief to plan, plan to diff, diff to a green check, that
+to an open PR, review to a clean review, clean review to merged-and-closed —
+is the pipeline doing what it exists for, not a decision point. Landing on a
+red `make check` with no substitute written down, or an unanswered standing
+obligation, is a bug in the work to go fix, not a reason to pause and check
+in.
 
-`merge-closeout` is the one stage this doesn't reach on its own — merging is
-a separate, explicit ask, gated on a real review having landed, not on
-publishing having happened.
+**This includes `merge-closeout`, gated precisely.** Squash-merge, delete the
+just-merged feature branch, confirm the issue closed, update the milestone
+tracking issue — all of it runs the moment, and *only* the moment, a **real,
+completed CodeRabbit review against the current head** comes back with no
+finding raised. "No comments visible" is not that condition on its own — a
+`Review limit reached` skip also shows no comments, and this repo's whole
+`coderabbit-triage` skill exists because that shape has been mistaken for a
+clean review before. Auto-merge fires on the positive signal (a completed
+review, clean), never on the mere absence of a negative one.
+
+**On `Review limit reached`, this is a race, not a stall:** wait the stated
+refill window (usually 20–45 min, polled in the background — see below), then
+request a fresh review (`@coderabbitai review`); if a subsequent real review
+lands clean, merge proceeds automatically as above. **Whichever comes first
+wins** — if the maintainer explicitly asks for the merge before a clean
+review ever lands, that request is acted on immediately regardless of
+CodeRabbit's state, and does not wait for the retry cycle to resolve.
+
+This is a deliberate, standing authorization the maintainer gave in full
+knowledge of what it covers (2026-08-27) — not the pipeline quietly picking
+up a hard-reverse action it used to stop for. State plainly what happened at
+each of these steps as they happen; reporting faithfully is not the same as
+asking permission.
+
+**Waiting on CodeRabbit is not a reason to stall the turn.** A review can
+take minutes to post, or never post at all (the free-tier skip). Poll for it
+in the background — `Monitor` with an `until`-loop checking
+`gh api .../pulls/<n>/reviews`, not a foreground sleep — so the turn is
+freed to report progress and pick back up when the poll resolves, and cap
+the wait rather than polling forever if nothing ever posts (see
+`coderabbit-triage`).
+
+**The one thing this pipeline does not do on its own is stop iterating on a
+review early.** "Fix → verify → push → reply → repeat" continues until
+either CodeRabbit has no more findings raised against the head, or the user
+explicitly says to stop — a fixed number of rounds is not the exit
+condition, silence from CodeRabbit on an unresolved finding is not either.
 
 ---
 
@@ -132,17 +172,38 @@ verification.
 
 ## Stage 4 — Land
 
-**Receives:** a verified diff. **Produces:** one commit on `main`.
+**Receives:** a verified diff. **Produces:** one commit on `main`, merged and
+closed out.
 
 | Skill | Gate before it |
 |---|---|
 | `delivery-review` | Read the whole diff; walk all five standing obligations; ask the fog question in writing |
 | `pr-publish` | `delivery-review` came back clean — that is the approval to publish, no separate one needed. The body **is** the commit message. `Fixes #<n>` is present, literally |
-| `coderabbit-triage` | Every finding fixed or answered — **including the ones that live only in the review body** |
-| `merge-closeout` | A real review has landed, and no finding is still raised against the head |
+| `coderabbit-triage` | Every finding fixed or answered — **including the ones that live only in the review body** — looping fix → verify → push → reply until none remain raised against the head |
+| `merge-closeout` | A real review has landed, and no finding is still raised against the head. This gate is **checked, not asked for** — meeting it is what runs the merge, same turn, no separate go-ahead |
 
 **After merge, in the same turn:** verify the issue actually closed, update the
-milestone tracking issue, sync `main`, file anything deferred.
+milestone tracking issue, sync `main`, file anything deferred, and close the
+pass with one summary — what was built, what it took to get through review,
+what landed, what (if anything) is still open.
+
+**The summary also names any harness lesson this pass surfaced** — a gap
+between what a skill claimed and what actually happened, a rule that only
+lived in an agent's memory instead of the skill file, a check that turned
+out to need a real command instead of "read it back" or "eyeball it." Naming
+it in the summary without fixing it is how the same gap gets rediscovered on
+the next task instead of the one after that. **Fix it the same pass, tracked
+like everything else here:** file a plain issue for it — no GDD/RFC spec
+anchor, since a harness/process fix isn't about game content and doesn't
+have one; every other field in CONTRIBUTING's "what every issue must carry"
+table still applies — then land the fix as its **own follow-up PR closing
+that issue**, never bundled into the task's own PR, since a content change
+and a process fix are different things reviewed for different reasons (the
+precedent already in use: #368's Postgres fix and #370's workflow fix landed
+as two PRs, not one — #370 itself should have had an issue behind it and did
+not, which is the gap this paragraph closes). This repeats for as long as a
+pass keeps surfacing gaps — there is no cap on how many harness-fix issues
+and PRs one task's pass produces, only on bundling them with the content PR.
 
 ---
 
@@ -179,12 +240,14 @@ skipped check is written down as skipped rather than counted as passed.
   commit is coherent and buildable alone.
 - **Read the changelog before trusting a spec section.** Later entries correct
   earlier ones.
-- **Confirm before actions outside the pipeline's own shape** — merging (a
-  separate, explicit ask per Stage 4), force-pushing, deleting a branch,
-  pushing straight to `main`, or editing/closing an issue the current task
-  isn't the one mandated to touch. Pushing your own feature branch and
-  opening its PR are the normal output of `pr-publish`, not on this list —
-  see "Running it end to end" above.
+- **Confirm before actions outside the pipeline's own shape** —
+  force-pushing, pushing straight to `main`, deleting any branch other than
+  the one this task itself opened and just squash-merged, or
+  editing/closing an issue the current task isn't the one mandated to touch.
+  Pushing your own feature branch, opening its PR, merging it once
+  `coderabbit-triage`'s gate is met, and deleting that same feature branch
+  as part of `merge-closeout` are all the normal output of the pipeline, not
+  on this list — see "Running it end to end" above.
 - **Report faithfully.** Failed tests get quoted. Skipped steps get named. Done
   and verified gets stated plainly without hedging.
 
@@ -196,6 +259,7 @@ Most sessions do not start at Intake. Locate yourself by what exists:
 
 | What you have | Enter at |
 |---|---|
+| No issue number — "start next issue" was said | `issue-intake` §0, which picks one (harness issues first, then the current milestone's next unblocked row) |
 | An issue number and nothing else | `issue-intake` |
 | A brief, no edits yet | `task-plan` |
 | A plan, no diff | the matching Execute skill |

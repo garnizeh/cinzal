@@ -100,10 +100,13 @@ coherent and buildable alone.
 If the plan does not fit that, split it into issues and say so **before**
 executing anything. If it is trivially small, fold it into its neighbour.
 
-## 5. Present it and get agreement
+## 5. State the plan and continue
 
-Show the plan. Flag the open questions. Ask only where different answers produce
-materially different work — otherwise state the assumption and proceed.
+Show the plan and flag the open questions as part of the running narration —
+this is not a checkpoint to wait at. Ask only where different answers produce
+materially different work (the same bar as `issue-intake`'s stop condition);
+otherwise state the assumption and move straight into execution in the same
+turn, per [WORKFLOW.md](../../WORKFLOW.md)'s "Running it end to end."
 
 Then route:
 

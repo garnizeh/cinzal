@@ -1,6 +1,6 @@
 ---
 name: issue-intake
-description: Read a Cinzal issue and turn it into a work brief, or file a new one. Use when the user names an issue number ("vamos pegar a #319", "analisa a issue 325", "what does #328 ask for"), asks for a brief, asks to open/file an issue, or describes work that is not tracked yet. Also decides which of the three work-item kinds it is — task, decision, or exit demonstration — which determines every downstream step.
+description: Read a Cinzal issue and turn it into a work brief, or file a new one. Use when the user names an issue number ("vamos pegar a #319", "analisa a issue 325", "what does #328 ask for"), asks for a brief, asks to open/file an issue, describes work that is not tracked yet, or says "start next issue" / "próxima issue" / "pega a próxima" with no number given. Also decides which of the three work-item kinds it is — task, decision, or exit demonstration — which determines every downstream step.
 ---
 
 # Issue intake
@@ -13,6 +13,37 @@ written here.
 [gh-recipes.md](../../reference/gh-recipes.md).
 
 ---
+
+## 0. No issue named — "start next issue"
+
+Trigger phrases: "start next issue", "próxima issue", "pega a próxima" — no
+number given, asking the pipeline to pick its own starting point. Selection
+order:
+
+1. **Harness issues first.** Open issues titled `harness: …` with no
+   milestone assigned — process/skill gaps a prior pass surfaced and tracked
+   (WORKFLOW.md, "the summary also names any harness lesson"). Oldest first
+   (lowest number). These go before milestone work: a harness gap left open
+   costs every task that runs before it's fixed, not just the one that found
+   it.
+2. **Otherwise, the current milestone's next task.** "Current" is whichever
+   milestone `CLAUDE.md`'s "Repository state" paragraph names as underway,
+   and its tracking issue is the one `CLAUDE.md` points at (M3 → #332,
+   today) — not GitHub's own milestone `state`, which stays `open` on every
+   milestone here regardless of whether `CLAUDE.md` calls it closed. Read
+   that issue's checklist top to bottom; the first unchecked `- [ ]` row
+   whose "Blocked by" is fully closed (or has none) is next.
+3. **Skip anything already mid-pipeline.** An unchecked row with an open PR
+   already referencing its issue number is in progress, not next — check
+   before picking one, and continue that PR instead
+   ([WORKFLOW.md](../../WORKFLOW.md)'s "Entering mid-pipeline" table) rather
+   than starting over.
+4. **If everything reachable is blocked, say so — don't guess past it.**
+   Report which rows are next in line and what blocks each, rather than
+   silently picking something further down the list.
+
+Once an issue is selected, proceed exactly as if the user had named it —
+§1 onward, same brief, same continuous pass.
 
 ## 1. Read the issue and everything it points at
 
@@ -104,14 +135,17 @@ a candidate decision — say which.
 What a reader might reasonably expect to be included and is not.
 ```
 
-## 5. Report and stop
+## 5. Hand off — do not stop here
 
-Hand the brief to the user with a one-line recommendation of the next step. Do
-not start planning; `task-plan` is the next skill, and it may want the user's
-input on the unknowns first.
+State the brief plainly (what's asked, its kind, the acceptance criterion),
+then **continue straight into `task-plan` in the same turn** — per
+[WORKFLOW.md](../../WORKFLOW.md)'s "Running it end to end," intake and plan
+are one continuous pass, not a checkpoint to wait at.
 
-**If an unknown would make the work useless if guessed wrong, ask before
-planning.** Everything else gets a stated assumption in the brief.
+**The one exception:** if an unknown would make the work useless if guessed
+wrong — a genuinely ambiguous product/scope call the GDD/RFC don't settle —
+stop and ask before planning. Everything else gets a stated assumption in the
+brief and the pipeline keeps moving.
 
 ---
 
@@ -124,6 +158,11 @@ spec anchor and no demonstrable acceptance criterion will not survive review.
 
 Out-of-scope findings from a code review get filed too — a reply saying
 "pre-existing" is not enough on its own; track it as a real issue and link it.
+
+**No manual line-wrap inside a paragraph or bullet** — one physical line per
+paragraph, same rule `pr-publish` states for PR bodies, and it has already
+been violated here too (#368, 2026-08-27). Run `pr-publish`'s mechanical
+check against `/tmp/issue.md` before `gh issue create`, not an eyeball read.
 
 ```bash
 rtk gh issue create --title "<area>: <what>" --body-file /tmp/issue.md --label task

@@ -26,7 +26,11 @@ mismatch is part of your change.
 **Grep for the statement you are about to correct.** A wrong sentence in one
 document has, twice on this repo, also existed in another — the real bug was a
 spec section carrying the same wrong claim somewhere else. Search the GDD, the
-RFC, the roadmap, `docs/decisions/`, `CLAUDE.md` and the code comments.
+RFC, the roadmap, `docs/decisions/`, `CLAUDE.md` and the code comments — **and
+any open GitHub issue you have already read in this session that quoted the
+same text** (an issue's spec-anchor line often echoes the sentence verbatim).
+Missing this on the first pass turned one correction into three follow-up
+rounds once — check `gh api` for the phrase, not just the repo tree.
 
 ## Making the edit
 
@@ -52,6 +56,7 @@ Fan-out to check on every edit:
 | A decision's status | `docs/decisions/README.md` catalogue row **and** the roadmap §3 status line |
 | Milestone state | `CLAUDE.md`'s "Repository state" paragraph; the roadmap section |
 | A CI gate's behaviour | `CONTRIBUTING.md`'s gate table; the `Makefile` target comment |
+| Filed a new issue to track this correction | The milestone's tracking issue, **in the same turn** — don't wait for `pr-publish`'s own step for it. Forgotten before; see [issue-intake](../issue-intake/SKILL.md)'s filing section. |
 
 **Everything committed is in English** — docs, comments, commit messages, PR
 text, issue text — regardless of the language the request came in. Replies to
