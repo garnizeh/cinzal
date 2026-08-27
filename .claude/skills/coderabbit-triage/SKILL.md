@@ -72,7 +72,28 @@ When the message gives no refill time, the allowance is exhausted for longer and
 there is nothing to do but wait. When a review genuinely was missed, the way to
 get one is a new commit after the allowance returns, not repeating the command.
 
-**Check proactively.** Poll after pushing; do not wait to be told.
+**Check proactively.** Poll after pushing; do not wait to be told. Do it in the
+background (`Monitor` with an `until`-loop against
+`gh api .../pulls/<n>/reviews`, not a foreground sleep) so the wait — which can
+span the whole 20–45 min refill window, possibly more than once — doesn't stall
+the turn.
+
+## The merge gate this skill hands to `merge-closeout`
+
+**"No comments visible" is never the merge signal on its own.** A rate-limited
+skip and a genuinely clean review both show zero comments — that is exactly the
+ambiguity this whole skill exists to resolve. The gate `merge-closeout` checks
+is a **positive** one: a real review object exists against the PR's current
+head, and no finding from it (comment-thread or review-body) is still raised.
+Reaching that state is what authorizes the automatic merge (WORKFLOW.md,
+"Running it end to end") — not silence, not a green check, not time elapsed.
+
+**While rate-limited, this is a race, not a stall:** keep polling/retrying per
+the paragraph above, in the background. If a subsequent real review lands
+clean, the merge gate is met and `merge-closeout` proceeds automatically. If
+the maintainer explicitly asks for the merge first, that wins immediately and
+is acted on regardless of where the retry cycle is — do not make an explicit
+merge request wait for one more polling round.
 
 If the user says "temos review", that is a checked fact — they looked and saw
 one. Go fetch it and act; do not ask them to confirm.

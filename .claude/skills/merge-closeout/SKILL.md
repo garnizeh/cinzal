@@ -5,26 +5,47 @@ description: Merge a Cinzal PR and do the bookkeeping that follows — squash-me
 
 # Merge and close-out
 
-Merging is irreversible and outward-facing. **Confirm with the user before
-merging** unless they have already said to land it; approval on one PR does not
-carry to the next.
+Merging is irreversible and outward-facing, but this pipeline carries a
+standing authorization (2026-08-27, WORKFLOW.md "Running it end to end"): once
+the gate below is met, merge runs automatically, same turn, with no separate
+"go ahead" — the gate itself is the approval, checked, not asked for. What
+still needs a human decision is *whether the gate is actually met*, not
+whether to act once it is.
 
 ---
 
-## 1. The gate: has a real review landed?
+## 1. The gate: has a real review landed, and is it clean?
 
-Do not merge on a green check. Run `coderabbit-triage` first and satisfy
-yourself that:
+**This is a positive condition, not the absence of a negative one.** Do not
+merge on a green check, and do not merge on silence — a `Review limit reached`
+skip and a genuinely clean review both look like "no comments" from the
+outside, and that exact ambiguity is why `coderabbit-triage` exists. Run it
+first and confirm, concretely:
 
+- **A real review object exists against the PR's current head** — not merely
+  that none is showing. Check which commit each review covered
+  (`coderabbit-triage` step 2); a review of an earlier commit does not clear a
+  later one.
 - Every finding raised is either fixed or answered with reasoning.
 - **No finding is still raised against the current head** — the one reliable
   signal, and it is negative.
 - Every review conversation is resolved. `main` requires it, and this is what
   caught a factual error in the very first PR of the project.
 
-If waiting for a review genuinely is not an option, **say so in the PR
-description before merging**, so the commit on `main` records what went in
-unreviewed rather than implying it did not.
+**If the latest attempt hit `Review limit reached` — no real review landed —
+this is a race, not a stall, and not a reason to merge on the silence:**
+
+1. Wait the stated refill window and request a fresh review, polling in the
+   background (`coderabbit-triage`'s own guidance on this).
+2. **Whichever happens first wins:** a subsequent real review lands clean →
+   the gate is met, merge proceeds automatically; or the maintainer explicitly
+   asks for the merge → that request is acted on immediately, gate or no gate,
+   without waiting for one more retry round.
+
+Merging on an explicit ask before a review ever landed is still a decision the
+maintainer made, not the pipeline inventing an exception — record that a
+review had not landed in the PR description either way, so the commit on
+`main` says plainly what did or did not go in reviewed.
 
 ## 2. Pre-merge check
 
@@ -74,7 +95,15 @@ This is the part that gets forgotten. Do all four:
    promised in a reply, drift you noticed and did not fix. A promise in a review
    thread with no issue behind it disappears.
 
-## 5. Report
+## 5. Report — and close the whole pass, not just this stage
 
 State plainly: merged as `<sha>`, issue `#<n>` closed, tracking issue updated,
 and anything filed as follow-up. If a step did not happen, say which and why.
+
+**When this merge is the end of a pipeline run that started at `issue-intake`
+or `task-plan`**, this is also the pipeline's own final step (WORKFLOW.md,
+"Running it end to end"): give one summary of the whole pass — what was
+built, what review found and how it was resolved (or why it merged without
+one, if that's how it went), what landed, and anything still open. Not a
+restatement of every tool call — the shape of what happened, for someone who
+was not watching it happen.

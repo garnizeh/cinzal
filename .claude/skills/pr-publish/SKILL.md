@@ -107,10 +107,14 @@ rtk gh pr view <n> --json state,mergeable,reviewDecision
 ```
 
 Fix red checks before asking for a review. Then hand off to `coderabbit-triage`
-— **and go look proactively**; do not wait to be told a review exists.
+— **and go look proactively**; do not wait to be told a review exists. Poll for
+the review in the background (`Monitor`, not a foreground sleep) rather than
+stalling the turn — see WORKFLOW.md's "Running it end to end."
 
-**Do not merge here.** Merging is `merge-closeout`, and it has its own gate: a
-real review has to have landed.
+**Do not merge here.** Merging is `merge-closeout`, and it runs automatically
+the moment `coderabbit-triage`'s gate is met — a real review landed and no
+finding is still raised against the head. That gate is a fact to check, not a
+fresh "go ahead" to wait for.
 
 ---
 

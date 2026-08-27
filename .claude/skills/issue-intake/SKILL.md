@@ -104,14 +104,17 @@ a candidate decision — say which.
 What a reader might reasonably expect to be included and is not.
 ```
 
-## 5. Report and stop
+## 5. Hand off — do not stop here
 
-Hand the brief to the user with a one-line recommendation of the next step. Do
-not start planning; `task-plan` is the next skill, and it may want the user's
-input on the unknowns first.
+State the brief plainly (what's asked, its kind, the acceptance criterion),
+then **continue straight into `task-plan` in the same turn** — per
+[WORKFLOW.md](../../WORKFLOW.md)'s "Running it end to end," intake and plan
+are one continuous pass, not a checkpoint to wait at.
 
-**If an unknown would make the work useless if guessed wrong, ask before
-planning.** Everything else gets a stated assumption in the brief.
+**The one exception:** if an unknown would make the work useless if guessed
+wrong — a genuinely ambiguous product/scope call the GDD/RFC don't settle —
+stop and ask before planning. Everything else gets a stated assumption in the
+brief and the pipeline keeps moving.
 
 ---
 
