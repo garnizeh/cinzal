@@ -16,9 +16,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 docs/project/cinzal-gdd.md                  — Game Design Document (v2.32)
 docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r47)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
-docs/decisions/                             — Decision log; D1–D14, D16–D20 and D23–D52 decided
+docs/decisions/                             — Decision log; D1–D14, D16–D20 and D23–D53 decided
                                               (D15 reclassified as a task, #40); D21–D22 open, block M5/M6;
-                                              D53–D55 open, block M3 (#350, #351, #359)
+                                              D54–D55 open, block M3 (#351, #359)
 ```
 
 M3's tracking issue is [#332](https://github.com/garnizeh/cinzal/issues/332). Filing an issue or merging a PR updates it in the same turn.
