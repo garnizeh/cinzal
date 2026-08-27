@@ -1,0 +1,78 @@
+# D50 — Which `/auth/request` and `/auth/verify` outcomes must commit, given that a rolled-back consume refunds the attacker?
+
+**Status:** decided
+**Blocks:** the rate-limit queries task ([#314](https://github.com/garnizeh/cinzal/issues/314)) and M5's auth handlers, which [D20](D20-rate-limit-storage.md) says can now be built against a real contract
+**Decided:** 2026-08-27
+**Issue:** [#347](https://github.com/garnizeh/cinzal/issues/347)
+
+## The question
+
+[D20](D20-rate-limit-storage.md) puts the rate-limit consume inside the handler's own transaction and states the idiom for a denial: "the handler's own code has to check the row count from each consume call and, on zero, return an error from the transaction closure — the same `m.tx(ctx, func(q *store.Queries) error { … })` idiom §7.4/§8's `Tick()` already uses". That idiom rolls back the whole transaction on any non-nil return. D20 never says which *other* outcomes of the same transaction are allowed to trigger that rollback, and consuming a token is a real `UPDATE` — a `ROLLBACK` un-does it exactly as completely as it un-does an `orders` upsert.
+
+Two outcomes silently refund a spent token if the existing `Tick()` idiom is reused as-is:
+
+1. **`/auth/verify` with a wrong code**, if "wrong code" is modelled as an error returned from the closure. §12.2 requires burning a code after 5 wrong attempts, which means `auth_codes.attempts` must **increment and survive** on exactly the outcome — verification failure — that the idiom's error-return path was built to roll back.
+2. **A failure after the consume succeeds** — the `auth_codes` insert, the outbox enqueue, or a context cancellation from a client disconnect. All three sit *after* the consume in D20's stated transaction and can abort it for reasons that have nothing to do with the rate limit itself.
+
+## Why it is open
+
+**Case 1 fails closed on the wrong axis.** D20's fail-closed policy governs the *limiter erroring* — a timeout or connection failure on the `rate_limits` check itself, treated as a denial. It says nothing about the limiter check *succeeding* and then being undone by something else in the same transaction. That is a different event with the opposite sign: the first fails closed (denies when it shouldn't have to), the second fails **open** — a request that should have cost a token ends up costing nothing, and the `rate_limits` row shows no trace that it happened.
+
+**Case 2 is attacker-reachable on demand, not a rare edge case.** A client disconnecting mid-request is not a hypothetical failure mode — it is one line of code for anyone sending the request, repeatable as fast as the server accepts new connections. If the transaction holding the consume is still open when the disconnect lands, `context.Context` cancellation propagating into the query layer aborts that transaction the same way a genuine Postgres error would, and the consume rolls back with it. An attacker who reliably wins this race gets an uncapped request rate on the exact path §19's "OTP brute force" row names this control against.
+
+**Case 1 and case 2 share a root cause.** Both come from using "return a non-nil error to signal an application-level outcome" for something that must survive the transaction it's raised in. §7.4's `Tick()` idiom was designed around a different assumption: that a non-nil return always means *nothing in this transaction should be kept*. `/auth/verify`'s wrong-code path breaks that assumption on purpose (the attempt counter is exactly the thing that must be kept), and any late abort after a successful consume breaks it by accident.
+
+**The fix is not free.** Splitting the consume out of the handler's transaction gives up the atomicity D20 leaned on for its enumeration-safety argument — but that argument is about the HTTP *response shape* being identical for known/unknown emails and for limited/unlimited requests, not about every write sharing one commit. It's worth checking that the two are actually independent before paying to split them (see Reasoning).
+
+## Options
+
+**1. Leave the consume inside the handler transaction, and state a rule that the closure must never return an error once a consume has succeeded.**
+Cheapest to write down. Fails on case 2 regardless of how carefully the closure is written: a client disconnect aborts the transaction from *outside* the closure's control — no return value the handler code writes can prevent it, because the abort happens in the driver/transport layer, not in application logic. A rule that can be defeated by an event the handler never sees coming is not a rule, it's a hope.
+
+**2. Move the consume (and, for `/auth/verify`, the wrong-code attempts increment) out of the handler transaction entirely — a standalone statement, executed and committed before anything else in the handler runs, on a context detached from the request's own cancellation.**
+Gives up nothing case 1 or case 2 needed: the atomicity D20 wanted was never between the consume and the *rest* of the write, it was between the response shape and which branch executed (see Reasoning). Costs one more short-lived connection acquisition per request — negligible at this project's stated scale (§1: "hundreds of concurrent matches, not hundreds of thousands").
+
+**3. Keep everything in one transaction, but replace `ctx` with a detached context for the whole handler, so a client disconnect can never abort anything.**
+Closes case 2 without splitting the transaction, but reopens case 1 in a different shape: the wrong-code outcome would still need to return a value from the closure without triggering `ROLLBACK`, which requires touching the same `m.tx` idiom regardless. It also detaches things that *should* still be cancellable — a legitimate long-running query that outlives client interest has no reason to keep running to completion once nobody is waiting on it. Detachment should be scoped to the specific writes that must survive, not the whole request.
+
+## Decision
+
+**Option 2.** Every write whose purpose is a security counter — a `rate_limits` consume, or `auth_codes.attempts` incrementing on a wrong code — executes as its own statement, on its own connection, on a context built with `context.WithoutCancel(ctx)` (stdlib, Go 1.21+; this project targets 1.27), committed before the handler does anything else. None of these statements are wrapped in the `m.tx(ctx, func(q *store.Queries) error { … })` idiom `Tick()` uses — there is no closure to return an error from, so there is no rollback path for a slip in review to reintroduce later. The remaining work in each handler — the parts D20's `Tick()`-idiom atomicity argument actually applies to — stays in one ordinary, cancellable `m.tx` transaction, per outcome:
+
+**`/auth/request`:**
+
+1. Consume `auth_email` and `auth_ip` (detached context, no shared transaction with anything below). Both statements run regardless of what the other returns — a request blocked on one axis still spends nothing on the other, matching D20's original intent, just enforced by running both before either result is acted on rather than inside one transaction.
+2. Either bucket returns zero rows, **or the consume statement itself errors** (D20's existing fail-closed policy, unchanged) → respond via the existing identical-response path. Nothing below runs.
+3. Both consumed → one `m.tx` (ordinary request context): insert `auth_codes`, enqueue outbox mail. `Tick()`'s existing atomicity applies unchanged — either both happen or neither. If this transaction fails for any reason, including a client disconnect, **the tokens already consumed in step 1 stay spent** — a retry costs another token, which is the entire point of a rate limit, not a bug in it.
+
+**`/auth/verify`:**
+
+1. Consume `auth_email` and `auth_ip` (detached context, shared buckets with `/auth/request`, per D20). Zero rows, or a consume error → respond limited/fail-closed, without looking at the submitted code at all — preserves D20's "no code check happens on a request that didn't clear both buckets."
+2. Buckets cleared → look up the `auth_codes` row for the email and compare the submitted code against `code_hash`.
+   - **No usable row** (none, expired, already consumed) → respond invalid code. Nothing to increment; there is no live attempt budget to charge against.
+   - **Row exists, hash mismatch** → increment `attempts` (detached context, standalone statement, committed immediately); burn the code (`consumed_at`) in the same statement if this increment reaches 5. Respond invalid code, or "too many attempts" if just burned. **This statement is what D20 described as an error-returning closure and is the specific fix**: it is no longer signalled by returning an error from anything, so there is nothing for a rollback to undo.
+   - **Row exists, hash matches** → one `m.tx` (ordinary request context): mark the code consumed, create the session. `Tick()`'s atomicity applies here too — a mid-transaction failure leaves the code unconsumed, so the same correct code can be retried rather than leaving the account burned-but-sessionless. Nothing security-relevant is lost if this rolls back: the code isn't a limited resource the way a rate-limit token is, and the attempt that reached this branch was already counted as a bucket draw in step 1.
+
+**Rule stated once, for both counters:** *a statement that records "this attempt happened" commits before the handler does anything else, on a context the caller cannot cancel, and is never the return value of a transaction closure that something else in the same transaction could roll back.* `auth_codes.attempts` has exactly the shape D20's `rate_limits` consume has — a durable counter on the deny path — and gets exactly the same fix, for the same reason: the issue's suspicion that it's "almost certainly the answer for both" is correct, once both are traced to the same root cause.
+
+## Reasoning
+
+**D20's atomicity claim was never actually about the counters.** Re-reading D20's own words: "Both buckets are checked inside the same transaction as the rest of the handler ... so a request blocked on one axis spends nothing against the other". That property — *don't spend on one axis if the other already denied* — only needs both consumes to happen before either result is acted on. It does not need either consume to share a commit with the `auth_codes` insert, the outbox enqueue, or the session write. Splitting the transaction preserves the actual property D20 wanted and only removes a coupling D20 stated in passing, never argued for on its own merits.
+
+**The identical-response requirement survives the split intact**, for the same reason: §12.2's enumeration-safety property is about which HTTP response a given combination of outcomes produces, decided in Go code after every relevant statement has run — not about how many SQL transactions those statements were split across. A limiter error, a rate-limited real account, and an unknown email still take the same Go branch regardless of whether the check that got them there was one transaction or two.
+
+**Why a detached context and not just "commit fast".** A single-statement write against Postgres is already atomic on its own without an explicit `BEGIN`/`COMMIT` — but atomicity isn't what's at risk here. The risk is the *driver* aborting the query before it reaches the server, or aborting the wait for the server's acknowledgment, because the request's `context.Context` was cancelled out from under it. That cancellation is attacker-controlled on this specific path (a client disconnect is free to trigger, repeatedly, exactly on the request an attacker is trying to make cheap). `context.WithoutCancel` removes the one lever the attacker has over whether the write completes, without removing genuine deadline protection — the detached context should still carry its own short `context.WithTimeout` (a connection-acquire-and-single-statement budget, on the order of the sweeper's own `statement_timeout` in §8.3) so a genuinely wedged database doesn't hold the request open forever; it just can't be cut short by the caller hanging up.
+
+**Why the wrong-code path doesn't need the same detach-and-split treatment as `auth_codes` insertion in `/auth/request`.** The two look symmetric but aren't. `/auth/request`'s risk is a write *after* the consume (the `auth_codes` insert) failing and taking the consume down with it — solved by moving the consume earlier and out. `/auth/verify`'s wrong-code path has the attempts-increment as its *last* write; there is nothing after it to fail and roll it back except the increment's own transaction being aborted from outside — which is exactly the client-disconnect case the detached context (not the split) exists to close. Once the increment runs on a detached context as its own statement, it needs no further isolation from anything, because nothing else shares its transaction to begin with.
+
+**Why the correct-code path is allowed to stay in one ordinary, cancellable `m.tx`.** Marking a code consumed and creating a session are not counters — retrying a correct code that failed to commit costs the user a re-submission, not a security property. The one thing that must not silently regress here is `attempts`, and it was already durably incremented (or, on the correct-code path, never touched at all) before this transaction opens.
+
+**Why this doesn't need a new idiom, only a narrower one.** §7.4 already draws the "effects belong to the caller, never the fold" line for a different reason (replay safety) using a different mechanism (a null effects sink). This decision adds a second, equally narrow rule next to it: a durability-critical counter is written by a standalone statement, never by a transaction closure's return value. Both rules exist because a single `return err` in this codebase means two different things depending on where it's written — "abort everything, nothing here should be kept" in `Tick()`, and now, if this weren't stated, potentially "the operation as the caller understands it failed" in an auth handler — and conflating them is exactly what produced this issue.
+
+## Consequences
+
+- **RFC §12.3 gains one stated durability requirement**, quoting the rule above, so the next reader of the consume statement does not have to re-derive it from `m.tx`'s rollback semantics the way this decision had to.
+- **RFC §12.3's prose describing "checked inside that one transaction"** (the line D20 wrote, quoted in "The question" above) is corrected to describe two phases — a detached, always-committing counter phase, then an ordinary cancellable transaction for whatever's left — rather than one shared transaction.
+- **M5's auth handlers** now have a concrete shape to build against for the specific durability question D20 left open: which statements run detached-and-first, which stay in the ordinary per-outcome transaction, and which Go-level branch produces which response. Connection pool sizing and the detached-context timeout constant are M5's to pick, the same boundary D20 already drew around its own connection settings.
+- **`auth_codes.attempts` is confirmed to need no schema change** — the column D20's own quoted schema (`auth_codes(id, email, code_hash, expires_at, consumed_at, attempts)`, RFC §7.2) already has is sufficient; only the write path that increments it moves.
+- **Reversible at low cost.** Nothing here changes a table shape or a wire format — only where a statement runs and what context it runs on. A future decision to change the split (say, batching both counter writes into one round trip) amends this document without touching D20's table or algorithm.

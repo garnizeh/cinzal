@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r45 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r46 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -249,6 +249,11 @@
 > - **Cleanup is an in-process ticker**, the same shape as §8's deadline sweeper, deleting rows idle past `auth_ip`'s own hour-long window every 10 minutes — a row that old has certainly refilled to capacity regardless of its prior state, so deleting it is exactly equivalent to leaving it, per the consume statement's own `LEAST(capacity, …)` clamp.
 > - **§19's security table** gains a "Rate limiting" row with the concrete mechanism.
 > - No GDD text change: rate limiting has no GDD anchor. Companion doc stays at v2.32.
+>
+> **Changelog r45 → r46** — a rolled-back consume refunds the token it just spent (issue [#347](https://github.com/garnizeh/cinzal/issues/347), [D50](../decisions/D50-rate-limit-consume-durability.md))
+> - **§12.3 corrected.** D20's own text said the `rate_limits` consume runs "inside the same transaction as the rest of the handler" — true as far as it went, but that transaction can still abort *after* a consume succeeds (a later insert failing, or a client disconnecting), silently refunding the token with no trace left in the table. Case in point: `/auth/verify`'s wrong-code path needs `auth_codes.attempts` to survive the exact outcome — a failed verification — that D20's stated idiom signals by rolling back.
+> - **The consume, and `auth_codes.attempts`'s increment on a wrong code, are no longer part of the handler's transaction closure.** Each runs as its own statement, on its own connection, on a context built with `context.WithoutCancel` so a client hanging up mid-request can't abort a write that already represents a spent attempt — committed before the handler does anything else. The rest of each handler — `auth_codes` insert plus outbox enqueue for `/auth/request`; marking a code consumed and creating a session for `/auth/verify` — stays in one ordinary, cancellable transaction, since neither is a counter and a rollback there costs nothing but a retry.
+> - No GDD text change: same reason as r44 → r45. Companion doc stays at v2.32.
 
 ---
 
@@ -1428,7 +1433,9 @@ ON CONFLICT (scope, key) DO UPDATE
 RETURNING tokens;
 ```
 
-Zero rows returned means limited — but not automatically: a zero-row `RETURNING` is not an error to Postgres and rolls nothing back on its own. The handler checks each consume call's row count and returns an error from the transaction closure on zero, the same `m.tx(ctx, func(q *store.Queries) error { … })` idiom §7.4/§8's `Tick()` already uses to turn a non-nil return into a real `ROLLBACK`. Both buckets are checked inside that one transaction, so a request blocked on one axis spends nothing against the other, and no `auth_codes` row or outbox mail is written for a request that didn't clear both.
+Zero rows returned means limited — but not automatically: a zero-row `RETURNING` is not an error to Postgres and rolls nothing back on its own.
+
+**Durability requirement (D50):** a statement that records "this attempt happened" — this consume, or `auth_codes.attempts` incrementing on a wrong `/auth/verify` code — must commit before the handler does anything else, on a context the caller cannot cancel, and must never be the return value of a transaction closure that something else in the same transaction could roll back. Reusing `Tick()`'s `m.tx(ctx, func(q *store.Queries) error { … })` idiom here — return an error to signal denial, let the non-nil return trigger `ROLLBACK` — un-does the consume itself the moment anything, including a client disconnect, aborts the transaction afterward: exactly the transaction §7.4/§8 built that idiom to abort *completely* on a non-nil return, which a spent rate-limit token or an incremented attempt counter must survive instead. Both `/auth/request` and `/auth/verify` therefore run their bucket consume as a standalone statement, on a context built with `context.WithoutCancel`, committed before either the request-specific write (`auth_codes` insert + outbox enqueue) or the code check runs — that write and check stay in one ordinary, cancellable `m.tx` transaction each, since nothing durable is lost if either rolls back: a retry there costs another already-committed token, not a free one. Both buckets are consumed before either result is acted on, so a request blocked on one axis spends nothing against the other, and no `auth_codes` row or outbox mail is written for a request that didn't clear both. See D50 for the full per-outcome enumeration, including why `auth_codes.attempts` needs the identical treatment on `/auth/verify`'s wrong-code path.
 
 **IP key.** `TRUSTED_PROXY_HOPS` (§18), default `1`, names how many `X-Forwarded-For` hops are trusted; the key is read that many positions from the **right**, so nothing left of that point — client-supplied — can select a bucket. This needs **at least `TRUSTED_PROXY_HOPS` entries** — a single trusted hop that appends rather than replaces (NGINX's `$proxy_add_x_forwarded_for`, HAProxy's `option forwardfor`) produces exactly one entry when the client sent none, which is already the real client address, not a case to fall back from. Fewer entries than that — a misconfiguration, or a connection bypassing the expected proxy chain — is what falls back to the raw connection address, which behind a correctly configured load balancer funnels every request into one shared bucket: stricter, not a bypass. IPv4 keys on `/32`; **IPv6 keys on `/64`**, the usual single-customer allocation — `/128` would let an attacker escape a bucket by requesting a fresh address inside a delegation they already control.
 
