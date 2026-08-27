@@ -140,7 +140,7 @@ make packages  # assert the package graph matches scripts/packages.txt
 
 `golangci-lint` for `make lint`. `gitleaks` for `make secrets`. `templ` and `sqlc` for `make generate`; both are no-ops until M5 and M3 respectively, so you can skip them until then. Postgres 16 arrives with M3.
 
-No Node, no frontend build step, and no Docker for the rules engine — `internal/rules` is pure and its tests do no I/O at all.
+No Node, no frontend build step, and no Docker for the rules engine — `internal/rules` is pure and its tests do no I/O at all. **This holds for `make check` as a whole, not only for `internal/rules`, even after M3** ([D46](docs/decisions/D46-postgres-backed-test-layer.md), [D54](docs/decisions/D54-integration-tag-fog-gate-and-check-scope.md)): `internal/store`'s Postgres-backed Integration and Concurrency tests live behind `//go:build integration` and a separate `make integration` target, which needs a reachable Docker daemon and hard-fails without one — but is never compiled by `make check`, only by that target itself. `make integration-list` is a Docker-free companion that confirms the tagged suite hasn't silently shrunk; it still needs network access the first time it runs, to fetch the testcontainers-go dependency tree its compile pulls in, so it also stays out of `make check` and runs instead as its own required CI job. Neither target exists before M3.
 
 **A missing tool fails the target rather than skipping it.** That is deliberate, and it is the same principle as the CI gates below: a check that did not run looks exactly like one that passed.
 
