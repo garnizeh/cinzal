@@ -1,6 +1,6 @@
 # D16 — The Recap has no cursor. Where does last-seen-round live, and what advances it?
 
-**Status:** decided
+**Status:** decided — its `UPDATE` statement is corrected by [D52](D52-recap-cursor-multi-round-advance.md)
 **Blocks:** M3's schema migration (RFC §7.2) and the scope of its `cmd/replay --rebuild`; every Recap query M6 will write against this column
 **Decided:** 2026-08-25
 **Issue:** [#302](https://github.com/garnizeh/cinzal/issues/302)
@@ -33,7 +33,7 @@ The update point is the genuinely undecided part. The routes already named in RF
 
 **Option C — Advance on rendering `GET /m/{id}/recap`.** Cost: the magic-link precedent above — a `GET` is not a safe place to hang a single-fire state mutation when the transport in front of it (HTMX, browsers) treats `GET` as prefetchable by design.
 
-**Option D — Advance inside the order-submission transaction (`POST /m/{id}/order`), to the last round that has actually resolved, and only there.** Concretely: `last_seen_round = GREATEST(last_seen_round, round − 1)`, where `round` is the round being submitted for, run in the same transaction as the `orders` upsert (RFC §8.1). Cost: a player who views the Recap without submitting (common early in an async round, well before the deadline) doesn't have the cursor move on that visit — but nothing is *lost* either, since the same content simply reappears on the next visit until they act.
+**Option D — Advance inside the order-submission transaction (`POST /m/{id}/order`), to the last round that has actually resolved, and only there.** Concretely: `last_seen_round = GREATEST(last_seen_round, round − 1)`, where `round` is the round being submitted for, run in the same transaction as the `orders` upsert (RFC §8.1). Cost: a player who views the Recap without submitting (common early in an async round, well before the deadline) doesn't have the cursor move on that visit — but nothing is *lost* either, since the same content simply reappears on the next visit until they act. **[Corrected by D52]** This `GREATEST` expression itself turned out to carry a second, worse cost this document never analysed: it jumps the cursor to `round − 1` from wherever it was in one statement, marking every round in between as seen at once rather than advancing by one. [D52](D52-recap-cursor-multi-round-advance.md) replaces the expression below with one bounded to one round per submission; nothing else about Option D (the update point, the column, its type and default) changes.
 
 ## Decision
 
@@ -46,6 +46,8 @@ UPDATE match_players
  WHERE match_id = $1 AND seat = $3;
 -- $1 = match id, $2 = round being submitted for, $3 = seat
 ```
+
+**[Corrected by D52]** This statement jumps the cursor to `round − 1` from wherever it was, marking every round in between as seen in one statement rather than one round at a time — [D52](D52-recap-cursor-multi-round-advance.md) replaces it with a statement bounded to one round per submission, gated on the submission being the seat's first for that round. Everything else below this point — the column, its type, its default, the update point being `POST /m/{id}/order` — is unaffected and still authoritative.
 
 `0`, not `NULL`, is the seat-creation value — for both a lobby-formation seat and one that joins mid-lobby — and no special case is needed for either. The column is a **derived, rebuildable read cache**, the same category as `events`, `match_summary` and `match_players.missed_deadlines` (RFC §7.2, §8.2), not a new exception to §7.1's `state = fold(...)`.
 

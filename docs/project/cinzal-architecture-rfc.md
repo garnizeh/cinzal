@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r46 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r47 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -254,6 +254,11 @@
 > - **§12.3 corrected.** D20's own text said the `rate_limits` consume runs "inside the same transaction as the rest of the handler" — true as far as it went, but that transaction can still abort *after* a consume succeeds (a later insert failing, or a client disconnecting), silently refunding the token with no trace left in the table. Case in point: `/auth/verify`'s wrong-code path needs `auth_codes.attempts` to survive the exact outcome — a failed verification — that D20's stated idiom signals by rolling back.
 > - **The two buckets stay coupled to each other, in a new `TX_limits` transaction, but split from everything after them.** `TX_limits` holds only the `auth_email`/`auth_ip` consumes — a non-nil closure return there still rolls back both, preserving the cross-axis guarantee — and nothing else shares its commit, so a later write failing (or a client disconnecting) can no longer reach back and un-consume a token `TX_limits` already committed. `auth_codes.attempts`'s increment on a wrong code gets a different fix, not the same one: a standalone statement on a context built with `context.WithoutCancel`, since by the time it runs the code has already been compared in memory and only a caller's own cancellation, not a sibling write, can still take it back. The rest of each handler — `auth_codes` insert plus outbox enqueue for `/auth/request`; the code check, and on a match, session creation for `/auth/verify` — stays in one ordinary, cancellable transaction after `TX_limits` commits, since neither is a counter and a rollback there costs nothing but a retry.
 > - No GDD text change: same reason as r44 → r45. Companion doc stays at v2.32.
+>
+> **Changelog r46 → r47** — the Recap cursor's `GREATEST` jumps to `round − 1` in one statement, marking a multi-round backlog seen at once (issue [#349](https://github.com/garnizeh/cinzal/issues/349), [D52](../decisions/D52-recap-cursor-multi-round-advance.md))
+> - **§8.1's submit-transaction sample corrected.** The `orders` upsert's `RETURNING` clause now exposes `is_first_submission` (the standard `xmax = 0` insert-vs-update idiom), and the cursor statement becomes `last_seen_round = LEAST(last_seen_round + 1, $2 - 1)`, gated on `is_first_submission` and `last_seen_round < $2 - 1`. Steady-state behaviour (one submission per round, no gap) is unchanged — the new expression produces the same value D16's `GREATEST` did whenever there is nothing to catch up on — but a returning seat's backlog now closes at one round per submission rather than all at once, and a resubmission of an already-open round (GDD §18) no longer advances the cursor a second time.
+> - **D16's column, type, default, and update point (`POST /m/{id}/order`, never a `GET`) are unchanged** — only the arithmetic and its trigger condition move.
+> - No GDD text change: this is a persistence-and-timing correction, not a rule change. Companion doc stays at v2.32.
 
 ---
 
@@ -965,14 +970,22 @@ A player submitting milliseconds before the sweeper acquires its lock must not g
 -- inside the submit transaction
 SELECT round, deadline_at, status FROM matches WHERE id = $1 FOR UPDATE;
 -- reject if status <> 'active' OR now() >= deadline_at OR round <> $2
-INSERT INTO orders (...) VALUES (...)
-ON CONFLICT (match_id, round, seat) DO UPDATE SET payload = ..., submitted_at = now();
--- Recap cursor (D16): advance to the last round that has actually resolved —
--- $2 - 1, never $2 itself, since the round being submitted for is still open.
--- GREATEST guards a resubmission (GDD §18) from moving it backward.
+WITH upsert AS (
+    INSERT INTO orders (...) VALUES (...)
+    ON CONFLICT (match_id, round, seat) DO UPDATE SET payload = ..., submitted_at = now()
+    RETURNING (xmax = 0) AS is_first_submission
+)
+-- Recap cursor (D16, corrected by D52): advance by at most one round toward
+-- $2 - 1 (the last round that has actually resolved), and only on the
+-- seat's first submission for this round — is_first_submission (the
+-- standard xmax=0 idiom) guards a resubmission (GDD §18) from advancing
+-- the cursor again, and LEAST bounds a returning seat's backlog to a
+-- one-round-per-submission catch-up rather than marking it all seen at once.
 UPDATE match_players
-   SET last_seen_round = GREATEST(last_seen_round, $2 - 1)
- WHERE match_id = $1 AND seat = $3;
+   SET last_seen_round = LEAST(last_seen_round + 1, $2 - 1)
+ WHERE match_id = $1 AND seat = $3
+   AND last_seen_round < $2 - 1
+   AND (SELECT is_first_submission FROM upsert);
 ```
 
 Three properties follow. The grace period is **zero and deterministic**, independent of how often the sweeper runs. Instance clock skew is irrelevant, because there is one clock and it belongs to the database. And a late submission is rejected with an explicit *"this round has closed"* rather than being silently swallowed — the player learns immediately instead of discovering it in the recap.
