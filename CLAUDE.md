@@ -4,7 +4,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > **Every shell command runs as `rtk <command>`, no exceptions** — including `git`, `gh`, and anything chained with `&&`. `rtk` passes through transparently when it has no dedicated filter, so there's never a reason to drop it.
 
-> **Always write in English** — code, comments, commit messages, PR titles/descriptions, issue text, and any other artifact that lands in this repository — regardless of the language the request came in. The GDD, RFC, and every existing doc are English-only, and mixing languages in history or docs would break that consistency. Conversational replies to the user may still match the user's own language; this rule is about what gets committed or posted, not how you talk to them.
+> **Always write in English** — code, comments, commit messages, PR titles/descriptions, issue text, docs, and replies to the user. The GDD, RFC, and every existing doc are English-only, and mixing languages in history or docs would break that consistency. The one exception is the trigger phrases in `.claude/skills/*/SKILL.md` frontmatter, which are deliberately bilingual because they match what the maintainer types.
+
+> **Process lives in the harness, not in this file.** [`.claude/WORKFLOW.md`](.claude/WORKFLOW.md) is the stage-by-stage contract — what each stage receives, produces, and must satisfy before the next starts — and [`.claude/skills/README.md`](.claude/skills/README.md) is the lookup table for the thirteen skills under [`.claude/skills/`](.claude/skills/). **Start there rather than improvising a process.** This file is the always-loaded context those skills assume: what the repo is, where it stands, and the constraints that hold in every stage.
 
 ## Repository state
 
@@ -12,12 +14,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ```text
 docs/project/cinzal-gdd.md                  — Game Design Document (v2.32)
-docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r45)
+docs/project/cinzal-architecture-rfc.md     — Architecture RFC-001 (r47)
 docs/project/cinzal-implementation-plan.md  — Roadmap: milestones, exit criteria, open decisions
-docs/decisions/                             — Decision log; D1–D20, D23–D31 (M1) and D32–D47 (M2/M3) decided (D15 reclassified as a task, #40), D21–D22 open (block M5/M6)
+docs/decisions/                             — Decision log; D1–D14, D16–D20 and D23–D52 decided
+                                              (D15 reclassified as a task, #40); D21–D22 open, block M5/M6;
+                                              D53–D55 open, block M3 (#350, #351, #359)
 ```
 
-`make check` runs `packages purity purity-selftest fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps lint test bench-regression-selftest prod dev`, all live and required on `main`. Three of those are M2's own additions. `bots-isolation` is the load-bearing one ([#195](https://github.com/garnizeh/cinzal/issues/195), RFC §14.5): `internal/bots` may not name `MatchState`, the graph, or the match seed. It can't be an import-graph check the way `fog` is — `bots` legitimately imports `rules` for `BotRNG` — so it walks every `rules.X` selector `internal/bots` uses against an allow-list (`scripts/bots-isolation-allowlist.txt`) that must be widened on purpose, in a reviewed PR, before a new symbol can be named at all; `bots-isolation-selftest` is that gate's own fixture coverage, and `simulate-deps` asserts `cmd/simulate` depends on only `rules`/`bots`/`game`/`telemetry`. `generate-check` is not part of `check` yet: `GENERATED` is still empty until M3/M5 land real generated paths, and a gate that can only report VACUOUS stays out of the aggregate rather than passing by not running — run `make generate-check` standalone if you want to see that message. `bench-compare` is also a required check, separate from `make check` — it only runs on a pull request that touches `internal/rules/gen`, `.github/workflows/ci.yml`, `scripts/check-bench-regression.sh`, or the `Makefile`; see CONTRIBUTING.md's "The benchmark regression gate." Since [#336](https://github.com/garnizeh/cinzal/issues/336), CI's `check` job runs `make check-nosecrets` — everything above except `secrets` — and skips itself (along with `replay`'s two-OS matrix) on a pull request that cannot touch Go source or its own tooling; `secrets` runs unconditionally in its own job instead, because it scans docs too and must never be skippable by what a diff touches. Both jobs' path check (`.github/actions/changed-paths`) fails open: an unresolvable diff runs everything rather than skipping.
+M3's tracking issue is [#332](https://github.com/garnizeh/cinzal/issues/332). Filing an issue or merging a PR updates it in the same turn.
+
+`make check` runs `packages purity purity-selftest fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps lint test bench-regression-selftest prod dev`, all live and required on `main`. Two more are true of the gate set but not visible in that list: `generate-check` stays **out** of the aggregate because `GENERATED` is empty until M3/M5 land real generated paths and it can only report VACUOUS — run it standalone to see that message — and `bench-compare` is required but separate, running only on a PR that touches `internal/rules/gen`, `.github/workflows/ci.yml`, `.github/actions/changed-paths/action.yml`, `scripts/check-bench-regression.sh` or the `Makefile`. What each gate asserts and what a failure means is in the [`gates-run`](.claude/skills/gates-run/SKILL.md) skill; the reasoning behind each is in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 Package layout is fixed by [D01](docs/decisions/D01-package-layout.md):
 
@@ -26,11 +32,13 @@ Package layout is fixed by [D01](docs/decisions/D01-package-layout.md):
 - **`internal/render` and `internal/web` must never import `internal/rules` directly** — everything arrives via `internal/match` as `game` types.
 - There is no `game.State` and there must never be one.
 
-**The RFC is authoritative on architecture; the GDD is authoritative on rules.** Both are changelogged at the top — check it before trusting a section, since later entries correct earlier ones. If GDD and RFC disagree, the RFC's "Companion doc" header says which GDD revision it's paired with.
+**The RFC is authoritative on architecture; the GDD is authoritative on rules.** Both are changelogged at the top — check it before trusting a section, since later entries correct earlier ones, and most non-obvious rules exist to close a loophole found in design review. If GDD and RFC disagree, the RFC's "Companion doc" header says which GDD revision it's paired with.
 
 ## What Cinzal is
 
 A digital strategy game (2–5 players) with **simultaneous, secret orders** on a partially-hidden procedural graph map. Players run criminal factions smuggling "cargo" between warehouses and border checkpoints across 15 rounds (~30–35 min/match), inferring rivals' positions from public traces rather than direct observation. Full pitch and design pillars: GDD §1–2.
+
+GDD sections that matter most when implementing: §6–7 (map generation, fog/sight/trail), §9 (Order structure, step-allowance formula in §9.1a), §14–15 (event/incident decks, confrontation, legality), §21 (randomness inventory — keep in sync with RFC §6.4), §22 (telemetry the simulation harness answers, RFC §16.4).
 
 ## The one constraint that shapes everything
 
@@ -55,40 +63,18 @@ Before implementing anything: does this leak state past the fog boundary? The RF
 
 Build order (RFC §21): rules core → bots/simulation → persistence → round lifecycle → playable web → async/email → onboarding — riskiest unknowns (fun/balance, determinism) resolve before any UI. Milestone 2 (bot simulation) answers open GDD balance questions by measurement, not guesswork.
 
-## Working with the GDD
-
-When a rule seems odd, check the changelog — most non-obvious rules exist to close a loophole or deadlock found during design review, and the changelog says which one.
-
-Sections that matter most when implementing: §6–7 (map generation, fog/sight/trail), §9 (Order structure, step-allowance formula in §9.1a), §14–15 (event/incident decks, confrontation, legality), §21 (randomness inventory — keep in sync with RFC §6.4), §22 (telemetry the simulation harness answers, RFC §16.4).
-
 ## How work lands here
 
-Full detail in [CONTRIBUTING.md](CONTRIBUTING.md). What an agent gets wrong without being told:
+Full detail in [CONTRIBUTING.md](CONTRIBUTING.md); the procedure is in the harness. Three framing facts an agent gets wrong without being told, because they decide which skill applies before any of them is loaded:
 
 - **Everything goes through a PR.** `main` is protected even for the maintainer, squash-only, linear history, every review conversation must resolve before merge. One task = one PR = one commit.
 - **The PR description becomes the commit message** — write it for whoever reads `git log` in a year.
-- **Work is tracked as three things:** *decisions* (`docs/decisions/`, block dependent tasks), *tasks* (produce code), *exit demonstrations* (prove a milestone met its criteria, often by breaking something on purpose). A task that can't cite a GDD/RFC section is really a decision — file it as one.
+- **Work is tracked as three things:** *decisions* (`docs/decisions/`, block dependent tasks), *tasks* (produce code or docs), *exit demonstrations* (prove a milestone met its criteria, often by breaking something on purpose). A task that can't cite a GDD/RFC section is really a decision — file it as one.
 
-### Verifying that CodeRabbit actually reviewed
+## Absence of a signal is not evidence of a state
 
-CodeRabbit runs on the free OSS tier and often skips a PR with "Review limit reached" — **and its status check reports success anyway.** This has been the common case here.
+The one idea behind more of this repository's tooling than any other. It took four misreadings here to arrive at, and it has two standing consequences:
 
-**The only reliable signal is negative: a finding still raised against the current head means not addressed.** Everything else — a green check, no new review on your latest commit, a missing `✅ Addressed` marker — is inconclusive; a clean incremental review posts nothing, and the marker isn't guaranteed even on a real fix.
+**Gates fail closed.** Every check reports **failure** when it can't run — missing tool, empty `go list` output, unreadable config. A gate built the obvious way reports green having inspected zero packages. **A gate that passes when it can't run is worse than no gate.** Hold new checks to this, and never "fix" a noisy gate by letting it skip.
 
-**`pulls/<n>/comments` is not the complete set of findings — check the review body too.** A finding CodeRabbit can't anchor to a diff position (typically a line untouched by the specific commit range an incremental review diffed against) never becomes a comment at all; it lands as an "Outside diff range comments" block inside the *review object's own `body` field* instead, with no comment ID and nothing in `pulls/<n>/comments`:
-
-```
-gh api repos/<owner>/<repo>/pulls/<n>/reviews/<review_id> --jq .body
-```
-
-Read this for every review whose `body` isn't empty, not just its positioned comments — a comments-only audit reads as complete and silently isn't. Found 2026-08-20 on PR #228: a full `pulls/<n>/comments` audit reported zero unaddressed findings while a real one sat unposted in the review body, and the user had to paste it by hand.
-
-Procedure: after pushing a fix, check whether the finding is still raised against the head. If not, and the fix is right, resolve the thread and record *why* in the reply. If quota was available, the review fires on its own — don't trigger manually. On "Review limit reached," wait 20–45 min then `@coderabbitai review`; if it answers "Already reviewed," that's an answer, not a refusal — look for `✅ Addressed` markers rather than retrying. If a merge genuinely can't wait for review, say so in the PR description. When matching the marker in tooling, note the wording varies with commit count — match `Addressed in commits? …`, not just the singular form.
-
-If you disagree with a finding, reply with reasoning — CodeRabbit answers and concedes when it's wrong (it did on a suggestion that would have introduced `game.State`, inverting D01). If a reply 404s, the thread went outdated after your push; post a PR-level comment instead.
-
-**Verify findings before applying them** — usually right (caught real defects here), but check each against the specs; when a finding is right about the problem and wrong about the fix, say so instead of adopting it. **Findings can point past their own file** — twice here the real bug was a spec section or unrelated issue carrying the same wrong statement; when a finding exposes a wrong statement, grep for it elsewhere.
-
-### Gates fail closed
-
-Every check here reports **failure** when it can't run — missing tool, empty `go list` output, unreadable config. A gate built the obvious way reports green having inspected zero packages, which is the same failure as a review bot reporting success on a skipped review. **A gate that passes when it can't run is worse than no gate.** Hold new checks to this, and never "fix" a noisy gate by letting it skip.
+**A green CodeRabbit check means nothing.** It runs on the free OSS tier and often skips a PR with "Review limit reached" while its status check still reports success — the common case here. The only reliable signal is negative: *a finding still raised against the current head means not addressed.* Do not merge on a green check, and note that `pulls/<n>/comments` is not the complete set of findings — a finding that can't be anchored to a diff position lands only in the review object's own `body`. The full procedure, including the `gh api` calls, is in the [`coderabbit-triage`](.claude/skills/coderabbit-triage/SKILL.md) skill.

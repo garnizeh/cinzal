@@ -1,5 +1,8 @@
-# Local Claude Code settings — per-machine permissions, never shared
+# Local Claude Code state — per-machine, never shared. The skills and the
+# workflow harness under .claude/ ARE committed; only this local state is not.
 .claude/settings.local.json
+.claude/worktrees/
+.claude/scheduled_tasks.lock
 
 # Compiled binaries
 /bin/
