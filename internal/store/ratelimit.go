@@ -3,6 +3,8 @@ package store
 import (
 	"context"
 	"errors"
+	"fmt"
+	"math"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -77,6 +79,17 @@ type dbtx interface {
 // auth_email/auth_ip's own constants in internal/auth (M5), not here, so
 // the same table and statement serve any future scope with no migration.
 //
+// capacity is validated before consumeRateLimitSQL ever runs: the statement
+// only guards the ON CONFLICT (refill) branch with its WHERE clause (line
+// 48 above) — a brand-new (scope, key) has no conflicting row, so the plain
+// INSERT ... VALUES ($3 - 1, ...) branch has no predicate at all. A caller
+// bug that passed a capacity below one (or a non-finite float) would
+// otherwise admit exactly one request the first time a fresh key was seen,
+// which is D20's fail-closed posture inverted by construction rather than
+// by a code path anyone chose. A caller passing a bad capacity is a bug,
+// and D20's fail-closed policy says a bug in the check must deny, not
+// admit — so this returns an error and never issues the query.
+//
 // The store owns the counter, not the policy (issue #314): what ConsumeRateLimit
 // hands back is deliberately just "was this admitted", collapsing two
 // different D20 outcomes into that one signal on purpose. allowed is false
@@ -90,6 +103,10 @@ type dbtx interface {
 // failure so a caller can log or alert on it; it just never has to be
 // consulted to get the fail-closed behavior right.
 func ConsumeRateLimit(ctx context.Context, exec dbtx, scope, key string, capacity, refillPerSecond float64) (allowed bool, err error) {
+	if math.IsNaN(capacity) || math.IsInf(capacity, 0) || capacity < 1 {
+		return false, fmt.Errorf("store: capacity must be a finite number >= 1, got %v", capacity)
+	}
+
 	var tokens float64
 	err = exec.QueryRow(ctx, consumeRateLimitSQL, scope, key, capacity, refillPerSecond).Scan(&tokens)
 	if err != nil {
