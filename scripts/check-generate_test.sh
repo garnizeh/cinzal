@@ -85,21 +85,40 @@ printf '%s\n' "$out" | grep -q 'could not inspect' ||
 	fail "git cannot inspect: expected the inspection-failure line, got: $out"
 
 # ---------------------------------------------------------------------------
-# Case 5 (missing generator: require-sqlc must not be swallowed): builds a
-# PATH excluding sqlc's own directory and runs the real `make generate-check`
-# against this repository's real Makefile. sqlc, golangci-lint and templ all
-# resolve into the same `go install` bin directory here, separate from
-# `git`/`make` -- confirmed with `command -v` before writing this fixture --
-# so filtering that one directory out removes only sqlc's reachability for
-# this invocation, not the tools generate-check's own recipe still needs
-# (git). Nothing is written: require-sqlc fails before `generate`'s `sqlc
-# generate` step ever runs.
+# Case 5 (missing generator: require-sqlc must not be swallowed): runs the
+# real `make generate-check` against this repository's real Makefile with an
+# isolated PATH that cannot resolve sqlc, and confirms require-sqlc fails
+# before `generate`'s `sqlc generate` step -- and generate-check's own
+# check-generate.sh -- ever run.
+#
+# This used to build that PATH by filtering sqlc's own directory out of the
+# ambient $PATH, on the premise that sqlc lives in a `go install` bin
+# directory separate from make/bash. CodeRabbit's review of PR #389 ran
+# `command -v` against sqlc/make/bash in its own environment and found them
+# sharing one directory there; filtering that directory out would also drop
+# make's and/or bash's own reachability, so the fixture would then fail for
+# the wrong reason (make or bash not found) rather than the one under test.
+# Reproduced by hand: symlinking sqlc/make/bash into one shared directory and
+# filtering it out the old way broke with "make: command not found" /
+# "bash: No such file or directory", never reaching require-sqlc at all.
+#
+# Fixed by not depending on directory layout in the first place: resolve
+# make's and bash's real absolute paths from the current, unfiltered PATH,
+# then run generate-check against a wholly new isolated PATH containing
+# nothing but a symlink to bash (SHELL := bash in the Makefile is a bare
+# name, so Make still needs to find it via PATH) -- invoking make itself via
+# its resolved absolute path so the make lookup never touches that isolated
+# PATH at all. sqlc is absent from it unconditionally, regardless of which
+# directory it happens to resolve from on the host running this test.
 # ---------------------------------------------------------------------------
-if sqlc_path="$(command -v sqlc 2>/dev/null)"; then
-	sqlc_dir="$(dirname "$sqlc_path")"
-	filtered_path="$(printf '%s' "$PATH" | tr ':' '\n' | grep -vFx "$sqlc_dir" | paste -sd: -)"
+if command -v sqlc >/dev/null 2>&1; then
+	make_abs="$(command -v make)"
+	bash_abs="$(command -v bash)"
+	isolated_path_dir="$tmp/isolated-path"
+	mkdir -p "$isolated_path_dir"
+	ln -s "$bash_abs" "$isolated_path_dir/bash"
 
-	out="$(PATH="$filtered_path" make -C "$ROOT" generate-check 2>&1)" && code=0 || code=$?
+	out="$(PATH="$isolated_path_dir" "$make_abs" -C "$ROOT" generate-check 2>&1)" && code=0 || code=$?
 	[ "$code" -ne 0 ] || fail "missing sqlc: expected generate-check to fail without sqlc on PATH, got exit 0: $out"
 	printf '%s\n' "$out" | grep -q 'sqlc is required and is not on PATH' ||
 		fail "missing sqlc: expected the require-sqlc failure message, got: $out"
