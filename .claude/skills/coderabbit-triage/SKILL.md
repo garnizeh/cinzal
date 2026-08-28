@@ -206,9 +206,14 @@ For each finding:
 1. Verify the fix for real, and rerun `make check`.
 2. Push the fix.
 3. Check whether the finding is still raised against the head.
-4. If not, and you believe the fix is right: **resolve the thread and say *why*
-   in the reply.** That is your judgement closing it rather than a confirmation,
-   and the difference is worth putting on the record.
+4. If not, and you believe the fix is right: **reply saying why, and stop —
+   do not resolve the thread yourself.** CodeRabbit resolves its own threads
+   automatically, usually within a few minutes of the reply, once it agrees
+   with the fix or the justification given. **If a thread is still open
+   after a few minutes, that is the signal, not a stuck UI action** — it
+   means CodeRabbit disagreed, and it posts its own reply explaining why.
+   Read that reply and treat it as a fresh finding to address (§3's verify
+   step again), not as a resolve step you forgot to do.
 
 If a reply 404s, the thread went outdated after your push — post a **PR-level
 comment** that quotes the finding instead.

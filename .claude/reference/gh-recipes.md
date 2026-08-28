@@ -92,10 +92,7 @@ rtk gh api "repos/garnizeh/cinzal/issues/<n>/comments?per_page=100" \
 # Reply into an existing review thread
 rtk gh api repos/garnizeh/cinzal/pulls/<n>/comments/<comment_id>/replies -X POST --input /tmp/reply.json
 
-# Resolve a thread (GraphQL — REST has no equivalent)
-rtk gh api graphql -f query='mutation { resolveReviewThread(input:{threadId:"<id>"}) { thread { isResolved } } }'
-
-# Thread ids, with resolution state
+# Thread ids, with resolution state (read-only diagnostic — see note below)
 rtk gh api graphql -f query='
 query { repository(owner:"garnizeh",name:"cinzal") { pullRequest(number:<n>) {
   reviewThreads(first:100) { nodes { id isResolved isOutdated comments(first:1){nodes{body path}} } } } } }'
@@ -103,6 +100,13 @@ query { repository(owner:"garnizeh",name:"cinzal") { pullRequest(number:<n>) {
 
 If a reply 404s, the thread went outdated after your push. Post a PR-level
 comment that quotes the finding instead — a finding never gets a silent fix.
+
+**Never resolve a thread yourself.** Reply with the fix or the justification
+and stop there — CodeRabbit resolves its own threads automatically, usually
+within a few minutes, once it agrees. A thread still open after that means
+it disagreed and will explain why in a reply of its own (`coderabbit-triage`
+§4). The resolution-state query above is diagnostic only, for checking what
+CodeRabbit has already done — not a step to act on with a resolve mutation.
 
 ## Milestone tracking issues
 
