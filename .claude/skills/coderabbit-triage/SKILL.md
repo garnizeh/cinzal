@@ -40,6 +40,25 @@ comments were generated in the recent review. 🎉"** (genuinely clean —
 `Review limit reached` warning (that attempt was skipped), or a findings
 summary (still has outstanding comments). Nothing else counts as clean.
 
+**The clean text alone is not enough — bind it to the current head before
+trusting it.** The comment is a single mutable object with no field of its own
+recording which commit it describes, so a clean comment left over from an
+earlier commit and a clean comment about the current one are indistinguishable
+by text alone. Its body carries the commit range it reviewed inside a nested
+`Commits` block (`Reviewing files that changed from the base of the PR and
+between <base-sha> and <head-sha>.`) — extract that trailing sha and compare it
+against the PR's actual current head:
+
+```bash
+rtk gh api repos/garnizeh/cinzal/issues/<n>/comments --jq '.[0].body' \
+  | rtk grep -oP 'Reviewing files that changed from the base of the PR and between [0-9a-f]{40} and \K[0-9a-f]{40}'
+rtk gh api repos/garnizeh/cinzal/pulls/<n> --jq .head.sha
+```
+
+If the two shas differ, or the `Commits` block can't be found at all, the
+clean text is stale — **fail closed**: treat it the same as no review having
+landed yet, not as confirmation.
+
 **b. The review objects.** List them; note which commits each covered — this
 tells you which commit the main comment's current state is actually about.
 

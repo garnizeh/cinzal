@@ -34,9 +34,12 @@ first and confirm, concretely:
 
 - **The main comment, read fresh, against the PR's current head** — not a
   memory of what it said earlier, and not the presence/absence of new
-  comments underneath it. Check which commit the review behind it covered
-  (`coderabbit-triage` step 2); a review of an earlier commit does not clear a
-  later one.
+  comments underneath it. The comment has no field recording which commit it
+  describes, so the clean text alone doesn't prove it — extract the head sha
+  from its nested `Commits` block and diff it against `pulls/<n>.head.sha`
+  (`coderabbit-triage` §1a has the exact commands). A mismatch, or no
+  `Commits` block at all, means the text is stale: **fail closed**, treat it
+  as no review having landed.
 - **If findings were raised and got fixed, that is necessary but not
   sufficient.** Resolving every thread and going green does not rewrite the
   main comment — it still records whatever the review that raised those
