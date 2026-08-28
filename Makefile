@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity purity-selftest fog debug-isolation secrets bots-isolation bots-isolation-selftest simulate-deps check check-nosecrets replay clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check packages purity purity-selftest fog debug-isolation secrets vuln bots-isolation bots-isolation-selftest simulate-deps check check-nosecrets replay clean
 
 ## help      list these targets
 help:
@@ -160,6 +160,27 @@ debug-isolation:
 secrets: require-gitleaks
 	./scripts/check-secrets.sh
 
+## vuln      scan go.mod/go.sum for known-vulnerable dependencies (issue #373)
+#
+# osv-scanner is the gate: plain version-range matching against OSV/GHSA,
+# catching a disclosure regardless of whether it carries call-graph symbol
+# data. govulncheck runs alongside it as defense-in-depth for vulnerabilities
+# that do carry that data — GO-2026-6253 (github.com/moby/go-archive
+# v0.2.0, the CVE that motivated this target) is UNREVIEWED with an empty
+# ecosystem_specific block, so govulncheck alone reports no vulnerabilities
+# against it even reintroduced deliberately; that is this CVE's specific
+# gap, not a reason to drop govulncheck as a general check.
+#
+# Its own CI job (.github/workflows/ci.yml), not folded into
+# check-nosecrets — same reasoning as secrets, above: a newly-disclosed CVE
+# against an already-vendored dependency is a fact about time, not about
+# what this diff touches, so path-gating it the way `check` gates on
+# internal/cmd/go.mod/go.sum would let a PR that doesn't touch those paths
+# merge past a freshly-disclosed CVE in an unrelated dependency.
+vuln: require-osv-scanner require-govulncheck
+	osv-scanner scan source -L go.mod
+	govulncheck $(ALL)
+
 ## bots-isolation  assert internal/bots names no MatchState, graph, or seed
 bots-isolation:
 	$(GO) run scripts/check-bots-isolation.go
@@ -242,7 +263,7 @@ generate-check: generate
 # wrong: it calls these targets rather than restating them, so there is one
 # definition.
 #
-# check-nosecrets HOLDS THE REAL LIST; check ADDS secrets ON TOP OF IT.
+# check-nosecrets HOLDS THE REAL LIST; check ADDS secrets AND vuln ON TOP OF IT.
 #
 # Issue #336: CI's `check` workflow job path-gates on Go-relevant files, and
 # `secrets` must never be subject to that gate — it scans docs too, and a
@@ -252,12 +273,18 @@ generate-check: generate
 # its own always-runs CI job (.github/workflows/ci.yml) instead, and
 # check-nosecrets is what that job's `check` step actually invokes.
 #
-# `make check`, run locally, still runs everything including `secrets` — a
-# contributor who is not thinking about CI's job split should not lose gate
-# coverage by running the target this file's own help text tells them to
-# run. `secrets` is listed last here rather than staying in its old middle
-# position: this list is the CI split's boundary, and secrets being visibly
-# bolted on is the point, not an accident of alphabetizing.
+# `vuln` (issue #373) joined the same way, for the same shape of reason: a
+# newly-disclosed CVE against an already-vendored dependency is a fact about
+# time, not about what a given diff touches, so it must run regardless of
+# path too — its own always-runs CI job, kept off `check-nosecrets`'s list.
+#
+# `make check`, run locally, still runs everything including `secrets` and
+# `vuln` — a contributor who is not thinking about CI's job split should not
+# lose gate coverage by running the target this file's own help text tells
+# them to run. `secrets` and `vuln` are listed last here rather than staying
+# in their alphabetical position: this list is the CI split's boundary, and
+# both being visibly bolted on is the point, not an accident of
+# alphabetizing.
 #
 # No `## ` line, deliberately, unlike every other directly-invoked target in
 # this file: `make help` should keep pointing a contributor at `make check`,
@@ -265,7 +292,7 @@ generate-check: generate
 # visible option. CI calls it by its full name instead of through `help`.
 check-nosecrets: packages purity purity-selftest fog debug-isolation bots-isolation bots-isolation-selftest simulate-deps lint test bench-regression-selftest prod dev
 
-check: check-nosecrets secrets
+check: check-nosecrets secrets vuln
 
 ## replay    golden-replay determinism suite, for the cross-OS/arch matrix (issue #80)
 #

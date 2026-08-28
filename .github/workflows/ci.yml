@@ -48,6 +48,13 @@ env:
   # others above. Same reasoning as those: a tool release (here, a commit)
   # should not change what CI does without a reviewed change to this file.
   BENCHSTAT_VERSION: v0.0.0-20260825160852-19be9d8e6c70
+  # Both Go-installable, so no binary-archive/checksum dance like gitleaks
+  # needs above — `go install` itself resolves and verifies the module
+  # through the checksum database. Same reasoning as every other pin here: a
+  # tool release should not change what CI does without a reviewed commit to
+  # this file. See #373 and the `vuln` job/Makefile target.
+  GOVULNCHECK_VERSION: v1.7.0
+  OSV_SCANNER_VERSION: v2.5.1
 
 jobs:
   check:
@@ -277,6 +284,50 @@ jobs:
 
       - name: make secrets
         run: make secrets
+
+  # Issue #373: a newly-disclosed CVE against an already-vendored dependency
+  # is a fact about time, not about this diff — the vulnerable version can
+  # already be sitting in go.sum from a PR merged months ago. Path-gating
+  # this the way `check` gates on internal/cmd/go.mod/go.sum would let a PR
+  # that happens not to touch those paths merge past a freshly-disclosed CVE
+  # in an unrelated dependency. Same reasoning `secrets` (above) already
+  # uses for staying unconditional, aimed at a different bot: no `if:`, no
+  # path check, always runs, on every pull_request and every push to main.
+  #
+  # Two tools, not one: govulncheck's call-graph reachability analysis only
+  # fires against OSV entries carrying symbol-level data, and GO-2026-6253
+  # (the CVE that motivated this job — github.com/moby/go-archive v0.2.0,
+  # caught by CodeRabbit's SAST step on #372/#311's PR, missed by every gate
+  # `make check` already ran) has none — its OSV entry is
+  # "review_status":"UNREVIEWED" with an empty ecosystem_specific block.
+  # osv-scanner's plain version-range match against go.mod/go.sum catches it
+  # regardless. govulncheck stays as defense-in-depth for vulnerabilities
+  # that do carry symbol data — this CVE's gap is specific to it, not a
+  # general reason to drop the tool.
+  vuln:
+    name: vuln
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # No history scan here, unlike secrets — both tools only need the
+          # working tree's go.mod/go.sum and the current source, so the
+          # default shallow clone is enough.
+          persist-credentials: false
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      - name: Install pinned tools
+        run: |
+          set -euo pipefail
+          go install "golang.org/x/vuln/cmd/govulncheck@${GOVULNCHECK_VERSION}"
+          go install "github.com/google/osv-scanner/v2/cmd/osv-scanner@${OSV_SCANNER_VERSION}"
+
+      - name: make vuln
+        run: make vuln
 
   # Issue #80's exit demonstration: "resolve(s, o) == resolve(s, o)
   # byte-identical, and a golden 15-round replay reproduces on a second

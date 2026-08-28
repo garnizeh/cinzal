@@ -1,6 +1,6 @@
 ---
 name: gates-run
-description: Run and interpret Cinzal's verification suite — make check, make test, lint, and the individual CI gates (packages, purity, fog, debug-isolation, secrets, bots-isolation, simulate-deps). Use to verify a change before review, to reproduce a red CI job locally, or when the user asks to test, run the checks, or "roda o make check".
+description: Run and interpret Cinzal's verification suite — make check, make test, lint, and the individual CI gates (packages, purity, fog, debug-isolation, secrets, vuln, bots-isolation, simulate-deps). Use to verify a change before review, to reproduce a red CI job locally, or when the user asks to test, run the checks, or "roda o make check".
 ---
 
 # Gates run
@@ -13,7 +13,7 @@ command and there is one definition to keep correct rather than two that drift.
 rtk make check
 ```
 
-which is `check-nosecrets` + `secrets`, where `check-nosecrets` is:
+which is `check-nosecrets` + `secrets` + `vuln`, where `check-nosecrets` is:
 
 ```
 packages purity purity-selftest fog debug-isolation bots-isolation
@@ -46,6 +46,7 @@ Run it standalone to see that message.
 | `fog` | `render`/`web` never directly import `internal/rules` | The rendering layer can name the full match state |
 | `debug-isolation` | The production binary contains no debug routes | Debug tooling escaped its `//go:build debug` tag |
 | `secrets` | No credentials in the tree **or in the commits this branch adds** | Scoped to `origin/main..HEAD`; over-scans rather than under-scans |
+| `vuln` | No `go.mod`/`go.sum` dependency carries a known OSV/GHSA vulnerability (osv-scanner) or a reachable one govulncheck's symbol data can confirm | A newly (or newly-disclosed) vulnerable dependency — bump or replace it, never suppress the finding |
 | `bots-isolation` | `internal/bots` production code names no `MatchState`, graph, or `[32]byte` seed, and no `rules.X` outside the allow-list | Widening `scripts/bots-isolation-allowlist.txt` is its own reviewed change with a fog-safety argument |
 | `simulate-deps` | `cmd/simulate` depends on only `rules`/`bots`/`game`/`telemetry` | `internal/match` (or anything else) leaked into the driver |
 | `lint` | `go vet` + `golangci-lint` | — |
@@ -68,6 +69,7 @@ rtk make test                     # go test -race ./...
 rtk make lint                     # go vet + golangci-lint
 rtk make fog                      # one gate
 rtk make purity
+rtk make vuln
 rtk make bots-isolation
 rtk go test -race ./internal/rules/...
 rtk make dev                      # debug build — the debug panel exists here
@@ -84,10 +86,12 @@ touch `internal/`, `cmd/`, `scripts/`, `go.mod`/`go.sum`, `Makefile`,
 `.golangci.yml` or the CI definitions. Skip it and **say so in the PR test
 plan**, with what you verified instead.
 
-The secret scan does **not** participate in that skip, on purpose — it scans
-docs too, runs in its own always-on CI job, and must never be skippable by what a
-diff touches. Both path checks **fail open**: an unresolvable diff runs
-everything.
+Neither the secret scan nor `vuln` participates in that skip, on purpose —
+`secrets` scans docs too, and `vuln` is checking a fact about time (has a CVE
+been disclosed against a dependency already in `go.sum`?), not about what this
+diff touches; both run in their own always-on CI jobs regardless of what a
+diff touches. The `check`/`replay` path check **fails open**: an unresolvable
+diff runs everything.
 
 ## Reproducing a red CI job
 

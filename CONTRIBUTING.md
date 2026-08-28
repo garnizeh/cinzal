@@ -150,7 +150,7 @@ No Node, no frontend build step, and no Docker for the rules engine — `interna
 
 ## The CI gates
 
-Six checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
+Seven checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
 
 | Gate | Asserts |
 |---|---|
@@ -158,6 +158,7 @@ Six checks make the architecture real rather than conventional. They are not sty
 | **Fog boundary** | The rendering and web layers cannot name the full match state |
 | **Debug isolation** | The production binary contains no debug routes |
 | **Secret scan** | No credentials or connection strings in the tree, or in the commits this change adds |
+| **Dependency scan** | No `go.mod`/`go.sum` dependency carries a known OSV/GHSA vulnerability |
 | **Bots isolation** | `internal/bots`'s production code cannot name `MatchState`, the graph, or the match seed |
 | **Simulate dependencies** | `cmd/simulate` depends on nothing but `internal/rules`, `internal/bots`, `internal/game` and `internal/telemetry` |
 
@@ -167,9 +168,9 @@ The secret scan reads history as well as the tree, because a credential added in
 
 ### A docs-only pull request does not pay for a Go toolchain
 
-The other five gates above, plus lint/test/build, run through CI's `check` job as `make check-nosecrets` — everything `make check` runs except the secret scan (see the Makefile's own comment on that split). That job, and `replay`'s cross-OS matrix, skip themselves on a pull request whose diff cannot touch `internal/`, `cmd/`, `scripts/`, `go.mod`/`go.sum`, `Makefile`, `.golangci.yml`, or this repository's CI definitions — a decision record, a GDD/RFC edit, a roadmap update ([#336](https://github.com/garnizeh/cinzal/issues/336)). The check that decides this (`.github/actions/changed-paths`) fails **open**: if it cannot resolve the base commit to diff against, it reports "touched" and everything runs, the same posture `check-secrets.sh` takes when its own commit range does not resolve.
+The other five gates above, plus lint/test/build, run through CI's `check` job as `make check-nosecrets` — everything `make check` runs except the secret scan and the dependency scan (see the Makefile's own comment on that split). That job, and `replay`'s cross-OS matrix, skip themselves on a pull request whose diff cannot touch `internal/`, `cmd/`, `scripts/`, `go.mod`/`go.sum`, `Makefile`, `.golangci.yml`, or this repository's CI definitions — a decision record, a GDD/RFC edit, a roadmap update ([#336](https://github.com/garnizeh/cinzal/issues/336)). The check that decides this (`.github/actions/changed-paths`) fails **open**: if it cannot resolve the base commit to diff against, it reports "touched" and everything runs, the same posture `check-secrets.sh` takes when its own commit range does not resolve.
 
-**The secret scan does not participate in this gate, on purpose.** It runs in its own CI job, unconditionally, on every pull request — a credential pasted into a decision record is exactly the case it exists to catch, so it is the one check that must never be skippable by what a diff touches. `bench-compare`'s own path check (below) uses the same `changed-paths` action but a narrower, unrelated path list — internal/rules/gen and its own gate definition — because what it decides is whether there is anything to benchmark, not whether there is anything to build.
+**Neither the secret scan nor the dependency scan participates in this gate, on purpose.** Both run in their own CI jobs, unconditionally, on every pull request. A credential pasted into a decision record is exactly the case the secret scan exists to catch, so it must never be skippable by what a diff touches; a newly-disclosed CVE against a dependency already sitting in `go.sum` is a fact about time, not about this diff, so the dependency scan can't be skippable by path either — see [The dependency-vulnerability gate](#the-dependency-vulnerability-gate) below. `bench-compare`'s own path check (below) uses the same `changed-paths` action but a narrower, unrelated path list — internal/rules/gen and its own gate definition — because what it decides is whether there is anything to benchmark, not whether there is anything to build.
 
 ### The bots isolation gate
 
@@ -183,9 +184,17 @@ RFC-001 §16.4 states `cmd/simulate` "needs only `rules` and `bots`" — a depen
 
 `make bots-isolation-selftest` drives the gate against fixtures for each failure mode — a named `rules.MatchState`, a `:=`-inferred local that never spells the type name, a bare `[32]byte` with no `rules` import at all, a dot-import, a `doc.go`-only package (VACUOUS, not a pass), a parse error, and a missing allow-list — the same standard `check-bench-regression_test.sh` is held to below.
 
+### The dependency-vulnerability gate
+
+Surfaced during [#372](https://github.com/garnizeh/cinzal/pull/372) ([#311](https://github.com/garnizeh/cinzal/issues/311)'s PR): CodeRabbit's SAST step flagged `github.com/moby/go-archive` v0.2.0 — a `testcontainers-go` transitive dependency, since bumped — as carrying GHSA-hfg8-hc9c-6c3h / GO-2026-6253, a tar-extraction path-traversal CVE. Nothing in `make check` would have caught it ([#373](https://github.com/garnizeh/cinzal/issues/373)).
+
+Two tools, not one, because neither alone is sufficient. `govulncheck ./...`'s call-graph reachability analysis only fires against an OSV entry carrying symbol-level data to match against — GO-2026-6253's is `"review_status":"UNREVIEWED"` with an empty `ecosystem_specific` block, so `govulncheck` reports no vulnerabilities against it even with the vulnerable version deliberately reintroduced. `osv-scanner scan source -L go.mod` catches it immediately with plain version-range matching, no reachability analysis required. `govulncheck` still runs, as defense-in-depth for vulnerabilities that *do* carry symbol data — this CVE's gap is specific to it, not a general reason to drop the tool.
+
+**The dependency scan does not participate in the path gate either, for the same shape of reason the secret scan doesn't.** A CVE against a dependency already vendored in `go.sum` can be disclosed at any time, independent of what a given pull request touches — gating the scan on `go.mod`/`go.sum` changes would let a freshly-disclosed CVE ride through any PR that doesn't happen to touch those files. `vuln` runs in its own always-on CI job, unconditionally, the same shape `secrets` already has.
+
 ### The benchmark regression gate
 
-**`bench-compare` is also required**, but shaped differently from the six above: it only runs on a pull request that touches `internal/rules/gen`, this workflow, its own path-gate action (`.github/actions/changed-paths`), `check-bench-regression.sh`, or the `Makefile` — most pull requests skip it rather than pass it. When it runs, it benchmarks the base commit and this pull request's merge commit back to back on the same runner and fails for real past a 20%-per-case or 10%-geomean threshold (`scripts/check-bench-regression.sh`).
+**`bench-compare` is also required**, but shaped differently from the seven above: it only runs on a pull request that touches `internal/rules/gen`, this workflow, its own path-gate action (`.github/actions/changed-paths`), `check-bench-regression.sh`, or the `Makefile` — most pull requests skip it rather than pass it. When it runs, it benchmarks the base commit and this pull request's merge commit back to back on the same runner and fails for real past a 20%-per-case or 10%-geomean threshold (`scripts/check-bench-regression.sh`).
 
 It started advisory (issue #113) because two data points could not characterise real CI-runner noise against those thresholds, and was promoted to required in [#127](https://github.com/garnizeh/cinzal/issues/127) once seven real same-runner comparisons had landed with zero false positives — worst single-case drift +6.27%, worst geomean 0.93%, both comfortably inside the thresholds.
 
