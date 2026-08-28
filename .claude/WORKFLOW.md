@@ -104,12 +104,19 @@ resolves. **Poll the main PR comment** (`gh api .../issues/<n>/comments`,
 index `[0]`), not `pulls/<n>/reviews` — `coderabbit-triage` §2 is explicit
 that a clean incremental review often edits that comment in place without
 creating a new review object, so a loop watching the reviews list can sit
-past a review that already landed. On a rate-limit skip, the same comment
-names a refill time (e.g. "Next included review available in 41 minutes");
-once that has passed, **the poll must itself comment `@coderabbitai review`**
-to request the retry — CodeRabbit does not re-scan a stale PR on its own, and
-a loop that only watches never gets a second attempt. Cap the wait rather
-than polling forever if nothing ever posts (see `coderabbit-triage`).
+past a review that already landed.
+
+**On a rate-limit skip, the comment states the exact wait, not a range** —
+"Next included review available in *N* minutes." Parse `N`, wait exactly
+`N + 1` minutes (one minute of buffer, timed precisely — not a guessed
+window), then comment `@coderabbitai review` to request the retry —
+CodeRabbit does not re-scan a stale PR on its own. If that attempt reports
+rate-limited again, it carries its own new `N`; parse and repeat the same
+wait-then-trigger cycle, not an escalating backoff. **A new commit already
+triggers CodeRabbit's own review attempt** — when the wait is spent pushing
+a fix rather than idling, that push is the trigger; do not also comment
+`@coderabbitai review` for it. Cap the wait rather than polling forever if
+nothing ever posts (see `coderabbit-triage`).
 
 **The one thing this pipeline does not do on its own is stop iterating on a
 review early.** "Fix → verify → push → reply → repeat" continues until

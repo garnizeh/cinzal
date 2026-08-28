@@ -104,24 +104,39 @@ silently is not.**
   one form silently misreads the other as unaddressed. That mistake was made
   twice here, once in each direction.
 
-On "Review limit reached": wait the stated refill (usually 20–45 min), then
-comment `@coderabbitai review`. **"Already reviewed" is an answer, not a
-refusal** — the review ran; look for `Addressed` markers instead of retrying.
-When the message gives no refill time, the allowance is exhausted for longer and
-there is nothing to do but wait. When a review genuinely was missed, the way to
-get one is a new commit after the allowance returns, not repeating the command.
+On "Review limit reached": **the comment states the exact wait, not a
+range** — "Next included review available in *N* minutes." Parse that
+number; do not substitute a guessed "20–45 min" window when an exact one is
+printed right there. Wait exactly `N + 1` minutes (one minute of buffer, via
+a timer/`Monitor` sleep for that duration — not a foreground sleep, not a
+shorter poll-and-hope), then comment `@coderabbitai review` to request the
+retry. **If that attempt reports rate-limited again, it carries its own new
+stated `N`** — parse it and repeat the same wait-then-trigger cycle; this is
+not an escalation or a backoff, just the same step run again with whatever
+number the message gives this time. When the message gives no refill time at
+all, the allowance is exhausted for longer and there is nothing precise to
+time against — fall back to waiting in longer increments and re-checking,
+there is nothing else to do. **"Already reviewed" is an answer, not a
+refusal** — the review ran; look for `Addressed` markers instead of
+retrying.
+
+**A new commit already triggers CodeRabbit's own review attempt on its
+own** — if the wait window is spent pushing a fix rather than idling, do not
+also comment `@coderabbitai review` for that same push; the explicit comment
+is only for waking a PR that has no commit of its own to trigger one. When a
+review genuinely was missed with no push to explain it, a new commit after
+the allowance returns is the more natural way to get one, ahead of repeating
+the command on an unchanged head.
 
 **Check proactively.** Poll after pushing; do not wait to be told. Do it in the
 background (`Monitor` with an `until`-loop against **the main issue comment**,
 `gh api .../issues/<n>/comments[0]` — not `pulls/<n>/reviews`, since a clean
 incremental review often edits that comment in place without creating a new
 review object, so a reviews-list poll can sit past a review that already
-landed — not a foreground sleep) so the wait — which can span the whole 20–45
-min refill window, possibly more than once — doesn't stall the turn. Bind
+landed — not a foreground sleep) so the wait — which can span the exact
+refill window above, possibly more than once — doesn't stall the turn. Bind
 whatever the comment says to the PR's current head SHA (§1a) before trusting
-it, and if the comment still shows "Review limit reached" once the stated
-refill window has passed, the poll itself must comment `@coderabbitai review`
-to request the retry — CodeRabbit does not re-scan a stale PR on its own.
+it.
 
 ## The merge gate this skill hands to `merge-closeout`
 
