@@ -94,7 +94,20 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 # catch it. internal/match/fold is where Fold/FoldMeasured live instead
 # (D49), specifically so this array is what stops web from reaching them,
 # rather than a doc comment in internal/match/doc.go.
-FORBIDDEN=("$MODULE/internal/rules" "$MODULE/internal/telemetry" "$MODULE/internal/match/fold")
+#
+# internal/store/orderlog (issue #317) is the same shape of fix, one layer
+# down: internal/store itself is NOT forbidden — RFC-001 §11.2 already
+# commits internal/web to importing internal/store directly for
+# []BoardNote (D18), and that edge is legitimate and must stay open — but
+# orderlog.Load returns a rules.OrderLog, at least as fog-sensitive as
+# MatchState (internal/rules/order_log.go's own doc comment: "it names
+# every seat's full route and action history, not one seat's"). Putting
+# Load directly on *store.Store would make it reachable from web through
+# the exact same allowed edge BoardNotes needs, with no forbidden import to
+# catch it — so, mirroring D49, it lives in its own sub-package instead,
+# and only that sub-package's import path is forbidden here. See
+# internal/store/orderlog's own package doc comment for the full reasoning.
+FORBIDDEN=("$MODULE/internal/rules" "$MODULE/internal/telemetry" "$MODULE/internal/match/fold" "$MODULE/internal/store/orderlog")
 GUARDED="./internal/render/... ./internal/web/..."
 
 # Every non-default build configuration this repository actually uses (D54).

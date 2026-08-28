@@ -5,39 +5,50 @@ import "slices"
 // Order is the whole of one player's turn: the five fields of GDD §9, plus
 // the abandon-cargo flag and the RFC §11.1a staleness field. It is the
 // server's only input — everything Resolve does starts from a map of these.
+//
+// The struct tags below are D44's wire vocabulary for orders.payload: field
+// names are frozen the same way the Go field name already is, snake_case,
+// chosen once. Order itself has no custom MarshalJSON/UnmarshalJSON — these
+// tags drive its encoding directly — but PushingOn, ActionOrder,
+// StanceOrder, ItemDiscard and AddOns each do (order_wire.go), so their own
+// field tags below are documentation only; see that file for why, and for
+// where D47's omit-on-zero enum treatment actually lives.
 type Order struct {
 	// Round is the round this form was rendered for (RFC §11.1a), checked
 	// against the round it resolves in so a stale resubmission after a tick
 	// is rejected rather than silently acting on outdated state.
-	Round RoundNumber
+	Round RoundNumber `json:"round"`
 
 	// Route is a sequence of steps along graph edges, starting from the
 	// player's current position. An empty route — staying put — is legal
-	// (GDD §9.1).
-	Route []NodeID
+	// (GDD §9.1). No omitempty: D44's round-trip property requires a nil
+	// Route and an explicitly-empty Route to be distinguishable on the wire
+	// (nil encodes as JSON null, an empty-but-non-nil slice as `[]`), and
+	// omitempty would collapse both to key-absence.
+	Route []NodeID `json:"route"`
 
 	// PushingOn is the optional blind continuation appended to a route that
 	// ends on a Hidden node (GDD §9.1). Zero value (Steps: 0, Bias: nil)
 	// means no Pushing On was declared.
-	PushingOn PushingOn
+	PushingOn PushingOn `json:"pushing_on"`
 
 	// Action is the action taken at the route's final node (GDD §9.2).
-	Action ActionOrder
+	Action ActionOrder `json:"action"`
 
 	// Stance is the one stance declared for any confrontation along the
 	// route (GDD §9.3).
-	Stance StanceOrder
+	Stance StanceOrder `json:"stance"`
 
 	// Items lists discards declared this round, up to the hand limit of 3
-	// (GDD §9.4).
-	Items []ItemDiscard
+	// (GDD §9.4). No omitempty — same nil-vs-empty reasoning as Route.
+	Items []ItemDiscard `json:"items"`
 
 	// AddOns are the two order add-ons (GDD §9.5).
-	AddOns AddOns
+	AddOns AddOns `json:"add_ons"`
 
 	// AbandonCargo drops any carried cargo at the ending node, free and
 	// costing no action (GDD §9.3).
-	AbandonCargo bool
+	AbandonCargo bool `json:"abandon_cargo"`
 
 	// ContractChoice answers this round's Phase 2 offer, if one is pending
 	// (GDD §8.1-8.2; D29): nil declines, and is ignored entirely when no
@@ -49,18 +60,20 @@ type Order struct {
 	// "unset" shape AddOns.OpenDoorsMarket already uses below. An absent
 	// or out-of-range value against a pending offer is a GDD §15.0
 	// illegal payload, degrading to decline rather than a partial accept.
-	ContractChoice *int
+	ContractChoice *int `json:"contract_choice,omitempty"`
 }
 
 // PushingOn is GDD §9.1's blind continuation: a step count of 0-2 past a
-// route's terminal Hidden node, plus a sector bias.
+// route's terminal Hidden node, plus a sector bias. See order_wire.go for
+// its MarshalJSON/UnmarshalJSON.
 type PushingOn struct {
 	// Steps is the blind step count, legally 0-2.
 	Steps int
 
 	// Bias is the declared sector to steer toward, evaluated by the priority
 	// ladder in GDD §9.1. Nil means "none" — a plain random walk with no
-	// backtracking, per GDD §9.1's own equivalence of the two.
+	// backtracking, per GDD §9.1's own equivalence of the two. D44: a nil
+	// *Sector encodes as JSON null, decoded back to nil.
 	Bias *Sector
 }
 
@@ -80,6 +93,8 @@ func (p PushingOn) Equal(other PushingOn) bool {
 // Kind is ActionDeal, selecting which of the Black Market's three rolled
 // items to buy; every other ActionKind takes no target, since GDD §9.2 always
 // resolves them against the route's final node rather than a declared one.
+// See order_wire.go for its MarshalJSON/UnmarshalJSON — Kind and Item are
+// both D47's omit-on-zero enums.
 type ActionOrder struct {
 	Kind ActionKind
 	Item ItemID
@@ -88,7 +103,8 @@ type ActionOrder struct {
 // StanceOrder is GDD §9.3's stance field. Stake is meaningful only when
 // Stance is StanceAggressive — Neutral and Evasive fix it at 0 by rule, but
 // this type does not enforce that; it is a validation concern for
-// internal/rules, not a representation concern here.
+// internal/rules, not a representation concern here. See order_wire.go for
+// its MarshalJSON/UnmarshalJSON.
 type StanceOrder struct {
 	Stance Stance
 	Stake  int // Cr$ 0-6
@@ -97,7 +113,7 @@ type StanceOrder struct {
 // ItemDiscard declares one item discarded this round (GDD §9.4). Target is
 // populated for Police Band (a node), Decoy (a Known node), and Bolt Hole (a
 // destination 2 steps away); it is the zero NodeID for every other item,
-// which takes none.
+// which takes none. See order_wire.go for its MarshalJSON/UnmarshalJSON.
 type ItemDiscard struct {
 	Item   ItemID
 	Target NodeID
@@ -106,7 +122,8 @@ type ItemDiscard struct {
 // AddOns are GDD §9.5's two checkboxes, plus Open Doors' pre-declaration
 // (GDD §14.3, D14 §4). RenewBlocks is 0 when no lease renewal is requested —
 // legal purchases are 1-4 blocks (GDD §10.4), so 0 is never a real value and
-// needs no separate flag or pointer.
+// needs no separate flag or pointer. See order_wire.go for its
+// MarshalJSON/UnmarshalJSON.
 type AddOns struct {
 	BuyLedger   bool
 	RenewPost   NodeID
