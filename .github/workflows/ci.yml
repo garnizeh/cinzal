@@ -156,7 +156,8 @@ jobs:
       # until M3/M5 declare real generated paths, and a gate that can only
       # report VACUOUS stays out of the aggregate rather than passing by not
       # running (see the Makefile's own comment on `check`). It rejoins once
-      # there is something for it to actually compare.
+      # there is something for it to actually compare — issue #316, blocked
+      # by #315.
       #
       # check-nosecrets, not check: `secrets` runs in its own job below and
       # must not run twice. `make check` (the full list, secrets included)

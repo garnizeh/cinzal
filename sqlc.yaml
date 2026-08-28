@@ -1,0 +1,101 @@
+# sqlc config (RFC-001 §7.5, issue #315). Generates typed Go methods from
+# the plain SQL in internal/store/queries/, type-checked against the SAME
+# migrations directory internal/store/migrate.go embeds and runs at boot —
+# not a duplicate schema.sql that can drift from what actually ships. Output
+# lands directly in internal/store (package store), alongside the
+# hand-written repository code (pool.go, migrate.go, ratelimit.go): the
+# generated DBTX/Queries types are meant to be used unqualified by that code,
+# not imported from a separate subpackage — see ratelimit.go's own dbtx
+# interface, written anticipating exactly this merge.
+#
+# CI installs this exact version (SQLC_VERSION, .github/workflows/ci.yml)
+# before any gate runs, so `sqlc generate` never silently no-ops there.
+version: "2"
+sql:
+  - engine: "postgresql"
+    schema: "internal/store/migrations"
+    queries: "internal/store/queries"
+    gen:
+      go:
+        package: "store"
+        out: "internal/store"
+        sql_package: "pgx/v5"
+
+        # D44's whole reason to exist: payload/config (matches.config,
+        # orders.payload, events.payload) must surface as raw bytes at this
+        # layer, never a decoded structure — decoding is D44's codec, a
+        # later task, strictly above internal/store. sqlc's pgx/v5 default
+        # for a jsonb column is already []byte, so no override is needed to
+        # get that; this comment exists so a future edit doesn't "helpfully"
+        # add a json.RawMessage or struct override here and quietly move the
+        # decode boundary down into this package.
+
+        # Nullable columns become plain Go pointers instead of a
+        # pgtype.Xxx{Valid bool} wrapper. Chosen deliberately: reading a
+        # nil pointer without checking panics loudly; reading an unchecked
+        # pgtype wrapper's zero value returns "" or 0 silently. Every
+        # nullable column this query set touches (match_players.user_id,
+        # match_players.bot_kind) means something specific — bot seat vs.
+        # human seat — and a silent wrong read is exactly the failure mode
+        # the rest of this codebase (D44, the fail-closed gates) refuses to
+        # allow.
+        #
+        # This flag does NOT reach every nullable column, though: sqlc's
+        # pgx/v5 driver hard-codes uuid -> pgtype.UUID (and several other
+        # composite pgtype.* wrappers) regardless of nullability, because
+        # those types already carry their own Valid field — confirmed against
+        # sqlc v1.31.1 (the CI-pinned SQLC_VERSION) by running `sqlc generate`
+        # and inspecting the output; emit_pointers_for_null_types has no
+        # effect on them. That is a silent-zero-value risk of exactly the
+        # kind this comment warns about for match_players.user_id specifically
+        # (D53: `user_id IS NULL` is the literal test that separates a bot
+        # seat from a human one — reading the zero-value UUID without
+        # checking .Valid reads as neither, silently), so it gets an explicit
+        # column override below forcing *pgtype.UUID instead of relying on
+        # the global flag. match_players.bot_kind needs no such override: TEXT
+        # is one of the plain types emit_pointers_for_null_types does reach,
+        # so it already comes out as *string.
+        emit_pointers_for_null_types: true
+
+        # Column-level, never db_type-level: a db_type override on every
+        # smallint or uuid column would silently coerce an unrelated future
+        # column (e.g. a headcount, a different entity's id) into the wrong
+        # domain type. Naming each column keeps every override an explicit,
+        # reviewed statement about that one column's meaning — the same
+        # reasoning game.SeatID/NodeID/RoundNumber/ContractID already give
+        # for being distinct wrapper types instead of bare int (ids.go).
+        overrides:
+          # Forces *pgtype.UUID over the driver-default pgtype.UUID — see the
+          # emit_pointers_for_null_types comment above for why this column
+          # specifically cannot rely on that flag.
+          - column: "match_players.user_id"
+            go_type:
+              type: "pgtype.UUID"
+              pointer: true
+          - column: "matches.id"
+            go_type: "github.com/garnizeh/cinzal/internal/game.MatchID"
+          - column: "matches.round"
+            go_type: "github.com/garnizeh/cinzal/internal/game.RoundNumber"
+          - column: "match_players.match_id"
+            go_type: "github.com/garnizeh/cinzal/internal/game.MatchID"
+          - column: "match_players.seat"
+            go_type: "github.com/garnizeh/cinzal/internal/game.SeatID"
+          - column: "orders.match_id"
+            go_type: "github.com/garnizeh/cinzal/internal/game.MatchID"
+          - column: "orders.round"
+            go_type: "github.com/garnizeh/cinzal/internal/game.RoundNumber"
+          - column: "orders.seat"
+            go_type: "github.com/garnizeh/cinzal/internal/game.SeatID"
+          - column: "events.match_id"
+            go_type: "github.com/garnizeh/cinzal/internal/game.MatchID"
+          - column: "events.round"
+            go_type: "github.com/garnizeh/cinzal/internal/game.RoundNumber"
+          - column: "match_summary.match_id"
+            go_type: "github.com/garnizeh/cinzal/internal/game.MatchID"
+          - column: "match_summary.round"
+            go_type: "github.com/garnizeh/cinzal/internal/game.RoundNumber"
+          - column: "match_summary.submitted_seats"
+            go_type:
+              import: "github.com/garnizeh/cinzal/internal/game"
+              type: "SeatID"
+              slice: true

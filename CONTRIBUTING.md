@@ -128,7 +128,7 @@ make test      # go test -race ./...
 make lint      # go vet + golangci-lint
 make dev       # build with the debug tag; the debug panel exists in this binary
 make prod      # build without it; debug routes do not exist in this binary
-make generate  # templ + sqlc
+make generate  # sqlc (templ joins at M5)
 make packages  # assert the package graph matches scripts/packages.txt
 ```
 
@@ -138,7 +138,7 @@ make packages  # assert the package graph matches scripts/packages.txt
 
 **Go 1.27.0.** RFC §4 names it and §6.3 explains why the project cares: the design is staked on `seed + order log` reproducing a match exactly, and *"which Go built it"* should never be a candidate explanation for a determinism mismatch. Note that `go.mod` can only express a **floor** — no directive pins a version from inside it — so the exact version is enforced in CI.
 
-`golangci-lint` for `make lint`. `gitleaks` for `make secrets`. `templ` and `sqlc` for `make generate`; both are no-ops until M5 and M3 respectively, so you can skip them until then. Postgres 18.6 arrives with M3.
+`golangci-lint` for `make lint`. `gitleaks` for `make secrets`. `templ` for `make generate` — a no-op until M5, so you can skip installing it until then. `sqlc` (issue #315, M3) is no longer skippable: `make generate` uses it for real, and `make test`/`make check` need it too, since `internal/store/sqlc_generate_test.go` shells out to it to prove `sqlc generate` fails closed on a query naming a nonexistent column. Postgres 18.6 arrives with M3.
 
 No Node, no frontend build step, and no Docker for the rules engine — `internal/rules` is pure and its tests do no I/O at all. **This holds for `make check` as a whole, not only for `internal/rules`, even after M3** ([D46](docs/decisions/D46-postgres-backed-test-layer.md), [D54](docs/decisions/D54-integration-tag-fog-gate-and-check-scope.md)): `internal/store`'s Postgres-backed Integration and Concurrency tests live behind `//go:build integration` and a separate `make integration` target, which needs a reachable Docker daemon and hard-fails without one — but is never compiled by `make check`, only by that target itself. `make integration-list` is a Docker-free companion that confirms the tagged suite hasn't silently shrunk; it still needs network access the first time it runs, to fetch the testcontainers-go dependency tree its compile pulls in, so it also stays out of `make check` and runs instead as its own required CI job. Neither target exists before M3.
 
