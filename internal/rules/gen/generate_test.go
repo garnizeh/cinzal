@@ -1,6 +1,7 @@
 package gen
 
 import (
+	"errors"
 	"math/rand/v2"
 	"testing"
 
@@ -557,7 +558,7 @@ func TestGenerateExhaustsAndNamesFailedConstraint(t *testing.T) {
 	}
 
 	var exhausted *ExhaustedError
-	if !asExhausted(err, &exhausted) {
+	if !errors.As(err, &exhausted) {
 		t.Fatalf("Generate() error = %v (%T), want *ExhaustedError", err, err)
 	}
 	if exhausted.Attempts != p.MaxAttempts {
@@ -569,12 +570,4 @@ func TestGenerateExhaustsAndNamesFailedConstraint(t *testing.T) {
 	if exhausted.Failures[constraintStartPlacement] == 0 {
 		t.Errorf("Failures[%q] = 0, want > 0", constraintStartPlacement)
 	}
-}
-
-func asExhausted(err error, target **ExhaustedError) bool {
-	e, ok := err.(*ExhaustedError)
-	if ok {
-		*target = e
-	}
-	return ok
 }

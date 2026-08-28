@@ -29,6 +29,55 @@ linters:
     - staticcheck
     - govet
 
+    # Curated from github.com/garnizeh/maestro's .golangci.yml (issue #373)
+    # against this file's own header: each of the six below closes a
+    # specific silent-failure class, not just "another repo enables it".
+    # (errcheck itself is already enabled above; its check-type-assertions
+    # option, in the settings block below, is the sixth addition — a failed
+    # type assertion returns the zero value instead of panicking, exactly
+    # the "silent when wrong" class errcheck exists to close for error
+    # returns, RFC-001 §6.6.)
+
+    # Enforces errors.Is/errors.As over naive == or type-switch comparisons —
+    # already this repo's own idiom (internal/store's tests use errors.Is/
+    # errors.AsType throughout). A naive comparison silently stops matching
+    # the moment an error gets wrapped one layer deeper somewhere upstream.
+    - errorlint
+
+    # Mechanically enforces CLAUDE.md's own "comments say why" rule, scoped
+    # to the one place it is currently unenforced: a bare //nolint (or one
+    # naming no specific linter) suppresses a finding with no record of why,
+    # which is a silent gate weakening with no reviewable trail. See the
+    # nolintlint settings block below.
+    - nolintlint
+
+    # internal/store/migrate.go (#311) is this repo's first slog call site;
+    # pins a consistent convention project-wide before a second, inconsistent
+    # one has a chance to land.
+    - sloglint
+
+    # Mechanical, idiomatic, low-noise: t.Setenv/t.TempDir over the manual
+    # os.Setenv/os.MkdirTemp equivalents, and stdlib-defined constants
+    # (net/http status codes, os.SEEK_* etc.) over hand-typed literals that
+    # can drift from what they mean to name.
+    - usetesting
+    - usestdlibvars
+
+  settings:
+    # A failed type assertion returns T's zero value silently rather than
+    # panicking — the same "silent when wrong" class errcheck already
+    # closes for unchecked error returns (RFC-001 §6.6).
+    errcheck:
+      check-type-assertions: true
+
+    # Both required: a directive naming no linter (require-specific) or
+    # naming one with no reason (require-explanation) suppresses a finding
+    # with nothing for a later reader to evaluate — CLAUDE.md's "comments
+    # say why" rule, mechanically enforced for this one comment shape.
+    nolintlint:
+      require-explanation: true
+      require-specific: true
+
 formatters:
   enable:
     - gofmt

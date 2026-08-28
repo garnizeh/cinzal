@@ -73,7 +73,7 @@ anchor parity, cross-round, property/adversarial, bot determinism).
 
 ## Gates this touches
 `make check` runs: packages purity purity-selftest fog debug-isolation secrets
-bots-isolation bots-isolation-selftest simulate-deps lint test
+vuln bots-isolation bots-isolation-selftest simulate-deps lint test
 bench-regression-selftest prod dev. Name the ones this change can move, and why.
 Say whether `bench-compare` triggers (it does only for `internal/rules/gen`,
 `.github/workflows/ci.yml`, `scripts/check-bench-regression.sh` or `Makefile`).
