@@ -65,7 +65,7 @@ type Match struct {
 type MatchPlayer struct {
 	MatchID         game.MatchID
 	Seat            game.SeatID
-	UserID          pgtype.UUID
+	UserID          *pgtype.UUID
 	BotKind         *string
 	Faction         string
 	JoinedAt        pgtype.Timestamptz

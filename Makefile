@@ -115,14 +115,18 @@ lint: require-golangci-lint
 	$(GO) vet $(ALL)
 	golangci-lint run
 
-## generate  templ and sqlc
+## generate  sqlc (templ arrives with M5)
 #
-# templ generate is a no-op until M5 (no .templ files exist yet). sqlc
-# generate stopped being one with issue #315 (M3): sqlc.yaml now exists at
-# the repo root, so the "no sqlc.yaml yet" placeholder branch this target
+# templ itself is left out of this target, not just skipped at runtime: no
+# .templ files exist until M5, so requiring the templ binary here would block
+# a contributor who only has sqlc from running the one generator that does
+# anything (CONTRIBUTING.md's "Requirements" section already documents templ
+# as skippable until M5 — this target used to disagree with that). sqlc
+# generate stopped being a no-op with issue #315 (M3): sqlc.yaml now exists
+# at the repo root, so the "no sqlc.yaml yet" placeholder branch this target
 # carried since M0 is gone — there is always something to generate now.
-generate: require-templ require-sqlc
-	templ generate
+# M5 re-adds require-templ and `templ generate` alongside this.
+generate: require-sqlc
 	sqlc generate
 
 ## packages  assert the package graph matches scripts/packages.txt

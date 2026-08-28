@@ -128,7 +128,7 @@ make test      # go test -race ./...
 make lint      # go vet + golangci-lint
 make dev       # build with the debug tag; the debug panel exists in this binary
 make prod      # build without it; debug routes do not exist in this binary
-make generate  # templ + sqlc
+make generate  # sqlc (templ joins at M5)
 make packages  # assert the package graph matches scripts/packages.txt
 ```
 

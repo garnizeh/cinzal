@@ -25,7 +25,7 @@ RETURNING match_id, seat, user_id, bot_kind, faction, joined_at, missed_deadline
 type CreateMatchPlayerParams struct {
 	MatchID              game.MatchID
 	Seat                 game.SeatID
-	UserID               pgtype.UUID
+	UserID               *pgtype.UUID
 	BotKind              *string
 	Faction              string
 	UnsubscribeTokenHash []byte
@@ -90,7 +90,7 @@ ORDER BY seat
 type ListMatchPlayersRow struct {
 	MatchID         game.MatchID
 	Seat            game.SeatID
-	UserID          pgtype.UUID
+	UserID          *pgtype.UUID
 	BotKind         *string
 	Faction         string
 	JoinedAt        pgtype.Timestamptz

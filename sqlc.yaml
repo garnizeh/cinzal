@@ -39,6 +39,22 @@ sql:
         # human seat — and a silent wrong read is exactly the failure mode
         # the rest of this codebase (D44, the fail-closed gates) refuses to
         # allow.
+        #
+        # This flag does NOT reach every nullable column, though: sqlc's
+        # pgx/v5 driver hard-codes uuid -> pgtype.UUID (and several other
+        # composite pgtype.* wrappers) regardless of nullability, because
+        # those types already carry their own Valid field — confirmed against
+        # sqlc v1.31.1 (the CI-pinned SQLC_VERSION) by running `sqlc generate`
+        # and inspecting the output; emit_pointers_for_null_types has no
+        # effect on them. That is a silent-zero-value risk of exactly the
+        # kind this comment warns about for match_players.user_id specifically
+        # (D53: `user_id IS NULL` is the literal test that separates a bot
+        # seat from a human one — reading the zero-value UUID without
+        # checking .Valid reads as neither, silently), so it gets an explicit
+        # column override below forcing *pgtype.UUID instead of relying on
+        # the global flag. match_players.bot_kind needs no such override: TEXT
+        # is one of the plain types emit_pointers_for_null_types does reach,
+        # so it already comes out as *string.
         emit_pointers_for_null_types: true
 
         # Column-level, never db_type-level: a db_type override on every
@@ -49,6 +65,13 @@ sql:
         # reasoning game.SeatID/NodeID/RoundNumber/ContractID already give
         # for being distinct wrapper types instead of bare int (ids.go).
         overrides:
+          # Forces *pgtype.UUID over the driver-default pgtype.UUID — see the
+          # emit_pointers_for_null_types comment above for why this column
+          # specifically cannot rely on that flag.
+          - column: "match_players.user_id"
+            go_type:
+              type: "pgtype.UUID"
+              pointer: true
           - column: "matches.id"
             go_type: "github.com/garnizeh/cinzal/internal/game.MatchID"
           - column: "matches.round"
