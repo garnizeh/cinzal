@@ -61,13 +61,14 @@ in.
 
 **This includes `merge-closeout`, gated precisely.** Squash-merge, delete the
 just-merged feature branch, confirm the issue closed, update the milestone
-tracking issue — all of it runs the moment, and *only* the moment, a **real,
-completed CodeRabbit review against the current head** comes back with no
-finding raised. "No comments visible" is not that condition on its own — a
-`Review limit reached` skip also shows no comments, and this repo's whole
-`coderabbit-triage` skill exists because that shape has been mistaken for a
-clean review before. Auto-merge fires on the positive signal (a completed
-review, clean), never on the mere absence of a negative one.
+tracking issue, write the local journal entry — all of it runs the moment,
+and *only* the moment, a **real, completed CodeRabbit review against the
+current head** comes back with no finding raised. "No comments visible" is
+not that condition on its own — a `Review limit reached` skip also shows no
+comments, and this repo's whole `coderabbit-triage` skill exists because that
+shape has been mistaken for a clean review before. Auto-merge fires on the
+positive signal (a completed review, clean), never on the mere absence of a
+negative one.
 
 **On `Review limit reached`, this is a race, not a stall:** wait the stated
 refill window (usually 20–45 min, polled in the background — see below), then
@@ -96,6 +97,17 @@ review early.** "Fix → verify → push → reply → repeat" continues until
 either CodeRabbit has no more findings raised against the head, or the user
 explicitly says to stop — a fixed number of rounds is not the exit
 condition, silence from CodeRabbit on an unresolved finding is not either.
+
+**Running this across a whole milestone, not just one issue, is a separate,
+explicit mode** — [`loop-dispatch`](skills/loop-dispatch/SKILL.md), started
+only when the maintainer invokes it (`/loop /loop-dispatch`), never a side
+effect of running one pass. Three rules hold there that do not apply to a
+single unattended pass: issues run strictly serially, never two in flight at
+once; any doubt at any stage is decided by the outer dispatcher, never
+guessed inside the subagent running the pass, and the dispatcher holds
+indefinitely rather than rescheduling a re-poll; and the loop stops
+entirely, with no rescheduled wakeup, once the active milestone has no
+unblocked issue left.
 
 ---
 
