@@ -3,10 +3,12 @@
 package store
 
 import (
+	"bytes"
 	"context"
 	"database/sql"
 	"embed"
 	"io/fs"
+	"log/slog"
 	"strings"
 	"sync"
 	"testing"
@@ -205,6 +207,29 @@ func TestConcurrencyMigrateHoldsLockOnDedicatedConnection(t *testing.T) {
 	}
 	if n != 0 {
 		t.Fatalf("advisory lock still held by pid %d after migrate() returned", backendPID)
+	}
+}
+
+// TestIntegrationReleaseMigrationLockLogsWhenNotHeld exercises the branch
+// ExecContext used to hide entirely: pg_advisory_unlock returns false, not
+// an error, when the current session does not hold the lock (Postgres
+// docs, §9.27.5), so a bare Exec sees a normal successful query and never
+// notices. This calls releaseMigrationLock directly against a connection
+// that never acquired the lock and asserts the false-result branch logs,
+// by swapping in a buffered slog handler for the duration of the call.
+func TestIntegrationReleaseMigrationLockLogsWhenNotHeld(t *testing.T) {
+	dsn := startPostgres(t)
+	db := openDedicated(t, dsn)
+
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, nil)))
+	defer slog.SetDefault(prev)
+
+	releaseMigrationLock(db) // never acquired — must observe and log released == false
+
+	if got := buf.String(); !strings.Contains(got, "did not hold it") {
+		t.Fatalf("releaseMigrationLock on an unheld lock logged %q, want a message noting the lock was not held", got)
 	}
 }
 

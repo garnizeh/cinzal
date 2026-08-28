@@ -139,11 +139,22 @@ func migrate(ctx context.Context, db *sql.DB, fsys fs.FS) error {
 // to know a session-scoped lock may still be held until this connection's
 // own session ends, even though that is harmless for a process about to
 // exit and the reason this function does not treat it as fatal.
+//
+// pg_advisory_unlock returns a boolean rather than erroring when the
+// current session does not hold the lock (Postgres docs, §9.27.5) — it
+// only ever raises a SQL warning, not an error. QueryRowContext, not
+// ExecContext, is required here: Exec would silently discard that boolean,
+// and a false result is exactly the case this function exists to surface.
 func releaseMigrationLock(db *sql.DB) {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 
-	if _, err := db.ExecContext(ctx, "SELECT pg_advisory_unlock($1)", migrationLockID); err != nil {
+	var released bool
+	if err := db.QueryRowContext(ctx, "SELECT pg_advisory_unlock($1)", migrationLockID).Scan(&released); err != nil {
 		slog.Error("store: release migration advisory lock", "error", err)
+		return
+	}
+	if !released {
+		slog.Error("store: release migration advisory lock: session did not hold it", "lock_id", migrationLockID)
 	}
 }
