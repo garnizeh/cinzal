@@ -316,7 +316,7 @@ Most sessions do not start at Intake. Locate yourself by what exists:
 | A diff, no green check | `gates-run` |
 | A green check, no PR | `delivery-review` |
 | An open PR | `coderabbit-triage` |
-| An approved PR | `merge-closeout` |
+| A PR whose main CodeRabbit comment already reads the exact clean text against the current head | `merge-closeout` |
 
 If you cannot tell, you are at Intake. Re-deriving a brief is cheap; executing
 against the wrong classification is not.

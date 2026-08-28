@@ -9,7 +9,24 @@ Every command is prefixed with `rtk` per [CLAUDE.md](../../CLAUDE.md).
 
 ## Issues
 
-**`gh issue view` is broken on this repository — it errors out.** Use `gh api`.
+**The installed `gh` is old, and that — not the repository, and not GraphQL —
+is what breaks.** `gh 2.45.0` hardcodes `repository.issue.projectCards` in its
+`issue view` query, a field GitHub has since deprecated, so raw `gh issue view`
+fails with `GraphQL: Projects (classic) is being deprecated`. Two things follow
+that are easy to over-generalise from and have been:
+
+- **GraphQL itself works.** A hand-written `gh api graphql` query against this
+  repository returns normally — verified 2026-08-28. The thread-state query at
+  the bottom of this file is fine. It is `gh`'s own baked-in queries that carry
+  the dead field, not anything about this account.
+- **`rtk gh issue view <n>` works too**, because `rtk`'s filter answers it
+  without the deprecated query. Only the raw form (`rtk proxy gh issue view`)
+  fails.
+
+Prefer `gh api` below anyway: it is explicit about the fields it asks for, so
+it cannot be broken by a client-side query going stale the way `issue view`
+was. If `gh` is ever upgraded past this, re-verify and simplify this section
+rather than leaving a fixed problem documented as live.
 
 ```bash
 # Read one issue, body included
@@ -49,6 +66,10 @@ rtk gh pr create --title "..." --body-file /tmp/body.md
 **Never `rtk <cmd> > file` for large output.** rtk's truncation-notice footer can
 land inside the redirected file and corrupt it. Write payloads with the Write
 tool or `python3`, then `rtk jq . <file>` to prove it parses before sending.
+
+**The `/tmp/...` paths below are placeholders.** Write bodies and payloads into
+the session's own scratchpad directory instead — it is isolated per session, so
+two concurrent passes cannot overwrite each other's `/tmp/pr-body.md`.
 
 **Always read back what you wrote** (`--jq .body`) and confirm it is what you meant.
 
@@ -110,8 +131,11 @@ CodeRabbit has already done — not a step to act on with a resolve mutation.
 
 ## Milestone tracking issues
 
-Every filing and every merge updates the milestone's tracking issue in the same
-turn. M3's is [#332](https://github.com/garnizeh/cinzal/issues/332).
+Every filing and every merge of **milestone work** updates that milestone's
+tracking issue in the same turn. The current one is whichever `CLAUDE.md`'s
+"Repository state" paragraph names — read it there, not from a number pasted
+here. Out-of-band work (`**Milestone:** Out of band`) has no tracking issue and
+skips this step.
 
 ```bash
 # Find the current one

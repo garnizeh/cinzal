@@ -19,11 +19,18 @@ the precedent).
 ## 1. Find the number and the shape
 
 Read `docs/decisions/README.md`: the format, the two standing conventions, and
-the catalogue. Take the next free `Dnn`. File name: `Dnn-short-slug.md`, zero
-padded below 10 (`D01`, `D02`, … `D52`).
+the catalogue. Take the next free `Dnn` — read it off the directory, never off a
+number quoted in a skill, since that number goes stale between milestones. File
+name: `Dnn-short-slug.md`, zero padded below 10 (`D01`, `D02`, … `D09`, then
+`D10` onward).
 
-Read three or four recent decisions end to end before writing — D44–D52 are the
-current house style, and it is tighter than the template suggests.
+```bash
+rtk ls docs/decisions/ | rtk sort | rtk tail -3
+```
+
+Read the three or four **most recent** decisions end to end before writing —
+whatever that command returns. They are the current house style, and it is
+tighter than the template suggests.
 
 ## 2. Establish the question is real
 

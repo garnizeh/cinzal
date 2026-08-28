@@ -19,8 +19,30 @@ bisect` lands there.
 Branch prefixes in use: `task/`, `decision/`, `exit/`, `fix/`, `docs/`,
 `chore/`. Naming is a convenience, not a gate.
 
+**Branch from a freshly pulled `main`, and assert it rather than assume it.**
+Most sessions do not start on `main` — they start wherever the last task left
+the tree, which may be a feature branch carrying an unrelated open PR. Cutting
+a branch there silently builds this change on top of someone else's unmerged
+work, and the diff, the PR and the squashed commit all inherit it. That is not
+hypothetical: PR #390 started on `task/316-generate-check-live`, which carried
+open PR #389, and the edits had to be stashed and replayed onto a fresh branch.
+
 ```bash
+rtk git checkout main && rtk git pull --ff-only
 rtk git checkout -b task/<short-slug>
+rtk git rev-parse HEAD origin/main    # the two SHAs must be identical
+```
+
+**`merge-base --is-ancestor origin/main HEAD` does not test this** — a feature
+branch sitting on top of `main` has `origin/main` as an ancestor too, so that
+check passes on exactly the case it was supposed to catch. A fresh branch off
+an up-to-date `main` has `HEAD == origin/main` outright; compare the two SHAs.
+
+If the working tree already has uncommitted edits when you get here, stash
+them, do the two steps above, then pop — do not skip the rebase onto `main`
+because moving the edits is inconvenient.
+
+```bash
 rtk git add <paths>          # never `git add -A` — read what you are staging
 rtk git commit -m "<subject>"
 rtk git push -u origin HEAD
@@ -68,26 +90,19 @@ newline at ~80 columns. GitHub (and `git log`) render a soft-wrapped
 paragraph as the intended block; a paragraph hard-wrapped in the source
 renders as broken, ragged lines instead. This has recurred more than
 once — "eyeball the raw text" is not enough, it has already failed twice.
-Run a mechanical check before every publish or body edit, not just a read-through:
+Run the mechanical check before every publish or body edit, not just a
+read-through:
 
 ```bash
-rtk python3 -c "
-lines = open('/tmp/pr-body.md').read().split(chr(10))
-run = maxrun = 0
-for l in lines:
-    if l.strip() and 60 <= len(l) <= 100 and not l.strip().startswith(('-', '*', '#', '\`\`\`')):
-        run += 1; maxrun = max(maxrun, run)
-    else:
-        run = 0
-print('longest wrapped-looking run:', maxrun, '(3+ means still wrapped)')
-"
+rtk ./scripts/check-no-hard-wrap.sh <body-file>
 ```
 
-A result of 3 or more means the file is still hard-wrapped — fix it before
-`gh pr create`/`gh pr edit` ever runs, not after. Tables and code blocks are
-exempt — they need their own literal line breaks, and will trip this
-heuristic harmlessly if they happen to fall in that length range; use
-judgement on those, not the raw number.
+Non-zero means the file is still hard-wrapped — it names the run length and
+the line the worst run starts at. Fix it before `gh pr create`/`gh pr edit`
+ever runs, not after. Tables, bullets, headings and fenced code blocks are
+excluded by the script rather than left to judgement, so a non-zero exit is a
+real finding, not a false positive to argue with. `--selftest` proves the
+script still catches what it exists to catch, across all seven cases.
 
 **The literal `Fixes #<n>` line is what auto-closes the issue.** It has been
 missing at creation and dropped by a later edit — both left the issue open after
@@ -110,10 +125,16 @@ truncation footer can corrupt a redirected file.
 
 ## 4. Update the milestone tracking issue — same turn
 
-Filing and merging both require it, and it has been forgotten twice. M3's
-tracking issue is **#332**. See [gh-recipes.md](../../reference/gh-recipes.md)
-for finding the current one and for editing an issue body safely (`-f body=@file`
-does **not** expand the file).
+Filing and merging both require it, and it has been forgotten twice. **The
+current tracking issue is the one `CLAUDE.md`'s "Repository state" names** —
+read it there, never from a number pasted into a skill, since every such copy
+goes stale together at the next milestone. See
+[gh-recipes.md](../../reference/gh-recipes.md) for the discovery query and for
+editing an issue body safely (`-f body=@file` does **not** expand the file).
+
+**An out-of-band issue has no milestone and therefore no tracking issue to
+update** — this step is about milestone work. Filing a `harness:`/process
+issue closes here rather than leaving a bookkeeping step unaccounted for.
 
 ## 5. Watch CI, then wait for review
 

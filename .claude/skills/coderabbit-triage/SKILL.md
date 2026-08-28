@@ -34,11 +34,25 @@ it said on an earlier commit:
 rtk gh api repos/garnizeh/cinzal/issues/<n>/comments --jq '.[0].body'
 ```
 
-Its current body is exactly one of: the exact string **"No actionable
-comments were generated in the recent review. 🎉"** (genuinely clean —
-[PR #378](https://github.com/garnizeh/cinzal/pull/378) is the reference), a
-`Review limit reached` warning (that attempt was skipped), or a findings
-summary (still has outstanding comments). Nothing else counts as clean.
+Its current body is expected to be one of three shapes: the exact string **"No
+actionable comments were generated in the recent review. 🎉"** (genuinely
+clean — [PR #378](https://github.com/garnizeh/cinzal/pull/378) is the
+reference), a `Review limit reached` warning (that attempt was skipped), or a
+findings summary (still has outstanding comments). Nothing else counts as
+clean.
+
+**If it matches none of the three, that is a fourth case with its own rule:
+unknown, not clean, and not merely "not clean yet."** The clean gate is a
+literal string against a third-party bot's output, so CodeRabbit rewording its
+own message would leave this pipeline waiting forever on text that will never
+appear again, retrying a review that already ran clean, with nothing
+distinguishing that from a review still pending. So when the body fits no
+known shape: **stop the loop, do not merge, and say so to the maintainer with
+the body quoted.** An unrecognised state is a question for a human, not a
+timer to keep re-arming — and if the wording genuinely has changed, the fix is
+to update this skill's expected string, which is a harness change with its own
+issue and its own PR (`WORKFLOW.md`, Stage 4), never a judgement call made
+inline mid-merge.
 
 **The clean text alone is not enough — bind it to the current head before
 trusting it.** The comment is a single mutable object with no field of its own

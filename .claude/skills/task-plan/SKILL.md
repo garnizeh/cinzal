@@ -72,11 +72,15 @@ Which existing tests must still pass, which new ones this needs, and which RFC
 anchor parity, cross-round, property/adversarial, bot determinism).
 
 ## Gates this touches
-`make check` runs: packages purity purity-selftest fog debug-isolation secrets
-vuln bots-isolation bots-isolation-selftest simulate-deps lint test
-bench-regression-selftest prod dev. Name the ones this change can move, and why.
-Say whether `bench-compare` triggers (it does only for `internal/rules/gen`,
-`.github/workflows/ci.yml`, `scripts/check-bench-regression.sh` or `Makefile`).
+`make check` is `check-nosecrets` + `secrets` + `vuln`; read the current target
+list off `Makefile`'s own `check-nosecrets` line rather than a copy pasted here,
+which is exactly the drift this section had. Name the ones this change can move,
+and why. Say whether `bench-compare` triggers — it does only for
+`internal/rules/gen`, `.github/workflows/ci.yml`,
+`.github/actions/changed-paths/action.yml`, `scripts/check-bench-regression.sh`
+or `Makefile`. Note which of the gates you name are actually blocking on `main`
+(`check`, `secrets`, `bench-compare`) and which run without blocking (`vuln`,
+`replay`) — see CLAUDE.md's "Repository state".
 
 ## Spec edits required
 The GDD or RFC changes **first** if this changes a rule or an architectural

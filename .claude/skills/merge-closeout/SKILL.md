@@ -72,8 +72,24 @@ rtk gh pr checks <n>
 rtk gh pr view <n> --json body --jq .body | rtk grep -i "fixes #"
 ```
 
-- All required checks green: the `check` job (or a legitimate path-gated skip),
-  `secrets` (always runs), and `bench-compare` if the diff triggered it.
+- **All required checks green.** GitHub enforces exactly three — `check` (or a
+  legitimate path-gated skip), `secrets` (always runs), and `bench-compare` if
+  the diff triggered it. That is the whole list; there are no rulesets adding
+  to it.
+- **`vuln` and `replay` are green too — check them by hand, because nothing
+  else will.** Both run on every PR and neither blocks the merge, so a red
+  `vuln` (a newly-disclosed CVE against a dependency already in `go.sum`) or a
+  red `replay` (a cross-OS determinism break) sails through `gh pr merge`
+  without complaint. Read the full job list, not the required subset:
+
+  ```bash
+  rtk gh pr checks <n>
+  ```
+
+  A red one of these is a stop like any other gate failure. If it is merged
+  past anyway on an explicit maintainer decision, record that in the PR
+  description the same way an unreviewed merge is recorded below — the commit
+  on `main` should say what went in red.
 - **The `Fixes #<n>` line is present in the body.** A later edit has dropped it
   before; without it the issue stays open after merge.
 - **The title and body are what you want in `git log`.** They become the commit
@@ -97,10 +113,16 @@ This is the part that gets forgotten. Do all five:
    ```
    If it is still open, close it and link the commit.
 
-2. **Update the milestone tracking issue** — M3's is **#332**. Tick the row, note
-   the merged PR. This has been needed unprompted twice (#265→#207 on filing,
-   #355/#345→#332 on merge). Edit the body safely: `-f body=@file` does **not**
-   expand the file — see [gh-recipes.md](../../reference/gh-recipes.md).
+2. **Update the milestone tracking issue** — whichever `CLAUDE.md`'s
+   "Repository state" names, read there rather than from a number pasted into
+   this file. Tick the row, note the merged PR. This has been needed unprompted
+   twice (#265→#207 on filing, #355/#345→#332 on merge). Edit the body safely:
+   `-f body=@file` does **not** expand the file — see
+   [gh-recipes.md](../../reference/gh-recipes.md).
+
+   **Skip this step for an out-of-band PR** — a harness or process fix filed
+   with `**Milestone:** Out of band` belongs to no milestone and has no row to
+   tick. Say so in the report rather than leaving the step unaccounted for.
 
 3. **Sync local `main`.**
    ```bash

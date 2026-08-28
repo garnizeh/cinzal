@@ -166,6 +166,16 @@ If one of these blocks you, the answer is almost never to weaken the gate.
 
 The secret scan reads history as well as the tree, because a credential added in one commit and deleted in the next is absent from the tree and present in the history forever. It is scoped to the commits your branch adds: a credential somewhere else in the repository is not your pull request's problem, and making it one was a real defect ([#37](https://github.com/garnizeh/cinzal/issues/37)). Locally, `make secrets` scopes itself the same way, to `origin/main..HEAD` — falling back to the whole history of `HEAD` when `origin/main` is unknown or your branch adds nothing to it, as on `main` itself. It over-scans rather than under-scans: no path through the gate inspects zero commits, because a scan of nothing reports "no leaks found" exactly like a clean one.
 
+### Which of these actually block a merge
+
+**"Runs in CI" and "blocks a merge" are two different facts, and only one of them is enforced by GitHub.** `main`'s branch protection requires exactly three status checks — `check`, `secrets` and `bench-compare` — and this repository has no rulesets, so that list is the entire enforcement surface. The `vuln` and `replay` jobs run on every pull request and block nothing; a pull request with a red `vuln` can be merged today.
+
+That is a gap, not a design: [The dependency-vulnerability gate](#the-dependency-vulnerability-gate) below argues `vuln` should be unskippable, and it is unskippable *by path* — it just is not yet a required context. Treat a red `vuln` or `replay` as a stop regardless, and say in the pull request that you did. Do not describe either as enforced until the required-contexts list says so, and read that list rather than trusting this paragraph when it matters:
+
+```bash
+rtk gh api repos/garnizeh/cinzal/branches/main/protection --jq .required_status_checks.contexts
+```
+
 ### A docs-only pull request does not pay for a Go toolchain
 
 The other five gates above, plus lint/test/build, run through CI's `check` job as `make check-nosecrets` — everything `make check` runs except the secret scan and the dependency scan (see the Makefile's own comment on that split). That job, and `replay`'s cross-OS matrix, skip themselves on a pull request whose diff cannot touch `internal/`, `cmd/`, `scripts/`, `go.mod`/`go.sum`, `Makefile`, `.golangci.yml`, or this repository's CI definitions — a decision record, a GDD/RFC edit, a roadmap update ([#336](https://github.com/garnizeh/cinzal/issues/336)). The check that decides this (`.github/actions/changed-paths`) fails **open**: if it cannot resolve the base commit to diff against, it reports "touched" and everything runs, the same posture `check-secrets.sh` takes when its own commit range does not resolve.
