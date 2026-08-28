@@ -114,11 +114,14 @@ retry. **If that attempt reports rate-limited again, it carries its own new
 stated `N`** — parse it and repeat the same wait-then-trigger cycle; this is
 not an escalation or a backoff, just the same step run again with whatever
 number the message gives this time. When the message gives no refill time at
-all, the allowance is exhausted for longer and there is nothing precise to
-time against — fall back to waiting in longer increments and re-checking,
-there is nothing else to do. **"Already reviewed" is an answer, not a
-refusal** — the review ran; look for `Addressed` markers instead of
-retrying.
+all, the allowance is exhausted for longer — fall back to a longer guessed
+wait (about 45 minutes) instead of a parsed one, but the trigger step still
+happens at the end of it: comment `@coderabbitai review` once that wait
+elapses, exactly as the parsed-time case does. Only the wait length is a
+guess here, never whether the retry gets sent — a loop that only waits and
+re-checks, with no trigger at the end, never gets a second attempt.
+**"Already reviewed" is an answer, not a refusal** — the review ran; look
+for `Addressed` markers instead of retrying.
 
 **A new commit already triggers CodeRabbit's own review attempt on its
 own** — if the wait window is spent pushing a fix rather than idling, do not
