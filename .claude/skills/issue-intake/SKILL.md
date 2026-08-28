@@ -20,12 +20,18 @@ Trigger phrases: "start next issue", "próxima issue", "pega a próxima" — no
 number given, asking the pipeline to pick its own starting point. Selection
 order:
 
-1. **Harness issues first.** Open issues titled `harness: …` with no
-   milestone assigned — process/skill gaps a prior pass surfaced and tracked
-   (WORKFLOW.md, "the summary also names any harness lesson"). Oldest first
-   (lowest number). These go before milestone work: a harness gap left open
-   costs every task that runs before it's fixed, not just the one that found
-   it.
+1. **Out-of-band work first.** Open issues with no milestone assigned (body
+   says `**Milestone:** Out of band`) whose `Blocked by` is empty or fully
+   closed, **and** that carry no `blocked` label — a `blocked` label on an
+   unmilestoned issue marks deliberate deferral to a future milestone (e.g.
+   #241/#237's M5.5 hand-offs), not readiness now, and those are skipped
+   here, not picked. This is broader than `harness: …`-titled issues
+   (process/skill gaps, WORKFLOW.md's "the summary also names any harness
+   lesson") — it also catches things like a CI/tooling gap an out-of-scope
+   review finding got filed as (#373), which shares the same "Out of band"
+   milestone convention without the `harness:` prefix. Oldest first (lowest
+   number). These go before milestone work: a gap left open here costs every
+   task that runs before it's fixed, not just the one that found it.
 2. **Otherwise, the current milestone's next task.** "Current" is whichever
    milestone `CLAUDE.md`'s "Repository state" paragraph names as underway,
    and its tracking issue is the one `CLAUDE.md` points at (M3 → #332,
