@@ -36,6 +36,13 @@ env:
   # keeps the runtime footprint deliberately small.
   GOLANGCI_LINT_VERSION: v2.13.1
   TEMPL_VERSION: v0.3.1020
+  # generate-check (issue #316) regenerates internal/store's committed sqlc
+  # output at exactly this version and diffs the result — a different sqlc
+  # release can format identically-configured output differently, so this
+  # pin is no longer just "which sqlc installs," it is part of what
+  # generate-check asserts. Bumping it and NOT regenerating
+  # (`make generate`, commit the result) in the same pull request fails the
+  # gate on formatting drift instead of on any real change.
   SQLC_VERSION: v1.31.1
   GITLEAKS_VERSION: 8.30.1
   # Pinning the version pins WHICH release, not WHAT is in it. Published by
@@ -152,12 +159,13 @@ jobs:
       # Locally `make check` stops at the first failure, which is what you want
       # while iterating; this is the one place the two differ, and deliberately.
       #
-      # generate-check is NOT a prerequisite of check: GENERATED is empty
-      # until M3/M5 declare real generated paths, and a gate that can only
-      # report VACUOUS stays out of the aggregate rather than passing by not
-      # running (see the Makefile's own comment on `check`). It rejoins once
-      # there is something for it to actually compare — issue #316, blocked
-      # by #315.
+      # generate-check joined check-nosecrets's own target line in issue
+      # #316, once GENERATED held sqlc's real output (issue #315) to compare
+      # against — see the Makefile's own comment above check-nosecrets for
+      # the full reasoning, including why templ's still-empty half of
+      # GENERATED does not make this VACUOUS again. Nothing here needs to
+      # change to pick it up: this step already runs whatever
+      # check-nosecrets names.
       #
       # check-nosecrets, not check: `secrets` runs in its own job below and
       # must not run twice. `make check` (the full list, secrets included)
