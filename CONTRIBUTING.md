@@ -168,9 +168,15 @@ The secret scan reads history as well as the tree, because a credential added in
 
 ### Which of these actually block a merge
 
-**"Runs in CI" and "blocks a merge" are two different facts, and only one of them is enforced by GitHub.** `main`'s branch protection requires exactly three status checks — `check`, `secrets` and `bench-compare` — and this repository has no rulesets, so that list is the entire enforcement surface. The `vuln` and `replay` jobs run on every pull request and block nothing; a pull request with a red `vuln` can be merged today.
+**"Runs in CI" and "blocks a merge" are two different facts.** `main`'s branch protection requires six status checks — `check`, `secrets`, `bench-compare`, `vuln`, `replay (ubuntu-latest)` and `replay (macos-latest)` — and this repository has no rulesets, so that list is the entire enforcement surface.
 
-That is a gap, not a design: [The dependency-vulnerability gate](#the-dependency-vulnerability-gate) below argues `vuln` should be unskippable, and it is unskippable *by path* — it just is not yet a required context. Treat a red `vuln` or `replay` as a stop regardless, and say in the pull request that you did. Do not describe either as enforced until the required-contexts list says so, and read that list rather than trusting this paragraph when it matters:
+Three of those are recent. `vuln` and both `replay` legs ran on every pull request while blocking nothing, which meant a red `vuln` — a newly-disclosed CVE against a dependency already sitting in `go.sum` — could be merged, and a cross-OS determinism break with it. [The dependency-vulnerability gate](#the-dependency-vulnerability-gate) below had argued `vuln` should be unskippable, and it was unskippable *by path* while not being a required context at all; [#391](https://github.com/garnizeh/cinzal/issues/391) closed that gap.
+
+**Requiring a path-gated job does not deadlock a prose-only pull request**, which is the objection that would otherwise block this. `check`, `vuln` and `replay` carry no job-level `if`: the job always runs and reports `success` even when its path gate skips every step inside. Verified on [#369](https://github.com/garnizeh/cinzal/pull/369), a documentation-only change, where `check` and both `replay` legs each reported `success` rather than `skipped`.
+
+**`bench` is deliberately excluded.** It is the only CI job with a job-level condition — `if: github.event_name == 'push'` — so it reports `skipped` on every pull request. It records `main`'s benchmark history; `bench-compare` is the gate.
+
+Read the list rather than trusting this paragraph when it matters:
 
 ```bash
 rtk gh api repos/garnizeh/cinzal/branches/main/protection --jq .required_status_checks.contexts

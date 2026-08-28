@@ -78,9 +78,10 @@ which is exactly the drift this section had. Name the ones this change can move,
 and why. Say whether `bench-compare` triggers — it does only for
 `internal/rules/gen`, `.github/workflows/ci.yml`,
 `.github/actions/changed-paths/action.yml`, `scripts/check-bench-regression.sh`
-or `Makefile`. Note which of the gates you name are actually blocking on `main`
-(`check`, `secrets`, `bench-compare`) and which run without blocking (`vuln`,
-`replay`) — see CLAUDE.md's "Repository state".
+or `Makefile`. Six CI checks block a merge — `check`, `secrets`,
+`bench-compare`, `vuln`, `replay (ubuntu-latest)`, `replay (macos-latest)`;
+`bench` is `push`-only and never required. See CLAUDE.md's "Repository state",
+and read the live list if it matters.
 
 ## Spec edits required
 The GDD or RFC changes **first** if this changes a rule or an architectural

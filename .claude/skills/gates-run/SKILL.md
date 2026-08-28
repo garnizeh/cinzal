@@ -60,11 +60,17 @@ VACUOUS again.
 | `prod` / `dev` | Both build tags compile | — |
 | `replay` | `internal/rules` behaves identically on Linux and macOS — its own CI job with a cross-OS matrix, not part of `make check` | A determinism break that only shows on one OS, which is the shape `seed + order log` guarantees against |
 
-**Not every job that runs is a job that blocks.** Branch protection requires
-exactly three status checks — `check`, `secrets`, `bench-compare` — and there
-are no rulesets. `vuln` and `replay` run on every PR and block nothing, so a
-red one merges unless a human notices. Treat a red one as a stop anyway
-(`merge-closeout` §2 says how to check), and never describe them as enforced.
+**What blocks a merge is a checkable list, not the set of jobs that ran.**
+Branch protection requires six status checks — `check`, `secrets`,
+`bench-compare`, `vuln`, `replay (ubuntu-latest)`, `replay (macos-latest)` —
+and there are no rulesets. `vuln` and both `replay` legs were promoted in
+#391, having run on every PR while blocking nothing. `bench` stays out: it is
+the one job with a job-level `if` (`push` only), so it reports `skipped` on
+every PR and requiring it would deadlock all of them.
+
+```bash
+rtk gh api repos/garnizeh/cinzal/branches/main/protection --jq .required_status_checks.contexts
+```
 
 **If a gate blocks you, the answer is almost never to weaken the gate.** These
 are not style checks and a failure is not a nit. Each exists because the failure

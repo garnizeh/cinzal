@@ -72,24 +72,19 @@ rtk gh pr checks <n>
 rtk gh pr view <n> --json body --jq .body | rtk grep -i "fixes #"
 ```
 
-- **All required checks green.** GitHub enforces exactly three — `check` (or a
-  legitimate path-gated skip), `secrets` (always runs), and `bench-compare` if
-  the diff triggered it. That is the whole list; there are no rulesets adding
-  to it.
-- **`vuln` and `replay` are green too — check them by hand, because nothing
-  else will.** Both run on every PR and neither blocks the merge, so a red
-  `vuln` (a newly-disclosed CVE against a dependency already in `go.sum`) or a
-  red `replay` (a cross-OS determinism break) sails through `gh pr merge`
-  without complaint. Read the full job list, not the required subset:
+- **All required checks green.** GitHub enforces six — `check`, `secrets`,
+  `bench-compare`, `vuln`, `replay (ubuntu-latest)`, `replay (macos-latest)`.
+  A path-gated job still reports `success` rather than skipping, so a
+  docs-only PR satisfies them all normally. There are no rulesets adding to
+  the list; read it rather than trusting this line:
 
   ```bash
   rtk gh pr checks <n>
+  rtk gh api repos/garnizeh/cinzal/branches/main/protection --jq .required_status_checks.contexts
   ```
 
-  A red one of these is a stop like any other gate failure. If it is merged
-  past anyway on an explicit maintainer decision, record that in the PR
-  description the same way an unreviewed merge is recorded below — the commit
-  on `main` should say what went in red.
+  `bench` appears in `gh pr checks` as `skipping` on every PR and is not
+  required — that is by design (`push`-only), not a failure to investigate.
 - **The `Fixes #<n>` line is present in the body.** A later edit has dropped it
   before; without it the issue stays open after merge.
 - **The title and body are what you want in `git log`.** They become the commit
