@@ -61,13 +61,14 @@ in.
 
 **This includes `merge-closeout`, gated precisely.** Squash-merge, delete the
 just-merged feature branch, confirm the issue closed, update the milestone
-tracking issue — all of it runs the moment, and *only* the moment, a **real,
-completed CodeRabbit review against the current head** comes back with no
-finding raised. "No comments visible" is not that condition on its own — a
-`Review limit reached` skip also shows no comments, and this repo's whole
-`coderabbit-triage` skill exists because that shape has been mistaken for a
-clean review before. Auto-merge fires on the positive signal (a completed
-review, clean), never on the mere absence of a negative one.
+tracking issue, write the local journal entry — all of it runs the moment,
+and *only* the moment, a **real, completed CodeRabbit review against the
+current head** comes back with no finding raised. "No comments visible" is
+not that condition on its own — a `Review limit reached` skip also shows no
+comments, and this repo's whole `coderabbit-triage` skill exists because that
+shape has been mistaken for a clean review before. Auto-merge fires on the
+positive signal (a completed review, clean), never on the mere absence of a
+negative one.
 
 **On `Review limit reached`, this is a race, not a stall:** wait the stated
 refill window (usually 20–45 min, polled in the background — see below), then

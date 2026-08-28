@@ -72,7 +72,7 @@ Squash-only, linear history. The branch deletes itself.
 
 ## 4. Close-out — same turn, every time
 
-This is the part that gets forgotten. Do all four:
+This is the part that gets forgotten. Do all five:
 
 1. **Verify the issue actually closed.**
    ```bash
@@ -95,10 +95,36 @@ This is the part that gets forgotten. Do all four:
    promised in a reply, drift you noticed and did not fix. A promise in a review
    thread with no issue behind it disappears.
 
-## 5. Report — and close the whole pass, not just this stage
+5. **Write a journal entry** — `.claude/journal.md`, local and gitignored,
+   never committed (no branch-protection concern applies: this file never
+   enters git). This is additive to the chat-turn report below, not a
+   replacement of it — the durable record for when nobody was watching the
+   session live. Prepend the new entry **above** the file's existing content
+   (most recent first), in the shape the file's own header template shows:
+
+   ```markdown
+   ## #<n> — <issue title>
+
+   - **Merged:** <UTC ISO 8601> as `<sha>` (PR #<pr-number>)
+   - **Issue closed:** <UTC ISO 8601 — record separately even if it matches Merged>
+
+   <the same execution-detail content the chat-turn report gives: what was
+   built, what review found and how it was resolved, what landed, anything
+   still open>
+
+   ---
+   ```
+
+   Use real UTC timestamps (`date -u +%Y-%m-%dT%H:%M:%SZ`), not an estimate.
+   If `.claude/journal.md` does not exist yet, create it first — its header
+   template is the source of truth for the entry shape, so write that header
+   once, then the entry.
+
+## 6. Report — and close the whole pass, not just this stage
 
 State plainly: merged as `<sha>`, issue `#<n>` closed, tracking issue updated,
-and anything filed as follow-up. If a step did not happen, say which and why.
+journal entry written, and anything filed as follow-up. If a step did not
+happen, say which and why.
 
 **When this merge is the end of a pipeline run that started at `issue-intake`
 or `task-plan`**, this is also the pipeline's own final step (WORKFLOW.md,
