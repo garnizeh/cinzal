@@ -1,6 +1,6 @@
 # Skill index — which skill, when
 
-Fourteen skills covering the whole path from an issue to a merged commit. Each
+Fifteen skills covering the whole path from an issue to a merged commit. Each
 is a `SKILL.md` under `.claude/skills/<name>/`, auto-discovered by Claude Code
 and invocable as `/<name>`.
 
@@ -29,6 +29,7 @@ Start at the top and take the first row that matches.
 | A CodeRabbit review — reading it, answering it, or checking one exists | [`coderabbit-triage`](coderabbit-triage/SKILL.md) |
 | Merging, and the bookkeeping after it | [`merge-closeout`](merge-closeout/SKILL.md) |
 | Running the pipeline unattended across a whole milestone's remaining issues, not just one | [`loop-dispatch`](loop-dispatch/SKILL.md) |
+| Mining the task journal for process learnings not yet folded into the harness | [`journal-retro`](journal-retro/SKILL.md) |
 
 ## By stage
 
