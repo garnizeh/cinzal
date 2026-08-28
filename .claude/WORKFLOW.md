@@ -259,7 +259,7 @@ Most sessions do not start at Intake. Locate yourself by what exists:
 
 | What you have | Enter at |
 |---|---|
-| No issue number — "start next issue" was said | `issue-intake` §0, which picks one (harness issues first, then the current milestone's next unblocked row) |
+| No issue number — "start next issue" was said | `issue-intake` §0, which picks one (out-of-band unmilestoned+unblocked work first, then the current milestone's next unblocked row) |
 | An issue number and nothing else | `issue-intake` |
 | A brief, no edits yet | `task-plan` |
 | A plan, no diff | the matching Execute skill |
