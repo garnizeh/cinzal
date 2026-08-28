@@ -58,7 +58,7 @@ M0's criteria, for example, are demonstrations that things *fail*: a pull reques
 
 | Field | Why |
 |---|---|
-| **Spec anchor** — a GDD or RFC section | The most important one. The documents are the authority, so a task that cannot cite a section is inventing a requirement. When that happens it is **not a task, it is a decision** — file it as one. |
+| **Spec anchor** — the section that governs the work | The most important one. The documents are the authority, so a task that cannot cite a section is inventing a requirement. When that happens it is **not a task, it is a decision** — file it as one. Normally this is a GDD or RFC section. **A harness or process fix is not exempt from the field** — its anchor is a harness document instead, because that is what governs it: [#373](https://github.com/garnizeh/cinzal/issues/373) cited this file's "Gates fail closed", [#391](https://github.com/garnizeh/cinzal/issues/391) cited [`.claude/WORKFLOW.md`](.claude/WORKFLOW.md)'s Stage 4. The field stays required either way; what changes is which document it points at. |
 | **Acceptance criterion** — demonstrable | "Implement `Resolve`" is not one. "A 15-round replay reproduces byte-identically on two machines" is. |
 | **Blocked by** | Decisions and predecessor tasks, explicitly. |
 | **Area** | Mirrors [`CODEOWNERS`](.github/CODEOWNERS): `rules`, `fog`, `ci`, `store`, `web`, `render`, `bots`, `mail`, `auth`, `docs`. |

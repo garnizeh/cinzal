@@ -34,14 +34,22 @@ it said on an earlier commit:
 rtk gh api repos/garnizeh/cinzal/issues/<n>/comments --jq '.[0].body'
 ```
 
-Its current body is expected to be one of three shapes: the exact string **"No
+Its current body is expected to be one of four shapes: the exact string **"No
 actionable comments were generated in the recent review. 🎉"** (genuinely
 clean — [PR #378](https://github.com/garnizeh/cinzal/pull/378) is the
-reference), a `Review limit reached` warning (that attempt was skipped), or a
-findings summary (still has outstanding comments). Nothing else counts as
-clean.
+reference), a `Review limit reached` warning (that attempt was skipped), a
+findings summary (still has outstanding comments), or **`Currently processing
+new changes in this PR`** — a review in flight. Nothing else counts as clean.
 
-**If it matches none of the three, that is a fourth case with its own rule:
+**The in-flight shape is transient, not an anomaly — keep waiting on it.** It
+appears for a few minutes after every push and after every `@coderabbitai
+review`, and it is the normal path to a verdict. A poller that treats "not one
+of the terminal shapes" as an error will escalate to the maintainer over an
+ordinary review that is simply still running; this was written after doing
+exactly that on PR #392. Match it explicitly rather than letting it fall into
+the unknown case below.
+
+**If it matches none of the four, that is a fifth case with its own rule:
 unknown, not clean, and not merely "not clean yet."** The clean gate is a
 literal string against a third-party bot's output, so CodeRabbit rewording its
 own message would leave this pipeline waiting forever on text that will never

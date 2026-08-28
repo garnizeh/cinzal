@@ -241,11 +241,13 @@ lived in an agent's memory instead of the skill file, a check that turned
 out to need a real command instead of "read it back" or "eyeball it." Naming
 it in the summary without fixing it is how the same gap gets rediscovered on
 the next task instead of the one after that. **Fix it the same pass, tracked
-like everything else here:** file a plain issue for it — no GDD/RFC spec
-anchor, since a harness/process fix isn't about game content and doesn't
-have one; every other field in CONTRIBUTING's "what every issue must carry"
-table still applies — then land the fix as its **own follow-up PR closing
-that issue**, never bundled into the task's own PR, since a content change
+like everything else here:** file a plain issue for it — `**Milestone:** Out
+of band`, and **every** field in CONTRIBUTING's "what every issue must carry"
+table filled, the spec anchor included. A process fix is not exempt from the
+anchor; its anchor is simply a *harness* document rather than the GDD or RFC,
+because that is what governs it. #373 cited CONTRIBUTING's "Gates fail
+closed"; #391 cited this section. Then land the fix as its **own follow-up PR
+closing that issue**, never bundled into the task's own PR, since a content change
 and a process fix are different things reviewed for different reasons (the
 precedent already in use: #368's Postgres fix and #370's workflow fix landed
 as two PRs, not one — #370 itself should have had an issue behind it and did

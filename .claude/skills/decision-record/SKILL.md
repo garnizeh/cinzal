@@ -25,8 +25,12 @@ name: `Dnn-short-slug.md`, zero padded below 10 (`D01`, `D02`, … `D09`, then
 `D10` onward).
 
 ```bash
-rtk ls docs/decisions/ | rtk sort | rtk tail -3
+rtk ls docs/decisions/D*.md | rtk sort | rtk tail -3
 ```
+
+The `D*.md` glob is not decoration: `docs/decisions/README.md` sorts last in that
+directory, so listing it unfiltered spends one of the three slots on the
+catalogue and leaves only two decisions to read.
 
 Read the three or four **most recent** decisions end to end before writing —
 whatever that command returns. They are the current house style, and it is

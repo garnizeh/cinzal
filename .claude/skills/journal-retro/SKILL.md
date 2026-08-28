@@ -97,9 +97,10 @@ with nothing left open) — that's normal task execution, not a process gap.
   mechanical as a stale number or a missing link; route anything that
   changes actual pipeline behavior or a gate through `docs-change`'s
   conventions and land it via `pr-publish`. **File an issue for it first**,
-  per `WORKFLOW.md`'s Stage 4 — `**Milestone:** Out of band`, no GDD/RFC spec
-  anchor (a process fix isn't about game content and doesn't have one), every
-  other field in CONTRIBUTING's issue table still filled — and have the PR
+  per `WORKFLOW.md`'s Stage 4 — `**Milestone:** Out of band`, and every field
+  in CONTRIBUTING's issue table filled, the spec anchor included; for a
+  process fix that anchor is a harness document (`WORKFLOW.md`,
+  `CONTRIBUTING.md`, `CLAUDE.md`) rather than the GDD or RFC — and have the PR
   close it with the literal `Fixes #<n>`. Earlier process PRs landed with no
   issue behind them (#382, #385, #370); Stage 4 was written specifically to
   end that, so they are precedent for the shape of the PR, not for skipping

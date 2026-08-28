@@ -50,13 +50,38 @@ command -v awk >/dev/null 2>&1 || die "awk not found — cannot run, so reportin
 # caller's to read.
 longest_run() {
 	awk -v lo="$BAND_MIN" -v hi="$BAND_MAX" '
-		BEGIN { run = 0; max = 0; at = 0; start = 0; fence = 0 }
-		# Fenced code blocks keep their own line breaks. Toggle, never count.
-		/^[[:space:]]*(```|~~~)/ { fence = !fence; run = 0; next }
-		fence { next }
+		BEGIN { run = 0; max = 0; at = 0; start = 0; fence = 0; fchar = ""; flen = 0 }
 		{
 			line = $0
 			sub(/^[[:space:]]+/, "", line)
+
+			# Fenced code blocks keep their own line breaks, so they are skipped
+			# rather than counted. A plain open/close toggle is not enough:
+			# CommonMark lets a fence nest inside a longer one, and a nested
+			# ``` inside a ```` block would close it early, after which real
+			# code gets counted as prose. So remember the opening delimiter and
+			# its length, and close only on the same character repeated at
+			# least as many times.
+			#
+			# The delimiter run is counted character by character rather than
+			# read off RLENGTH: mawk 1.3.4 (the awk on Debian/Ubuntu) does not
+			# return the longest match for an interval like /`{3,}/ — it reports
+			# RLENGTH 3 for a four-backtick fence — so an RLENGTH-based length
+			# comparison silently sees every fence as three and closes on the
+			# first nested one anyway. Counting is exact on every awk.
+			if (line ~ /^```/ || line ~ /^~~~/) {
+				dchar = substr(line, 1, 1)
+				dlen = 0
+				while (substr(line, dlen + 1, 1) == dchar) dlen++
+				if (!fence) {
+					fence = 1; fchar = dchar; flen = dlen; run = 0; next
+				} else if (dchar == fchar && dlen >= flen) {
+					fence = 0; fchar = ""; flen = 0; run = 0; next
+				}
+				# Otherwise it is a nested fence: content, handled below.
+			}
+			if (fence) { next }
+
 			# Blank lines, list items, headings, blockquotes and table rows all
 			# carry meaningful line breaks of their own.
 			if (line == "" || line ~ /^([-*+>|]|#|[0-9]+\.)/) { run = 0; next }
@@ -166,20 +191,41 @@ EOF
 		status=1
 	fi
 
-	# 6. Fails closed on an unreadable path.
+	# 6. A fence nested inside a longer one. Caught by CodeRabbit on PR #392:
+	#    a naive open/close toggle closes on the inner ```, after which the
+	#    code below it is counted as prose and reported as hard-wrapped.
+	cat >"$tmp/nested-fence.md" <<'EOF'
+Intro paragraph that is genuinely short.
+
+````markdown
+Inside a four-backtick fence, showing a nested block:
+
+```bash
+rtk gh api repos/garnizeh/cinzal/issues/391 --jq .body | head -c 400
+rtk gh api repos/garnizeh/cinzal/pulls/392 --jq .head.sha > /tmp/x.txt
+rtk gh api repos/garnizeh/cinzal/branches/main/protection --jq .required
+```
+````
+EOF
+	if ! report "$tmp/nested-fence.md" >/dev/null 2>&1; then
+		printf 'selftest FAILED: a fence nested in a longer fence was rejected as hard-wrapped\n' >&2
+		status=1
+	fi
+
+	# 7. Fails closed on an unreadable path.
 	if "$0" "$tmp/does-not-exist.md" >/dev/null 2>&1; then
 		printf 'selftest FAILED: a missing file was accepted\n' >&2
 		status=1
 	fi
 
-	# 7. Fails closed on no argument.
+	# 8. Fails closed on no argument.
 	if "$0" >/dev/null 2>&1; then
 		printf 'selftest FAILED: a missing argument was accepted\n' >&2
 		status=1
 	fi
 
 	if [ "$status" -eq 0 ]; then
-		printf 'check-no-hard-wrap selftest: ok (7 cases)\n'
+		printf 'check-no-hard-wrap selftest: ok (8 cases)\n'
 	fi
 	return "$status"
 }
