@@ -98,11 +98,18 @@ asking permission.
 
 **Waiting on CodeRabbit is not a reason to stall the turn.** A review can
 take minutes to post, or never post at all (the free-tier skip). Poll for it
-in the background — `Monitor` with an `until`-loop checking
-`gh api .../pulls/<n>/reviews`, not a foreground sleep — so the turn is
-freed to report progress and pick back up when the poll resolves, and cap
-the wait rather than polling forever if nothing ever posts (see
-`coderabbit-triage`).
+in the background — `Monitor` with an `until`-loop, not a foreground sleep —
+so the turn is freed to report progress and pick back up when the poll
+resolves. **Poll the main PR comment** (`gh api .../issues/<n>/comments`,
+index `[0]`), not `pulls/<n>/reviews` — `coderabbit-triage` §2 is explicit
+that a clean incremental review often edits that comment in place without
+creating a new review object, so a loop watching the reviews list can sit
+past a review that already landed. On a rate-limit skip, the same comment
+names a refill time (e.g. "Next included review available in 41 minutes");
+once that has passed, **the poll must itself comment `@coderabbitai review`**
+to request the retry — CodeRabbit does not re-scan a stale PR on its own, and
+a loop that only watches never gets a second attempt. Cap the wait rather
+than polling forever if nothing ever posts (see `coderabbit-triage`).
 
 **The one thing this pipeline does not do on its own is stop iterating on a
 review early.** "Fix → verify → push → reply → repeat" continues until

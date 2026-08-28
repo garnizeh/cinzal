@@ -60,11 +60,12 @@ func TestSchemaBaseTablesExactlyPresent(t *testing.T) {
 		// alongside every migration it applies — not part of #312's schema,
 		// but a real table in `public` all the same, so it belongs in the
 		// exact set this test asserts rather than being an unaccounted extra.
-		// board_notes (D18) and invite_links (D17) are #313's additions —
-		// this list extends #312's own, per plan, rather than replacing it.
+		// board_notes (D18) and invite_links (D17) are #313's additions,
+		// rate_limits (D20) is #314's — this list extends #312's own, per
+		// plan, rather than replacing it.
 		"auth_codes", "board_notes", "events", "goose_db_version",
 		"invite_links", "match_players", "match_summary", "matches",
-		"orders", "outbox", "sessions", "users",
+		"orders", "outbox", "rate_limits", "sessions", "users",
 	}
 	if len(got) != len(want) {
 		t.Fatalf("public schema has %d tables %v, want exactly %d %v", len(got), got, len(want), want)
@@ -637,6 +638,83 @@ func TestSchemaUsersEmailSuppressedAtDefaultsNull(t *testing.T) {
 	}
 	if suppressed.Valid {
 		t.Fatalf("users.email_suppressed_at = %v on insert, want NULL (D53)", suppressed.Time)
+	}
+}
+
+// TestSchemaRateLimitsColumnsAndPrimaryKey is #314's DDL-shape assertion:
+// rate_limits has exactly the columns D20 specifies, and (scope, key) is the
+// real primary key constraint — not merely two columns that happen to exist
+// — which is what makes ON CONFLICT (scope, key) in the check-and-consume
+// statement (ratelimit.go) a valid conflict target at all.
+func TestSchemaRateLimitsColumnsAndPrimaryKey(t *testing.T) {
+	db := applyBaseSchema(t)
+	ctx := context.Background()
+
+	rows, err := db.QueryContext(ctx,
+		`SELECT column_name FROM information_schema.columns
+		  WHERE table_schema = 'public' AND table_name = 'rate_limits' ORDER BY column_name`)
+	if err != nil {
+		t.Fatalf("query information_schema.columns: %v", err)
+	}
+	defer rows.Close()
+
+	var got []string
+	for rows.Next() {
+		var name string
+		if err := rows.Scan(&name); err != nil {
+			t.Fatalf("scan column_name: %v", err)
+		}
+		got = append(got, name)
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("iterate column_name rows: %v", err)
+	}
+
+	want := []string{"key", "scope", "tokens", "updated_at"}
+	if len(got) != len(want) {
+		t.Fatalf("rate_limits columns = %v, want exactly %v (D20)", got, want)
+	}
+	for i := range want {
+		if got[i] != want[i] {
+			t.Fatalf("rate_limits columns = %v, want %v", got, want)
+		}
+	}
+
+	// (scope, key) must be the real primary key constraint, asserted via
+	// information_schema rather than assumed from the column list above.
+	pkRows, err := db.QueryContext(ctx,
+		`SELECT kcu.column_name
+		   FROM information_schema.table_constraints tc
+		   JOIN information_schema.key_column_usage kcu
+		     ON tc.constraint_name = kcu.constraint_name AND tc.table_schema = kcu.table_schema
+		  WHERE tc.table_schema = 'public' AND tc.table_name = 'rate_limits'
+		    AND tc.constraint_type = 'PRIMARY KEY'
+		  ORDER BY kcu.ordinal_position`)
+	if err != nil {
+		t.Fatalf("query primary key constraint: %v", err)
+	}
+	defer pkRows.Close()
+
+	var pkCols []string
+	for pkRows.Next() {
+		var name string
+		if err := pkRows.Scan(&name); err != nil {
+			t.Fatalf("scan primary key column: %v", err)
+		}
+		pkCols = append(pkCols, name)
+	}
+	if err := pkRows.Err(); err != nil {
+		t.Fatalf("iterate primary key rows: %v", err)
+	}
+
+	wantPK := []string{"scope", "key"}
+	if len(pkCols) != len(wantPK) {
+		t.Fatalf("rate_limits primary key columns = %v, want exactly %v (D20)", pkCols, wantPK)
+	}
+	for i := range wantPK {
+		if pkCols[i] != wantPK[i] {
+			t.Fatalf("rate_limits primary key columns = %v, want %v", pkCols, wantPK)
+		}
 	}
 }
 

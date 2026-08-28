@@ -103,8 +103,13 @@ type Config struct {
 }
 
 // Store owns one pgx connection pool and its lifecycle. It knows nothing
-// about matches, orders, or any other game concept — repositories arrive in
-// later tasks (#315 onward); this is a pool and nothing else.
+// about matches, orders, or any other game concept — most repositories
+// arrive in later tasks (#315 onward, once sqlc is wired up). The one
+// exception is ConsumeRateLimit/CleanupRateLimits (ratelimit.go, #314): D20
+// scopes the rate-limit check-and-consume query to this migration's own
+// task rather than to #315's sqlc query set, so those two methods land here
+// directly, hand-written, ahead of sqlc — not a game concept either, and
+// generic across any future (scope, key) rather than auth-specific.
 type Store struct {
 	pool *pgxpool.Pool
 }
