@@ -332,8 +332,10 @@ clean:
 # ---------------------------------------------------------------------------
 # Tool presence. A missing tool is a failure, never a skip.
 #
-# `dev`, `prod`, `test` and `packages` need only the Go toolchain, and the `go`
+# `dev`, `prod` and `packages` need only the Go toolchain, and the `go`
 # directive in go.mod already refuses a toolchain older than the project needs.
+# `test` also needs `sqlc` as of issue #315 (require-sqlc, above) — its own
+# generated code is part of what `go test -race` compiles and runs against.
 # ---------------------------------------------------------------------------
 
 require-%:
