@@ -97,6 +97,17 @@ either CodeRabbit has no more findings raised against the head, or the user
 explicitly says to stop — a fixed number of rounds is not the exit
 condition, silence from CodeRabbit on an unresolved finding is not either.
 
+**Running this across a whole milestone, not just one issue, is a separate,
+explicit mode** — [`loop-dispatch`](skills/loop-dispatch/SKILL.md), started
+only when the maintainer invokes it (`/loop /loop-dispatch`), never a side
+effect of running one pass. Three rules hold there that do not apply to a
+single unattended pass: issues run strictly serially, never two in flight at
+once; any doubt at any stage is decided by the outer dispatcher, never
+guessed inside the subagent running the pass, and the dispatcher holds
+indefinitely rather than rescheduling a re-poll; and the loop stops
+entirely, with no rescheduled wakeup, once the active milestone has no
+unblocked issue left.
+
 ---
 
 ## Stage 1 — Intake

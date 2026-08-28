@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 > **Always write in English** — code, comments, commit messages, PR titles/descriptions, issue text, docs, and replies to the user. The GDD, RFC, and every existing doc are English-only, and mixing languages in history or docs would break that consistency. The one exception is the trigger phrases in `.claude/skills/*/SKILL.md` frontmatter, which are deliberately bilingual because they match what the maintainer types.
 
-> **Process lives in the harness, not in this file.** [`.claude/WORKFLOW.md`](.claude/WORKFLOW.md) is the stage-by-stage contract — what each stage receives, produces, and must satisfy before the next starts — and [`.claude/skills/README.md`](.claude/skills/README.md) is the lookup table for the thirteen skills under [`.claude/skills/`](.claude/skills/). **Start there rather than improvising a process.** This file is the always-loaded context those skills assume: what the repo is, where it stands, and the constraints that hold in every stage.
+> **Process lives in the harness, not in this file.** [`.claude/WORKFLOW.md`](.claude/WORKFLOW.md) is the stage-by-stage contract — what each stage receives, produces, and must satisfy before the next starts — and [`.claude/skills/README.md`](.claude/skills/README.md) is the lookup table for the fourteen skills under [`.claude/skills/`](.claude/skills/). **Start there rather than improvising a process.** This file is the always-loaded context those skills assume: what the repo is, where it stands, and the constraints that hold in every stage.
 
 ## Repository state
 
