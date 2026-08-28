@@ -24,12 +24,12 @@ import (
 // failure this whole mechanism exists to remove.
 const migrationLockID int64 = 7_312_005_501_884
 
-// migrationsFS embeds internal/store/migrations. The directory is empty of
-// .sql files today — #312 adds the first one — and carries only a README so
-// this embed directive has a non-empty, non-dotfile directory to embed at
-// all; go:embed over an empty directory is a compile error, and a directory
-// embed excludes dotfiles (".gitkeep") by default. goose's own scan ignores
-// any file that isn't NNN_name.sql/.go, so the README is inert to it.
+// migrationsFS embeds internal/store/migrations, which carries a README
+// alongside the real migrations so this embed directive always has a
+// non-empty, non-dotfile directory to embed; go:embed over an empty
+// directory is a compile error, and a directory embed excludes dotfiles
+// (".gitkeep") by default. goose's own scan ignores any file that isn't
+// NNN_name.sql/.go, so the README is inert to it.
 //
 //go:embed migrations
 var migrationsFS embed.FS

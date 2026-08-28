@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r50 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r51 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -277,6 +277,10 @@
 > - **§17 gains a `slog` timestamp fix.** `HandlerOptions.ReplaceAttr` forces the emitted time attribute through `.UTC()`, since `slog`'s default handler otherwise timestamps in whatever `Location` the process's `time.Now()` carries.
 > - **§18's Docker image gains `ENV TZ=UTC`**, stated explicitly as a backstop nothing depends on — no new required env var joins `DATABASE_URL`/`MAIL_PROVIDER_KEY`/`BASE_URL`/`SESSION_KEY`/`TRUSTED_PROXY_HOPS`, since no code branches on whether it's set. The actual process-timezone answer is a `.UTC()`-at-format/log discipline, scoped to the one surface where a `time.Time`'s `Location` is observable: Go's comparison operators (`Before`/`After`/`Sub`) and every `pgx` read/write are already `Location`-independent, so §8's `Tick()` deadline check needs no change.
 > - No GDD text change: this is a persistence-and-observability decision with no game-rule content. Companion doc stays at v2.32.
+>
+> **Changelog r50 → r51** — no `id` column had a stated generation rule (issue [#379](https://github.com/garnizeh/cinzal/issues/379), [D56](../decisions/D56-uuidv7-surrogate-keys.md))
+> - **§7.2 gains a stated surrogate-key convention.** Every `id` column defaults to `uuidv7()` — Postgres 18 native, no extension — never `gen_random_uuid()` (UUID v4) or a serial/bigserial type. v7's leading timestamp bits keep newly-inserted rows index-local in a btree, unlike v4's fully random layout, while staying exactly as non-enumerable: no `id` value discloses a row count or insertion sequence the way a serial key would. Governs `id` columns only — the composite-keyed tables (`match_players`, `orders`, `events`, `match_summary`, `rate_limits`) have no surrogate `id` and are unaffected.
+> - No GDD text change: this is a persistence implementation detail with no game-rule content. Companion doc stays at v2.32.
 
 ---
 
@@ -753,6 +757,13 @@ state = fold(Resolve, initial(seed, cfg), orderLog)
 This falls out of the determinism requirement rather than being an independent choice, and it hands us four things for free: asynchronous resume, shareable replays, time-travel debugging, and the ability to answer "what sequence produced this?" when a player disputes an outcome.
 
 ### 7.2 Schema
+
+Every `id` column below defaults to `uuidv7()` — Postgres 18 native, no
+extension — never `gen_random_uuid()` (UUID v4) or a serial type: v7's
+leading timestamp keeps inserts index-local in a btree while remaining
+exactly as non-enumerable as v4 (D56). This governs `id` columns only; the
+composite-keyed tables further down (`match_players`, `orders`, `events`,
+`match_summary`, `rate_limits`) have no surrogate `id` and are unaffected.
 
 ```sql
 -- identity
