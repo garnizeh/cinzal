@@ -16,36 +16,53 @@ whether to act once it is.
 
 ## 1. The gate: has a real review landed, and is it clean?
 
-**This is a positive condition, not the absence of a negative one.** Do not
-merge on a green check, and do not merge on silence — a `Review limit reached`
-skip and a genuinely clean review both look like "no comments" from the
-outside, and that exact ambiguity is why `coderabbit-triage` exists. Run it
+**The gate is a literal string, not a feeling.** CodeRabbit keeps one PR-level
+comment — the first comment after the PR description, present since the PR
+opened and edited in place on every review pass. Merge is authorized the
+moment that comment's current body is, verbatim:
+
+> No actionable comments were generated in the recent review. 🎉
+
+[PR #378](https://github.com/garnizeh/cinzal/pull/378) is the reference case —
+that exact text, and nothing else, is what a genuinely clean review looks
+like. Do not merge on a green check, and do not merge on silence — a `Review
+limit reached` skip and a genuinely clean review both look like "no new
+comments" from the outside, but the main comment itself carries the tell: it
+either still shows the rate-limit warning or a findings summary, or it shows
+the clean line. That exact ambiguity is why `coderabbit-triage` exists. Run it
 first and confirm, concretely:
 
-- **A real review object exists against the PR's current head** — not merely
-  that none is showing. Check which commit each review covered
-  (`coderabbit-triage` step 2); a review of an earlier commit does not clear a
-  later one.
-- Every finding raised is either fixed or answered with reasoning.
-- **No finding is still raised against the current head** — the one reliable
-  signal, and it is negative.
+- **The main comment, read fresh, against the PR's current head** — not a
+  memory of what it said earlier, and not the presence/absence of new
+  comments underneath it. The comment has no field recording which commit it
+  describes, so the clean text alone doesn't prove it — extract the head sha
+  from its nested `Commits` block and diff it against `pulls/<n>.head.sha`
+  (`coderabbit-triage` §1a has the exact commands). A mismatch, or no
+  `Commits` block at all, means the text is stale: **fail closed**, treat it
+  as no review having landed.
+- **If findings were raised and got fixed, that is necessary but not
+  sufficient.** Resolving every thread and going green does not rewrite the
+  main comment — it still records whatever the review that raised those
+  findings said. A fresh review has to run after the fix, and the gate is
+  only met once *that* review edits the main comment to the exact clean text.
 - Every review conversation is resolved. `main` requires it, and this is what
   caught a factual error in the very first PR of the project.
 
-**If the latest attempt hit `Review limit reached` — no real review landed —
-this is a race, not a stall, and not a reason to merge on the silence:**
+**If the current main comment shows `Review limit reached` — not the clean
+text — this is a race, not a stall, and not a reason to merge on the
+silence:**
 
 1. Wait the stated refill window and request a fresh review, polling in the
    background (`coderabbit-triage`'s own guidance on this).
-2. **Whichever happens first wins:** a subsequent real review lands clean →
-   the gate is met, merge proceeds automatically; or the maintainer explicitly
-   asks for the merge → that request is acted on immediately, gate or no gate,
-   without waiting for one more retry round.
+2. **Whichever happens first wins:** the main comment updates to the exact
+   clean text → the gate is met, merge proceeds automatically; or the
+   maintainer explicitly asks for the merge → that request is acted on
+   immediately, gate or no gate, without waiting for one more retry round.
 
-Merging on an explicit ask before a review ever landed is still a decision the
-maintainer made, not the pipeline inventing an exception — record that a
-review had not landed in the PR description either way, so the commit on
-`main` says plainly what did or did not go in reviewed.
+Merging on an explicit ask before the clean text ever landed is still a
+decision the maintainer made, not the pipeline inventing an exception —
+record in the PR description that the exact text had not appeared, so the
+commit on `main` says plainly what did or did not go in reviewed.
 
 ## 2. Pre-merge check
 

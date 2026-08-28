@@ -37,8 +37,9 @@ The four stages are not four approval gates. Once a work item is classified
 at Intake, the default is to run the **whole pipeline in one continuous
 pass, unattended**: read the task, understand it, plan it, execute it,
 review-and-fix it until `make check` is clean, publish it as a PR, watch for
-and answer CodeRabbit — fix, verify, push, reply, repeat — until no finding
-is still raised against the head, merge, delete the branch, close the issue,
+and answer CodeRabbit — fix, verify, push, reply, repeat until no finding is
+still raised against the head — then, once a review after that comes back
+with the exact clean text (below), merge, delete the branch, close the issue,
 update the milestone tracking issue, and end with one summary of everything
 that happened. No pause between any of these to ask "should I keep going?" —
 the gate at the end of each stage in this document (a closed blocker, a
@@ -62,21 +63,32 @@ in.
 **This includes `merge-closeout`, gated precisely.** Squash-merge, delete the
 just-merged feature branch, confirm the issue closed, update the milestone
 tracking issue, write the local journal entry — all of it runs the moment,
-and *only* the moment, a **real, completed CodeRabbit review against the
-current head** comes back with no finding raised. "No comments visible" is
-not that condition on its own — a `Review limit reached` skip also shows no
-comments, and this repo's whole `coderabbit-triage` skill exists because that
-shape has been mistaken for a clean review before. Auto-merge fires on the
-positive signal (a completed review, clean), never on the mere absence of a
-negative one.
+and *only* the moment, CodeRabbit's main PR comment — the first comment after
+the PR description, edited in place on every review pass — reads exactly
+**"No actionable comments were generated in the recent review. 🎉"** against
+the current head. PR [#378](https://github.com/garnizeh/cinzal/pull/378) is
+the reference case: that literal text, and nothing else, is what a genuinely
+clean review looks like. "No comments visible" is not that condition on its
+own — a `Review limit reached` skip also shows no *new* comments while the
+main comment itself still carries the rate-limit warning, not the clean line,
+and this repo's whole `coderabbit-triage` skill exists because that shape has
+been mistaken for a clean review before. Auto-merge fires on the positive
+signal — that exact string — never on the mere absence of a negative one.
+
+**Fixing every raised finding is necessary but not sufficient.** Resolving
+threads and going green does not rewrite the main comment; it still records
+whatever the review that raised those findings said. A fresh review has to
+run after the fix, and the gate is only met once *that* review edits the main
+comment to the exact clean text.
 
 **On `Review limit reached`, this is a race, not a stall:** wait the stated
 refill window (usually 20–45 min, polled in the background — see below), then
-request a fresh review (`@coderabbitai review`); if a subsequent real review
-lands clean, merge proceeds automatically as above. **Whichever comes first
-wins** — if the maintainer explicitly asks for the merge before a clean
-review ever lands, that request is acted on immediately regardless of
-CodeRabbit's state, and does not wait for the retry cycle to resolve.
+request a fresh review (`@coderabbitai review`); if the main comment then
+updates to the exact clean text, merge proceeds automatically as above.
+**Whichever comes first wins** — if the maintainer explicitly asks for the
+merge before that text ever lands, that request is acted on immediately
+regardless of CodeRabbit's state, and does not wait for the retry cycle to
+resolve.
 
 This is a deliberate, standing authorization the maintainer gave in full
 knowledge of what it covers (2026-08-27) — not the pipeline quietly picking
@@ -97,6 +109,9 @@ review early.** "Fix → verify → push → reply → repeat" continues until
 either CodeRabbit has no more findings raised against the head, or the user
 explicitly says to stop — a fixed number of rounds is not the exit
 condition, silence from CodeRabbit on an unresolved finding is not either.
+Reaching that exit condition ends the fix loop and triggers a fresh review
+request; it is not, by itself, the merge gate above — that still needs the
+exact clean text on a review taken after the last fix.
 
 **Running this across a whole milestone, not just one issue, is a separate,
 explicit mode** — [`loop-dispatch`](skills/loop-dispatch/SKILL.md), started
@@ -192,7 +207,7 @@ closed out.
 | `delivery-review` | Read the whole diff; walk all five standing obligations; ask the fog question in writing |
 | `pr-publish` | `delivery-review` came back clean — that is the approval to publish, no separate one needed. The body **is** the commit message. `Fixes #<n>` is present, literally |
 | `coderabbit-triage` | Every finding fixed or answered — **including the ones that live only in the review body** — looping fix → verify → push → reply until none remain raised against the head |
-| `merge-closeout` | A real review has landed, and no finding is still raised against the head. This gate is **checked, not asked for** — meeting it is what runs the merge, same turn, no separate go-ahead |
+| `merge-closeout` | CodeRabbit's main PR comment reads exactly "No actionable comments were generated in the recent review. 🎉" against the current head. This gate is **checked, not asked for** — meeting it is what runs the merge, same turn, no separate go-ahead |
 
 **After merge, in the same turn:** verify the issue actually closed, update the
 milestone tracking issue, sync `main`, file anything deferred, and close the
@@ -233,7 +248,9 @@ explains three otherwise unrelated rules:
 - A **test suite** that skipped for a missing Postgres reports the same green as
   one that ran.
 
-So: gates fail closed, reviews are confirmed by the *negative* signal only, and a
+So: gates fail closed; a CodeRabbit finding is answered on the *negative*
+signal (still raised against the head), but the review itself is confirmed
+clean only on the *positive* one (the main comment's exact clean text); and a
 skipped check is written down as skipped rather than counted as passed.
 
 ---
