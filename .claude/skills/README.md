@@ -70,7 +70,7 @@ The skills defer to these; they do not restate them.
 | [`docs/project/cinzal-gdd.md`](../../docs/project/cinzal-gdd.md) | Game rules |
 | [`docs/project/cinzal-architecture-rfc.md`](../../docs/project/cinzal-architecture-rfc.md) | Architecture |
 | [`docs/project/cinzal-implementation-plan.md`](../../docs/project/cinzal-implementation-plan.md) | Sequencing and open decisions |
-| [`docs/decisions/`](../../docs/decisions/) | Decisions D01–D52, and the format for the next one |
+| [`docs/decisions/`](../../docs/decisions/) | The decision log, and the format for the next one. `CLAUDE.md`'s document index carries the current decided range — read it there rather than from a number pasted here |
 
 **Read the changelog before trusting a spec section.** Later entries correct
 earlier ones, and both specs are heavily changelogged.

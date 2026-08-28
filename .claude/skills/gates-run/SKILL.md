@@ -58,6 +58,19 @@ VACUOUS again.
 | `test` | `go test -race ./...` | — |
 | `*-selftest` | The gates' own fixture coverage | The gate stopped catching what it exists to catch |
 | `prod` / `dev` | Both build tags compile | — |
+| `replay` | `internal/rules` behaves identically on Linux and macOS — its own CI job with a cross-OS matrix, not part of `make check` | A determinism break that only shows on one OS, which is the shape `seed + order log` guarantees against |
+
+**What blocks a merge is a checkable list, not the set of jobs that ran.**
+Branch protection requires six status checks — `check`, `secrets`,
+`bench-compare`, `vuln`, `replay (ubuntu-latest)`, `replay (macos-latest)` —
+and there are no rulesets. `vuln` and both `replay` legs were promoted in
+#391, having run on every PR while blocking nothing. `bench` stays out: it is
+the one job with a job-level `if` (`push` only), so it reports `skipped` on
+every PR and requiring it would deadlock all of them.
+
+```bash
+rtk gh api repos/garnizeh/cinzal/branches/main/protection --jq .required_status_checks.contexts
+```
 
 **If a gate blocks you, the answer is almost never to weaken the gate.** These
 are not style checks and a failure is not a nit. Each exists because the failure
@@ -79,7 +92,18 @@ rtk make bots-isolation
 rtk go test -race ./internal/rules/...
 rtk make dev                      # debug build — the debug panel exists here
 rtk make prod                     # debug routes do not exist in this binary
+rtk make replay                   # what CI's cross-OS matrix runs, on this OS
 ```
+
+**Two more targets arrive with M3 and are deliberately not in `make check`**
+([D46](../../../docs/decisions/D46-postgres-backed-test-layer.md),
+[D54](../../../docs/decisions/D54-integration-tag-fog-gate-and-check-scope.md)):
+`make integration`, the Postgres-backed suite behind `//go:build integration`,
+which needs a reachable Docker daemon and hard-fails without one; and `make
+integration-list`, its Docker-free companion asserting that suite hasn't
+silently shrunk, which runs as its own CI job. Neither exists yet — #325 builds
+them. When they land, `make check` still gains no Docker dependency, and that
+is the point of the split, not an oversight.
 
 Run the full `make check` once before opening the PR, not only the narrow ones.
 

@@ -96,9 +96,15 @@ with nothing left open) — that's normal task execution, not a process gap.
   lands through the normal path: edit directly for something as
   mechanical as a stale number or a missing link; route anything that
   changes actual pipeline behavior or a gate through `docs-change`'s
-  conventions and land it via `pr-publish` — a standalone process PR with no
-  linked issue is established precedent (PR #382, #385). Never batch an
-  unrelated code task into this PR.
+  conventions and land it via `pr-publish`. **File an issue for it first**,
+  per `WORKFLOW.md`'s Stage 4 — `**Milestone:** Out of band`, and every field
+  in CONTRIBUTING's issue table filled, the spec anchor included; for a
+  process fix that anchor is a harness document (`WORKFLOW.md`,
+  `CONTRIBUTING.md`, `CLAUDE.md`) rather than the GDD or RFC — and have the PR
+  close it with the literal `Fixes #<n>`. Earlier process PRs landed with no
+  issue behind them (#382, #385, #370); Stage 4 was written specifically to
+  end that, so they are precedent for the shape of the PR, not for skipping
+  the issue. Never batch an unrelated code task into this PR.
 - A learning about collaboration style, standing preference, or project
   state rather than repo content belongs in auto-memory instead, per the
   memory system's own type rules — not every finding here is a file edit.

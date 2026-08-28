@@ -45,9 +45,24 @@ wherever the criterion allows it, not "looks right".
 
 ## 3. Run it and record evidence
 
-Evidence lives in **`docs/exit-demos/<issue-number>/`** — the directory is named
-for the issue, so a re-run for a different criterion never lands on top of an
-existing one. CSVs, logs, the captured gate output.
+Evidence is **two artefacts, not one**, and the existing demonstrations are the
+register:
+
+- **`docs/exit-demos/<issue-number>/`** — the raw capture. CSVs, logs, the
+  captured gate output. The directory is named for the issue, so a re-run for a
+  different criterion never lands on top of an existing one.
+- **`docs/exit-demos/<issue-number>-<slug>.md`** — the write-up beside it: the
+  quoted criterion, a **Provenance** table (the git SHA of the binary that
+  produced the capture, the root seeds, the sample size), the method, the
+  numbers, and the verdict. Read
+  [`205-r1-r6-r7.md`](../../../docs/exit-demos/205-r1-r6-r7.md) before writing
+  one — it is the fullest example, and the Provenance table is the part a
+  reader in a year actually needs.
+
+A raw directory with no write-up is a pile of CSVs nobody can interpret; a
+write-up with no directory cannot be re-derived. The exception is a **re-run**
+(§4): it gets its own issue-numbered directory, and the narrative lives in the
+re-run's PR rather than in a second write-up competing with the original.
 
 Capture, do not paraphrase. A quoted failing check is evidence; "CI rejected it"
 is a claim.

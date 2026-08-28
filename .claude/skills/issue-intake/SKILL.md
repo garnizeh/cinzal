@@ -34,11 +34,11 @@ order:
    task that runs before it's fixed, not just the one that found it.
 2. **Otherwise, the current milestone's next task.** "Current" is whichever
    milestone `CLAUDE.md`'s "Repository state" paragraph names as underway,
-   and its tracking issue is the one `CLAUDE.md` points at (M3 → #332,
-   today) — not GitHub's own milestone `state`, which stays `open` on every
-   milestone here regardless of whether `CLAUDE.md` calls it closed. Read
-   that issue's checklist top to bottom; the first unchecked `- [ ]` row
-   whose "Blocked by" is fully closed (or has none) is next.
+   and its tracking issue is the one `CLAUDE.md` points at — not GitHub's own
+   milestone `state`, which stays `open` on every milestone here regardless of
+   whether `CLAUDE.md` calls it closed. Read that issue's checklist top to
+   bottom; the first unchecked `- [ ]` row whose "Blocked by" is fully closed
+   (or has none) is next.
 3. **Skip anything already mid-pipeline.** An unchecked row with an open PR
    already referencing its issue number is in progress, not next — check
    before picking one, and continue that PR instead
@@ -167,12 +167,23 @@ Out-of-scope findings from a code review get filed too — a reply saying
 
 **No manual line-wrap inside a paragraph or bullet** — one physical line per
 paragraph, same rule `pr-publish` states for PR bodies, and it has already
-been violated here too (#368, 2026-08-27). Run `pr-publish`'s mechanical
-check against `/tmp/issue.md` before `gh issue create`, not an eyeball read.
+been violated here too (#368, 2026-08-27). Run the mechanical check against
+the body file before `gh issue create`, not an eyeball read — it takes the
+path as an argument, so it works on an issue body exactly as it does on a PR
+body:
 
 ```bash
-rtk gh issue create --title "<area>: <what>" --body-file /tmp/issue.md --label task
+rtk ./scripts/check-no-hard-wrap.sh <body-file>
+rtk gh issue create --title "<area>: <what>" --body-file <body-file> --label task
 ```
 
-**After filing, update the milestone's tracking issue in the same turn** — that
-has been forgotten twice. M3's is #332; see [gh-recipes.md](../../reference/gh-recipes.md).
+**After filing milestone work, update that milestone's tracking issue in the
+same turn** — that has been forgotten twice. The current one is whichever
+`CLAUDE.md`'s "Repository state" names; see
+[gh-recipes.md](../../reference/gh-recipes.md) for the discovery query.
+
+**An out-of-band issue is the exception, not an oversight.** Work filed with
+`**Milestone:** Out of band` — harness and process fixes, a CI gap an
+out-of-scope review finding produced — belongs to no milestone and so has no
+tracking issue to tick (#373 and #391 are both filed this way, and neither
+appears in #332). Filing one ends here.

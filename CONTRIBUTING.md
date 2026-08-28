@@ -58,7 +58,7 @@ M0's criteria, for example, are demonstrations that things *fail*: a pull reques
 
 | Field | Why |
 |---|---|
-| **Spec anchor** — a GDD or RFC section | The most important one. The documents are the authority, so a task that cannot cite a section is inventing a requirement. When that happens it is **not a task, it is a decision** — file it as one. |
+| **Spec anchor** — the section that governs the work | The most important one. The documents are the authority, so a task that cannot cite a section is inventing a requirement. When that happens it is **not a task, it is a decision** — file it as one. Normally this is a GDD or RFC section. **A harness or process fix is not exempt from the field** — its anchor is a harness document instead, because that is what governs it: [#373](https://github.com/garnizeh/cinzal/issues/373) cited this file's "Gates fail closed", [#391](https://github.com/garnizeh/cinzal/issues/391) cited [`.claude/WORKFLOW.md`](.claude/WORKFLOW.md)'s Stage 4. The field stays required either way; what changes is which document it points at. |
 | **Acceptance criterion** — demonstrable | "Implement `Resolve`" is not one. "A 15-round replay reproduces byte-identically on two machines" is. |
 | **Blocked by** | Decisions and predecessor tasks, explicitly. |
 | **Area** | Mirrors [`CODEOWNERS`](.github/CODEOWNERS): `rules`, `fog`, `ci`, `store`, `web`, `render`, `bots`, `mail`, `auth`, `docs`. |
@@ -165,6 +165,22 @@ Seven checks make the architecture real rather than conventional. They are not s
 If one of these blocks you, the answer is almost never to weaken the gate.
 
 The secret scan reads history as well as the tree, because a credential added in one commit and deleted in the next is absent from the tree and present in the history forever. It is scoped to the commits your branch adds: a credential somewhere else in the repository is not your pull request's problem, and making it one was a real defect ([#37](https://github.com/garnizeh/cinzal/issues/37)). Locally, `make secrets` scopes itself the same way, to `origin/main..HEAD` — falling back to the whole history of `HEAD` when `origin/main` is unknown or your branch adds nothing to it, as on `main` itself. It over-scans rather than under-scans: no path through the gate inspects zero commits, because a scan of nothing reports "no leaks found" exactly like a clean one.
+
+### Which of these actually block a merge
+
+**"Runs in CI" and "blocks a merge" are two different facts.** `main`'s branch protection requires six status checks — `check`, `secrets`, `bench-compare`, `vuln`, `replay (ubuntu-latest)` and `replay (macos-latest)` — and this repository has no rulesets, so that list is the entire enforcement surface.
+
+Three of those are recent. `vuln` and both `replay` legs ran on every pull request while blocking nothing, which meant a red `vuln` — a newly-disclosed CVE against a dependency already sitting in `go.sum` — could be merged, and a cross-OS determinism break with it. [The dependency-vulnerability gate](#the-dependency-vulnerability-gate) below had argued `vuln` should be unskippable, and it was unskippable *by path* while not being a required context at all; [#391](https://github.com/garnizeh/cinzal/issues/391) closed that gap.
+
+**Requiring a path-gated job does not deadlock a prose-only pull request**, which is the objection that would otherwise block this. `check`, `vuln` and `replay` carry no job-level `if`: the job always runs and reports `success` even when its path gate skips every step inside. Verified on [#369](https://github.com/garnizeh/cinzal/pull/369), a documentation-only change, where `check` and both `replay` legs each reported `success` rather than `skipped`.
+
+**`bench` is deliberately excluded.** It is the only CI job with a job-level condition — `if: github.event_name == 'push'` — so it reports `skipped` on every pull request. It records `main`'s benchmark history; `bench-compare` is the gate.
+
+Read the list rather than trusting this paragraph when it matters:
+
+```bash
+rtk gh api repos/garnizeh/cinzal/branches/main/protection --jq .required_status_checks.contexts
+```
 
 ### A docs-only pull request does not pay for a Go toolchain
 
