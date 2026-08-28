@@ -17,8 +17,8 @@ which is `check-nosecrets` + `secrets` + `vuln`, where `check-nosecrets` is:
 
 ```
 packages purity purity-selftest fog debug-isolation bots-isolation
-bots-isolation-selftest simulate-deps lint test bench-regression-selftest
-prod dev
+bots-isolation-selftest simulate-deps generate-check generate-check-selftest
+lint test bench-regression-selftest prod dev
 ```
 
 ---
@@ -33,9 +33,13 @@ review bot reporting success on a skipped review.
 **A gate that passes when it cannot run is worse than no gate.** Hold new checks
 to this, and never "fix" a noisy gate by letting it skip.
 
-`generate-check` is deliberately **not** in `check` yet: `GENERATED` is empty
-until M3/M5 land real generated paths, and it reports **VACUOUS, not passing**.
-Run it standalone to see that message.
+`generate-check` joined `check` in issue #316: `GENERATED` now names sqlc's
+real output (issue #315), and emptying it back out still fails rather than
+passing — the VACUOUS branch stays reachable, proven by
+`scripts/check-generate_test.sh` (`generate-check-selftest`). Its still-empty
+templ half (`GENERATED_TEMPL`) stays that way until M5, documented inline at
+the Makefile's own definition — not a reason for the whole check to report
+VACUOUS again.
 
 ## What each gate asserts, and what a failure means
 
@@ -49,6 +53,7 @@ Run it standalone to see that message.
 | `vuln` | No `go.mod`/`go.sum` dependency carries a known OSV/GHSA vulnerability (osv-scanner) or a reachable one govulncheck's symbol data can confirm | A newly (or newly-disclosed) vulnerable dependency — bump or replace it, never suppress the finding |
 | `bots-isolation` | `internal/bots` production code names no `MatchState`, graph, or `[32]byte` seed, and no `rules.X` outside the allow-list | Widening `scripts/bots-isolation-allowlist.txt` is its own reviewed change with a fog-safety argument |
 | `simulate-deps` | `cmd/simulate` depends on only `rules`/`bots`/`game`/`telemetry` | `internal/match` (or anything else) leaked into the driver |
+| `generate-check` | Committed generated code (`GENERATED`, currently sqlc's output) matches a fresh regenerate | Regenerating changed something not committed — run `make generate` and commit the result |
 | `lint` | `go vet` + `golangci-lint` | — |
 | `test` | `go test -race ./...` | — |
 | `*-selftest` | The gates' own fixture coverage | The gate stopped catching what it exists to catch |
