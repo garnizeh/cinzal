@@ -9,24 +9,25 @@ Every command is prefixed with `rtk` per [CLAUDE.md](../../CLAUDE.md).
 
 ## Issues
 
-**The installed `gh` is old, and that — not the repository, and not GraphQL —
-is what breaks.** `gh 2.45.0` hardcodes `repository.issue.projectCards` in its
-`issue view` query, a field GitHub has since deprecated, so raw `gh issue view`
-fails with `GraphQL: Projects (classic) is being deprecated`. Two things follow
-that are easy to over-generalise from and have been:
+**`gh issue view` used to fail here. It was a stale client, and it is fixed.**
+The cause was never this repository and never GraphQL: `gh 2.45.0` (Ubuntu's
+package) hardcoded `repository.issue.projectCards` in its `issue view` query,
+a field GitHub has since deprecated. `gh 2.98.0` is now installed at
+`~/.local/bin/gh`, ahead of `/usr/bin/gh` on `PATH`, and `gh issue view`,
+`gh pr edit` and hand-written `gh api graphql` all work — verified 2026-08-28.
 
-- **GraphQL itself works.** A hand-written `gh api graphql` query against this
-  repository returns normally — verified 2026-08-28. The thread-state query at
-  the bottom of this file is fine. It is `gh`'s own baked-in queries that carry
-  the dead field, not anything about this account.
-- **`rtk gh issue view <n>` works too**, because `rtk`'s filter answers it
-  without the deprecated query. Only the raw form (`rtk proxy gh issue view`)
-  fails.
+Two things worth keeping from that episode:
 
-Prefer `gh api` below anyway: it is explicit about the fields it asks for, so
-it cannot be broken by a client-side query going stale the way `issue view`
-was. If `gh` is ever upgraded past this, re-verify and simplify this section
-rather than leaving a fixed problem documented as live.
+- **The old client is still on the box** at `/usr/bin/gh`. If `PATH` ever stops
+  putting `~/.local/bin` first, the deprecated-field failure comes back and
+  looks like a repository problem again. It is not one.
+- **"GraphQL is broken here" was the wrong lesson**, drawn from one client-side
+  query going stale. It was never true of the account, and the thread-state
+  query at the bottom of this file always worked.
+
+Prefer `gh api` below anyway: it names the fields it asks for, so it cannot be
+broken by a client's baked-in query going stale the way `issue view` was. That
+is a durability argument, not a workaround for a live bug.
 
 ```bash
 # Read one issue, body included
