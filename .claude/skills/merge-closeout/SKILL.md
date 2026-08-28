@@ -99,8 +99,28 @@ This is the part that gets forgotten. Do all five:
    never committed (no branch-protection concern applies: this file never
    enters git). This is additive to the chat-turn report below, not a
    replacement of it — the durable record for when nobody was watching the
-   session live. Prepend the new entry **above** the file's existing content
-   (most recent first), in the shape the file's own header template shows:
+   session live.
+
+   **If `.claude/journal.md` does not exist yet** (a fresh checkout, or it
+   was deleted — do not assume it survives), create it first with this exact
+   header, verbatim, so the file is self-describing even without this skill
+   open:
+
+   ```markdown
+   # Task execution journal
+
+   Local, async-monitoring log — never committed (`.claude/journal.md` in
+   `.gitignore`). Written by `merge-closeout`
+   (`.claude/skills/merge-closeout/SKILL.md`), one entry per merged task,
+   **most recent entry first**. This is additive to the chat-turn summary
+   `merge-closeout` already gives, not a replacement of it — the durable
+   record for when nobody was watching the session live.
+
+   ---
+   ```
+
+   **Then, every time, prepend one entry** directly below that header (above
+   any existing entries — most recent first):
 
    ```markdown
    ## #<n> — <issue title>
@@ -115,10 +135,8 @@ This is the part that gets forgotten. Do all five:
    ---
    ```
 
-   Use real UTC timestamps (`date -u +%Y-%m-%dT%H:%M:%SZ`), not an estimate.
-   If `.claude/journal.md` does not exist yet, create it first — its header
-   template is the source of truth for the entry shape, so write that header
-   once, then the entry.
+   Use real UTC timestamps — `rtk date -u +%Y-%m-%dT%H:%M:%SZ` — not an
+   estimate.
 
 ## 6. Report — and close the whole pass, not just this stage
 

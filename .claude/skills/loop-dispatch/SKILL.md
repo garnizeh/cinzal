@@ -40,28 +40,67 @@ than the dispatcher trying to summarize away what came before.
 
 ## 2. Per-cycle decision
 
-**Is a task already in flight** (an open PR referencing an issue, per
-`WORKFLOW.md`'s "Entering mid-pipeline" table)?
+**An open PR is not the only in-flight signal — it is not even the first
+one to check.** A delegated pass runs `issue-intake` through `pr-publish`
+before any PR exists; a subagent can be minutes into `task-plan` or
+`code-change` with no PR yet. If the dispatcher's *own* per-cycle check
+looked only at open PRs, a fallback `ScheduleWakeup` firing during that
+window would see "nothing in flight" and select a second issue — two
+subagents genuinely mid-pipeline at once, which is exactly what Rule 2
+forbids. So the dispatcher keeps its own record, checked first:
 
-- **Yes** — this is the serial-execution gate (Rule 2, §4 below). Check its
-  status. If it is waiting on CI or a CodeRabbit review, arm a `Monitor` on
-  it (per `WORKFLOW.md`'s "Waiting on CodeRabbit is not a reason to stall the
-  turn") and hold with a long fallback `ScheduleWakeup`. If it has moved
-  (checks landed, a review posted, it merged), hand off a **fresh** subagent
-  to continue from wherever the mid-pipeline table says that state enters —
-  never a subagent that already ran a previous stage in this same loop.
-- **No** — run `issue-intake` §0's selector exactly as it is defined there
-  (out-of-band unmilestoned+unblocked work first, then the active
-  milestone's next unblocked checklist row). Two outcomes:
-  - **Found one** — spawn a fresh subagent with the full brief the selector
-    would give a human: "drive issue #`<n>` through `issue-intake` →
-    `task-plan` → its execute skill → `delivery-review` → `pr-publish`, in
-    one continuous pass, per `WORKFLOW.md`." Stop there for this cycle —
-    `coderabbit-triage` and `merge-closeout` are picked up by a later cycle's
-    in-flight check, once the PR exists and this cycle's subagent has
-    exited.
-  - **Nothing found** — this is Rule 3 (§5 below): report and stop the loop
-    entirely, do not schedule another wakeup.
+**0. Read the active-issue marker** — a small scratchpad file (e.g.
+`loop-dispatch-active.md`) the dispatcher itself writes and owns, holding:
+the issue number, the UTC time the pass was spawned, and the subagent's
+`agentId`. Three cases:
+
+- **No marker** — nothing dispatched by this loop is running. Fall through
+  to the "no task in flight" branch below.
+- **Marker present, and that issue's PR is now merged and closed** — the
+  pass finished since the last cycle. Delete the marker, then fall through
+  to the "no task in flight" branch in this same cycle (no need to wait for
+  another wakeup just to notice).
+- **Marker present, and that issue's pass has not finished** (no PR yet, or
+  an open PR, or a report of failure/crash) — this **is** the in-flight
+  case; do not select a new issue this cycle no matter what the open-PR
+  check alone would suggest:
+  - **No PR yet** — the subagent is still pre-`pr-publish`. Do not spawn
+    anything for this issue or any other; just re-arm a long fallback
+    `ScheduleWakeup` and wait. The subagent's own completion notification is
+    the primary wake signal (per the general `Agent`-tool guidance the
+    dispatcher itself runs on) — this fallback only covers it being missed
+    or the pass running long.
+  - **A PR now exists and is open** — proceed as the old single-signal
+    check did: if it's waiting on CI or a CodeRabbit review, arm a `Monitor`
+    (per `WORKFLOW.md`'s "Waiting on CodeRabbit is not a reason to stall the
+    turn") and hold with a long fallback `ScheduleWakeup`; if it has moved
+    (checks landed, a review posted), hand off a **fresh** subagent to
+    continue from wherever `WORKFLOW.md`'s "Entering mid-pipeline" table
+    says that state enters — never a subagent that already ran a previous
+    stage in this same loop.
+  - **The subagent's completion notification reports failure or a crash**
+    (not the Rule 1 "blocked" report — an outright error) — treat this the
+    same as Rule 1: surface it to the maintainer with what's known and
+    `ScheduleWakeup stop: true`. Guessing how to resume a pass that failed
+    outright, with no written state, is itself the kind of doubt Rule 1
+    exists for.
+
+**Nothing in flight** (no marker, or the marker was just cleared above)?
+Run `issue-intake` §0's selector exactly as it is defined there (out-of-band
+unmilestoned+unblocked work first, then the active milestone's next
+unblocked checklist row). Two outcomes:
+
+- **Found one** — **write the active-issue marker first**, then spawn a
+  fresh subagent with the full brief the selector would give a human:
+  "drive issue #`<n>` through `issue-intake` → `task-plan` → its execute
+  skill → `delivery-review` → `pr-publish`, in one continuous pass, per
+  `WORKFLOW.md`." Stop there for this cycle — `coderabbit-triage` and
+  `merge-closeout` are picked up by a later cycle, once the PR exists and
+  this cycle's subagent has exited. Writing the marker *before* spawning
+  (not after) is what closes the race: the marker exists the instant the
+  issue is chosen, before the subagent has had any chance to run.
+- **Nothing found** — this is Rule 3 (§5 below): report and stop the loop
+  entirely, do not schedule another wakeup.
 
 ## 3. Rule 1 — any doubt stops the loop, decided by the dispatcher, never inside a subagent
 
@@ -93,13 +132,16 @@ The dispatcher, on receiving that report:
 
 ## 4. Rule 2 — strict serial execution
 
-At most one issue is ever mid-pipeline. This is not a new mechanism — it is
-the existing in-flight-PR check (§2 above, `WORKFLOW.md`'s "Entering
-mid-pipeline" table) used as a gate: the dispatcher runs `issue-intake` §0's
-selector to pick a *new* issue only when that check finds nothing in flight.
-Two subagents for two different issues are never spawned in the same cycle,
-and a cycle that finds something in flight does not also look for a next
-issue.
+At most one issue is ever mid-pipeline. The gate is the active-issue marker
+from §2 step 0, not the open-PR check alone — the marker is what covers the
+whole pass from the moment an issue is selected, including the
+pre-`pr-publish` window when no PR exists yet for the open-PR check to see.
+The dispatcher runs `issue-intake` §0's selector to pick a *new* issue only
+when no marker is present (or the marked issue's own pass has just finished
+and the marker was cleared this cycle). Two subagents for two different
+issues are never spawned in the same cycle, and a cycle that finds an active
+marker does not also look for a next issue — it either waits or continues
+that same issue's pass.
 
 ## 5. Rule 3 — stop-at-milestone-end, no reschedule
 
@@ -130,6 +172,11 @@ freedom. So resumption never relies on it:
   call pointed at the scratchpad file's path plus the maintainer's decision.
   It does not `SendMessage` the original blocked subagent, resumed or
   otherwise.
+- **The active-issue marker (§2 step 0) is updated, not cleared, across
+  this handoff** — the pass for that issue is still not done. Overwrite the
+  marker's `agentId` with the new resuming subagent's, keep the same issue
+  number, and the marker keeps gating serial execution exactly as it did
+  before the stop.
 
 ## 7. What this skill does not cover
 
