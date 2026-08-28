@@ -85,6 +85,14 @@ the issue number, the UTC time the pass was spawned, and the subagent's
     outright, with no written state, is itself the kind of doubt Rule 1
     exists for.
 
+**A subagent's own report that it is "still waiting in the background" is not
+itself evidence of that** — a background subagent's internal wait/`Monitor`
+dies silently the instant its turn ends, so a stray duplicate notification can
+go on claiming it's still waiting after the pass actually finished (#315).
+Re-verify the real state directly (PR/issue/CI status via `gh`) rather than
+trusting the claim at face value, and if the same subagent repeats this,
+stop it rather than tolerating multiple duplicate notifications.
+
 **Nothing in flight** (no marker, or the marker was just cleared above)?
 Run `issue-intake` §0's selector exactly as it is defined there (out-of-band
 unmilestoned+unblocked work first, then the active milestone's next

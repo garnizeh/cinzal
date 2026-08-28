@@ -138,6 +138,13 @@ indefinitely rather than rescheduling a re-poll; and the loop stops
 entirely, with no rescheduled wakeup, once the active milestone has no
 unblocked issue left.
 
+**A separate meta skill mines the journal itself for process learnings** —
+[`journal-retro`](skills/journal-retro/SKILL.md), run on demand or
+periodically after a run of merges, never as a side effect of one task's
+close-out. `merge-closeout` writes an entry per merge but nothing reads them
+back on its own; `journal-retro` is what turns a recurring root cause or an
+unresolved harness note into an actual fix to this file, a skill, or memory.
+
 ---
 
 ## Stage 1 — Intake
