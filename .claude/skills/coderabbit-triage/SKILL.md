@@ -112,10 +112,16 @@ there is nothing to do but wait. When a review genuinely was missed, the way to
 get one is a new commit after the allowance returns, not repeating the command.
 
 **Check proactively.** Poll after pushing; do not wait to be told. Do it in the
-background (`Monitor` with an `until`-loop against
-`gh api .../pulls/<n>/reviews`, not a foreground sleep) so the wait — which can
-span the whole 20–45 min refill window, possibly more than once — doesn't stall
-the turn.
+background (`Monitor` with an `until`-loop against **the main issue comment**,
+`gh api .../issues/<n>/comments[0]` — not `pulls/<n>/reviews`, since a clean
+incremental review often edits that comment in place without creating a new
+review object, so a reviews-list poll can sit past a review that already
+landed — not a foreground sleep) so the wait — which can span the whole 20–45
+min refill window, possibly more than once — doesn't stall the turn. Bind
+whatever the comment says to the PR's current head SHA (§1a) before trusting
+it, and if the comment still shows "Review limit reached" once the stated
+refill window has passed, the poll itself must comment `@coderabbitai review`
+to request the retry — CodeRabbit does not re-scan a stale PR on its own.
 
 ## The merge gate this skill hands to `merge-closeout`
 
