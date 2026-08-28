@@ -211,8 +211,10 @@ func TestSchemaOrdersCannotCascadeDelete(t *testing.T) {
 	}
 }
 
-// seedMatch inserts one user and one matches row and returns their ids,
-// for tests that only need a valid foreign-key target.
+// seedMatch inserts one user, one matches row, and a match_players row for
+// seat 0 (orders' composite FK requires seat to be an actual participant),
+// returning the user and match ids for tests that only need a valid
+// foreign-key target.
 func seedMatch(t *testing.T, db *sql.DB) (matchID, userID string) {
 	t.Helper()
 	ctx := context.Background()
@@ -227,14 +229,45 @@ func seedMatch(t *testing.T, db *sql.DB) (matchID, userID string) {
 	).Scan(&matchID); err != nil {
 		t.Fatalf("seed match: %v", err)
 	}
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO match_players (match_id, seat, user_id, faction) VALUES ($1, 0, $2, 'seed')`,
+		matchID, userID,
+	); err != nil {
+		t.Fatalf("seed match_players seat 0: %v", err)
+	}
 	return matchID, userID
+}
+
+// TestSchemaOrdersRequireValidMatchPlayer asserts the composite FK
+// (match_id, seat) -> match_players(match_id, seat): an order for a seat
+// with no corresponding participant must be rejected, not stored as an
+// order fold/replay can never map back to anyone.
+func TestSchemaOrdersRequireValidMatchPlayer(t *testing.T) {
+	db := applyBaseSchema(t)
+	ctx := context.Background()
+	matchID, _ := seedMatch(t, db)
+
+	// seat 0 was seeded by seedMatch and must succeed.
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO orders (match_id, round, seat, payload, source) VALUES ($1, 1, 0, '{}', 'human')`, matchID,
+	); err != nil {
+		t.Fatalf("insert for seeded seat 0: %v", err)
+	}
+
+	// seat 99 has no match_players row for this match and must be rejected.
+	_, err := db.ExecContext(ctx,
+		`INSERT INTO orders (match_id, round, seat, payload, source) VALUES ($1, 1, 99, '{}', 'human')`, matchID)
+	if !isForeignKeyViolation(err) {
+		t.Fatalf("insert for seat 99 with no match_players row = %v, want a foreign key violation", err)
+	}
 }
 
 // isUniqueViolation and isCheckViolation decode pgx's wrapped Postgres
 // error code rather than matching on message text, which goose/pgx do not
 // guarantee stays stable across versions.
-func isUniqueViolation(err error) bool { return pgErrorCode(err) == "23505" }
-func isCheckViolation(err error) bool  { return pgErrorCode(err) == "23514" }
+func isUniqueViolation(err error) bool     { return pgErrorCode(err) == "23505" }
+func isCheckViolation(err error) bool      { return pgErrorCode(err) == "23514" }
+func isForeignKeyViolation(err error) bool { return pgErrorCode(err) == "23503" }
 
 func pgErrorCode(err error) string {
 	var pgErr *pgconn.PgError

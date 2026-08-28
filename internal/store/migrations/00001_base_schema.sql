@@ -92,6 +92,13 @@ CREATE TABLE orders (
   -- column here means a typo in an insert silently changes whether a
   -- player reads as being on Autopilot.
   source TEXT NOT NULL CHECK (source IN ('human', 'bot', 'default')),
+  -- match_id alone only proves the match exists, not that seat is an
+  -- actual participant in it — without this, an insert for seat = 999
+  -- on a real match would succeed and store an order that maps to no
+  -- participant, which fold/replay has no way to make sense of later.
+  FOREIGN KEY (match_id, seat)
+    REFERENCES match_players (match_id, seat)
+    ON DELETE RESTRICT,
   PRIMARY KEY (match_id, round, seat)
 );
 
