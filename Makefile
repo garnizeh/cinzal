@@ -42,7 +42,13 @@ prod:
 	$(GO) build -o $(BIN)/prod/ $(CMD)
 
 ## test      race-enabled tests
-test:
+#
+# require-sqlc since issue #315: internal/store/sqlc_generate_test.go shells
+# out to the real sqlc binary to prove sqlc generate fails closed on a query
+# naming a nonexistent column. Failing the target with a clear message beats
+# a bare go test error buried in output — same reasoning as every other
+# require-% dependency below.
+test: require-sqlc
 	$(GO) test -race $(ALL)
 
 ## bench     run the benchmark suite (issue #112) and print results
@@ -109,14 +115,15 @@ lint: require-golangci-lint
 	$(GO) vet $(ALL)
 	golangci-lint run
 
-## generate  templ and sqlc — no-ops until M5 and M3 respectively
+## generate  templ and sqlc
+#
+# templ generate is a no-op until M5 (no .templ files exist yet). sqlc
+# generate stopped being one with issue #315 (M3): sqlc.yaml now exists at
+# the repo root, so the "no sqlc.yaml yet" placeholder branch this target
+# carried since M0 is gone — there is always something to generate now.
 generate: require-templ require-sqlc
 	templ generate
-	@if [ -f sqlc.yaml ]; then \
-		sqlc generate; \
-	else \
-		printf 'make: no sqlc.yaml yet — nothing to generate (arrives with M3)\n'; \
-	fi
+	sqlc generate
 
 ## packages  assert the package graph matches scripts/packages.txt
 packages:
@@ -200,6 +207,14 @@ simulate-deps:
 
 # Paths holding generated output. EMPTY UNTIL M3 AND M5 — templ output arrives
 # with the templates, sqlc output with the schema. Each milestone appends here.
+#
+# sqlc.yaml and internal/store's generated files exist as of issue #315, but
+# GENERATED itself and generate-check's rejoin into check-nosecrets are
+# issue #316's own scope (blocked by #315), with its own fixture-based
+# acceptance criteria (a corrupted-generated-file case, a git-status-cannot-
+# inspect case, a require-sqlc-missing case, the still-empty templ half
+# documented explicitly) — left empty here on purpose rather than duplicated
+# ahead of that task.
 GENERATED :=
 
 ## generate-check  assert the committed generated code matches what the tools produce
@@ -250,7 +265,7 @@ generate-check: generate
 # report VACUOUS, and listing it would make `check`'s own success mean
 # "every gate that could run, passed" instead of "every gate passed" —
 # exactly the failure this file's own header warns against. It rejoins once
-# GENERATED holds real paths.
+# GENERATED holds real paths — issue #316, blocked by #315.
 #
 # bench-compare is deliberately absent too, but for the opposite reason: it
 # can run, and deciding it should still not block is the point of issue #113
