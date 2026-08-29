@@ -20,24 +20,24 @@ const (
 type ContractTier struct {
 	// InfamyRequired is the minimum Infamy to be offered this tier. 0 for
 	// Tier I, which the table lists as "—".
-	InfamyRequired int
+	InfamyRequired int `json:"infamy_required"`
 
 	// MinDistance and MaxDistance bound the shortest-path distance between
 	// origin and destination. MaxDistance is 0 for Tier IV's "6+", meaning
 	// no upper bound — real distances are never 0.
-	MinDistance int
-	MaxDistance int
+	MinDistance int `json:"min_distance"`
+	MaxDistance int `json:"max_distance"`
 
-	Payment int // Cr$ on delivery
-	RP      int // Reputation on delivery
+	Payment int `json:"payment"` // Cr$ on delivery
+	RP      int `json:"rp"`      // Reputation on delivery
 
-	Deadline int // rounds until the contract expires, from acceptance
+	Deadline int `json:"deadline"` // rounds until the contract expires, from acceptance
 
-	Penalty int // Cr$ paid on a missed deadline
+	Penalty int `json:"penalty"` // Cr$ paid on a missed deadline
 
 	// PenaltyInfamy is additional Infamy lost on a missed deadline, on top
 	// of Penalty. 0 for every tier except IV, which also costs −2 Infamy.
-	PenaltyInfamy int
+	PenaltyInfamy int `json:"penalty_infamy"`
 
 	// OfferWeight is this tier's weight in the two non-guaranteed offer
 	// slots' independent draw (GDD §8.1, D6): the first of a three-contract
@@ -49,15 +49,15 @@ type ContractTier struct {
 	// runtime case the draw needs an undefined fallback for. Default 1 for
 	// every tier (DefaultConfig), i.e. an even split, until M2's simulation
 	// harness gives a reason to move it.
-	OfferWeight int
+	OfferWeight int `json:"offer_weight"`
 }
 
 // MapSpec is one row of GDD §6.1's node/edge table. Config.MapByPlayers
 // keys this by player count.
 type MapSpec struct {
-	Nodes    int
-	MinEdges int
-	MaxEdges int
+	Nodes    int `json:"nodes"`
+	MinEdges int `json:"min_edges"`
+	MaxEdges int `json:"max_edges"`
 }
 
 // ScavengingTable is GDD §9.1's reward table for entering a Hidden node,
@@ -65,9 +65,9 @@ type MapSpec struct {
 // [CashRoll, RevealRoll) finds CashAmount; a roll >= RevealRoll reveals
 // every node adjacent to the one just entered as Known.
 type ScavengingTable struct {
-	CashRoll   int
-	CashAmount int
-	RevealRoll int
+	CashRoll   int `json:"cash_roll"`
+	CashAmount int `json:"cash_amount"`
+	RevealRoll int `json:"reveal_roll"`
 }
 
 // PressureConfig is GDD §14.4's check: once per round, every Legend-tier
@@ -75,9 +75,9 @@ type ScavengingTable struct {
 // InfamyPenalty. There is no separate suppression flag for Pressure — see
 // SubsystemSuppression.
 type PressureConfig struct {
-	Threshold     int
-	CashPenalty   int
-	InfamyPenalty int
+	Threshold     int `json:"threshold"`
+	CashPenalty   int `json:"cash_penalty"`
+	InfamyPenalty int `json:"infamy_penalty"`
 }
 
 // SubsystemSuppression holds the per-subsystem "off" flags GDD §19.1's solo
@@ -93,11 +93,11 @@ type PressureConfig struct {
 // suppression flag after everything depends on Config's shape means
 // reopening a package everyone imports (D11).
 type SubsystemSuppression struct {
-	Leases      bool
-	Incidents   bool
-	Events      bool
-	InfamyTiers bool
-	Items       bool
+	Leases      bool `json:"leases"`
+	Incidents   bool `json:"incidents"`
+	Events      bool `json:"events"`
+	InfamyTiers bool `json:"infamy_tiers"`
+	Items       bool `json:"items"`
 }
 
 // Config is every dial the GDD calls tunable, plus the validation that
@@ -105,52 +105,67 @@ type SubsystemSuppression struct {
 // serialised into the match at creation and never read from global state:
 // rebalancing never corrupts an in-flight match, and a replay months later
 // runs under the rules the match was created with (RFC §6.2).
+//
+// Config and every type it nests (ContractTier, MapSpec, ScavengingTable,
+// PressureConfig, SubsystemSuppression) carry D44's snake_case json struct
+// tags — D44's Q1, "wire vocabulary lives in internal/game." Unlike
+// game.Order (order_wire.go), none of these types needs a custom
+// MarshalJSON/UnmarshalJSON: D44's audit found no iota-based enum reachable
+// from Config — every field here is a plain int, bool, map, or an
+// all-scalar nested struct — so encoding/json's reflection-based codec,
+// driven only by these tags, is the whole wire format. The version
+// dispatch, the recursive exact-key-set check that catches a field missing
+// from a stored row, and DisallowUnknownFields all live one layer up, in
+// internal/store's own EncodeConfig/DecodeConfig (D44's Q2/Q3, "trust,
+// versioning and rejection live in internal/store") — matches.config is a
+// frozen, never-reinterpreted snapshot (RFC §6.2), which needs a stronger
+// guarantee than Order's append-only, ordinary-missing-field discipline.
 type Config struct {
 	// Rounds is the match length. It is validated against deck arithmetic
 	// by Validate, not merely configured — GDD §16.2 works the case for why
 	// 20 rounds is unserviceable against the pools sized for 15.
-	Rounds int
+	Rounds int `json:"rounds"`
 
 	// StepsByTier is the step-allowance base before modifiers (GDD §9.1,
 	// §9.1a). Index 0 is TierNobody, index 3 is TierLegend.
-	StepsByTier [4]int
+	StepsByTier [4]int `json:"steps_by_tier"`
 
 	// CooldownByTier is rounds between contract offers (GDD §8.2). Same
 	// indexing as StepsByTier.
-	CooldownByTier [4]int
+	CooldownByTier [4]int `json:"cooldown_by_tier"`
 
 	// PostCapByPlayers is the post cap per player, keyed by player count
 	// (GDD §10.3).
-	PostCapByPlayers map[int]int
+	PostCapByPlayers map[int]int `json:"post_cap_by_players"`
 
 	// LeaseCostPerBlock is Cr$ per lease block (GDD §10.4). GDD §10.4 calls
 	// this "the single most sensitive dial in the game" — M2 sweeps it, so
 	// it must never be read as a constant.
-	LeaseCostPerBlock int
+	LeaseCostPerBlock int `json:"lease_cost_per_block"`
 
 	// LeaseBlockRounds is rounds held per lease block purchased (GDD §10.4).
-	LeaseBlockRounds int
+	LeaseBlockRounds int `json:"lease_block_rounds"`
 
 	// ShakedownCost is Cr$ an Evasive loser pays to keep their cargo (GDD
 	// §15).
-	ShakedownCost int
+	ShakedownCost int `json:"shakedown_cost"`
 
 	// LedgerCost is Cr$ to buy every player's exact balance as of the end
 	// of the previous round (GDD §5.1).
-	LedgerCost int
+	LedgerCost int `json:"ledger_cost"`
 
 	// GateFee is Cr$ charged on every delivery (GDD §6.2).
-	GateFee int
+	GateFee int `json:"gate_fee"`
 
 	// StartingBalance is Cr$ every player starts a match with (GDD §5).
-	StartingBalance int
+	StartingBalance int `json:"starting_balance"`
 
 	// Contracts is GDD §8.3's contract table. Index 0 is Tier I, index 3 is
 	// Tier IV.
-	Contracts [4]ContractTier
+	Contracts [4]ContractTier `json:"contracts"`
 
 	// MapByPlayers is GDD §6.1's node/edge table, keyed by player count.
-	MapByPlayers map[int]MapSpec
+	MapByPlayers map[int]MapSpec `json:"map_by_players"`
 
 	// MaxGenAttempts bounds rules/gen's rejection-and-retry loop (GDD §6.1:
 	// "The generator rejects and retries until all hold."). GDD §6.1 states
@@ -160,17 +175,17 @@ type Config struct {
 	// exhausting it is a returned error, never a partial graph or an
 	// infinite loop. A seed that cannot produce a legal map within this
 	// many attempts is a bug worth surfacing at match creation.
-	MaxGenAttempts int
+	MaxGenAttempts int `json:"max_gen_attempts"`
 
 	// Scavenging is the Hidden-node find table (GDD §9.1).
-	Scavenging ScavengingTable
+	Scavenging ScavengingTable `json:"scavenging"`
 
 	// Pressure is the Legend-tier end-of-round check (GDD §14.4).
-	Pressure PressureConfig
+	Pressure PressureConfig `json:"pressure"`
 
 	// Suppress holds the solo-scenario subsystem "off" flags (D11). Zero
 	// value for an ordinary match.
-	Suppress SubsystemSuppression
+	Suppress SubsystemSuppression `json:"suppress"`
 }
 
 // DefaultConfig returns the GDD's v1 numbers. Tests and the M2 simulation
