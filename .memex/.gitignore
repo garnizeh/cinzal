@@ -1,0 +1,5 @@
+# Memex data files — local to each machine, not for committing.
+# Ignore everything in .memex/ except this file itself, so transient
+# files (the database, daemon.pid, sockets, logs) never show up in git.
+*
+!.gitignore
