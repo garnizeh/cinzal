@@ -469,7 +469,7 @@ func TestSeatsFromRowsAcceptsContiguousRoster(t *testing.T) {
 // any query does (matches.go's own doc comment on CreateMatch).
 func TestCreateMatchRejectsNoSeats(t *testing.T) {
 	var s Store
-	_, err := s.CreateMatch(t.Context(), [32]byte{}, game.DefaultConfig(), nil, pgUUID(), nil, nil)
+	_, _, err := s.CreateMatch(t.Context(), [32]byte{}, game.DefaultConfig(), nil, pgUUID(), nil, nil)
 	if err == nil {
 		t.Fatal("CreateMatch with zero seats returned nil error, want a rejection")
 	}
@@ -480,7 +480,7 @@ func TestCreateMatchRejectsInvalidConfig(t *testing.T) {
 	cfg := game.DefaultConfig()
 	cfg.Rounds = 0 // Config.Validate rejects Rounds < 1
 	seats := []SeatSpec{{Faction: "test"}, {Faction: "test"}}
-	_, err := s.CreateMatch(t.Context(), [32]byte{}, cfg, seats, pgUUID(), nil, nil)
+	_, _, err := s.CreateMatch(t.Context(), [32]byte{}, cfg, seats, pgUUID(), nil, nil)
 	if err == nil {
 		t.Fatal("CreateMatch with an invalid config returned nil error, want cfg.Validate's own error")
 	}

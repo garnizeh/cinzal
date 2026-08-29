@@ -93,22 +93,35 @@ type MatchMeta struct {
 // creation." Seat creation is exactly what this function does — there is
 // no earlier point in the system a token could be minted at, whether or
 // not the mail path that eventually reads it (M6) has been built yet.
-func (s *Store) CreateMatch(ctx context.Context, seed [32]byte, cfg game.Config, seats []SeatSpec, createdBy pgtype.UUID, timerSeconds, deadlineSeconds *int32) (game.MatchID, error) {
+//
+// Only the hash is ever stored (D19, matching D17's invite-token shape); the
+// raw bytes are never persisted anywhere, which means seat creation is also
+// the *only* point they will ever exist as plaintext — a fresh set of random
+// bytes cannot later be re-generated to match an already-stored hash. Per
+// D17's own "raw-token handoff at creation" reasoning ("the only moment the
+// raw token exists anywhere ... is inside the handler that generates it ...
+// there is no second chance"), CreateMatch returns the raw tokens, one per
+// seat in the same order as seats, so a future caller (M5/M6's invite/mail
+// wiring) can still deliver a working unsubscribe link. This issue's own
+// scope stops at persistence — nothing here sends mail or stores the raw
+// value anywhere — but the tokens have to leave this function now or they
+// are gone for good.
+func (s *Store) CreateMatch(ctx context.Context, seed [32]byte, cfg game.Config, seats []SeatSpec, createdBy pgtype.UUID, timerSeconds, deadlineSeconds *int32) (game.MatchID, [][32]byte, error) {
 	if len(seats) == 0 {
-		return "", fmt.Errorf("store: create match: at least one seat is required")
+		return "", nil, fmt.Errorf("store: create match: at least one seat is required")
 	}
 	if err := cfg.Validate(len(seats)); err != nil {
-		return "", fmt.Errorf("store: create match: %w", err)
+		return "", nil, fmt.Errorf("store: create match: %w", err)
 	}
 
 	payload, err := EncodeConfig(cfg)
 	if err != nil {
-		return "", fmt.Errorf("store: create match: encode config: %w", err)
+		return "", nil, fmt.Errorf("store: create match: encode config: %w", err)
 	}
 
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
-		return "", fmt.Errorf("store: create match: begin transaction: %w", err)
+		return "", nil, fmt.Errorf("store: create match: begin transaction: %w", err)
 	}
 	// Rollback after a successful Commit is a documented no-op (pgx.Tx); the
 	// error is discarded deliberately — nothing actionable to do with a
@@ -125,14 +138,16 @@ func (s *Store) CreateMatch(ctx context.Context, seed [32]byte, cfg game.Config,
 		DeadlineSeconds: deadlineSeconds,
 	})
 	if err != nil {
-		return "", fmt.Errorf("store: create match: insert match: %w", err)
+		return "", nil, fmt.Errorf("store: create match: insert match: %w", err)
 	}
 
+	tokens := make([][32]byte, len(seats))
 	for i, seat := range seats {
-		hash, err := newUnsubscribeTokenHash()
+		raw, hash, err := newUnsubscribeTokenHash()
 		if err != nil {
-			return "", fmt.Errorf("store: create match: mint unsubscribe token for seat %d: %w", i, err)
+			return "", nil, fmt.Errorf("store: create match: mint unsubscribe token for seat %d: %w", i, err)
 		}
+		tokens[i] = raw
 		if _, err := q.CreateMatchPlayer(ctx, CreateMatchPlayerParams{
 			MatchID:              m.ID,
 			Seat:                 game.SeatID(i),
@@ -141,29 +156,30 @@ func (s *Store) CreateMatch(ctx context.Context, seed [32]byte, cfg game.Config,
 			Faction:              seat.Faction,
 			UnsubscribeTokenHash: hash,
 		}); err != nil {
-			return "", fmt.Errorf("store: create match: insert seat %d: %w", i, err)
+			return "", nil, fmt.Errorf("store: create match: insert seat %d: %w", i, err)
 		}
 	}
 
 	if err := tx.Commit(ctx); err != nil {
-		return "", fmt.Errorf("store: create match: commit: %w", err)
+		return "", nil, fmt.Errorf("store: create match: commit: %w", err)
 	}
-	return m.ID, nil
+	return m.ID, tokens, nil
 }
 
 // newUnsubscribeTokenHash mints one D19 unsubscribe token the way D19 (and
-// D17, which it cites) specifies: 32 bytes of crypto/rand, SHA-256'd. The
-// raw token itself is never returned or stored — D19's route (M5/M6, not
-// this issue) mints the same bytes again when it actually needs to compare
-// against this hash; this function's only job is to produce a
-// NOT-NULL-satisfying, unguessable digest at seat-creation time.
-func newUnsubscribeTokenHash() ([]byte, error) {
-	var raw [32]byte
+// D17, which it cites) specifies: 32 bytes of crypto/rand, SHA-256'd. It
+// returns both the raw bytes and their digest — the digest is what
+// CreateMatch stores (unsubscribe_token_hash), and the raw bytes are what
+// CreateMatch hands back to its caller, per D17's "raw-token handoff at
+// creation": this is the only moment the raw value will ever exist, so it
+// has to leave here now, since nothing later can regenerate bytes that
+// match an already-stored hash.
+func newUnsubscribeTokenHash() (raw [32]byte, hash []byte, err error) {
 	if _, err := rand.Read(raw[:]); err != nil {
-		return nil, fmt.Errorf("store: generate random token: %w", err)
+		return raw, nil, fmt.Errorf("store: generate random token: %w", err)
 	}
 	sum := sha256.Sum256(raw[:])
-	return sum[:], nil
+	return raw, sum[:], nil
 }
 
 // LoadMatch reads back exactly what CreateMatch wrote: the frozen seed and

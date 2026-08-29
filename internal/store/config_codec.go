@@ -96,14 +96,26 @@ type configEnvelope struct {
 }
 
 // EncodeConfig is CreateMatch's write-side half of D44: cfg, wrapped in the
-// version-1 envelope. There is no validation here — Store.CreateMatch calls
-// cfg.Validate before this runs, and EncodeConfig's own job is only to
-// produce the bytes a later DecodeConfig can trust, not to re-decide
-// whether cfg is legal.
+// version-1 envelope. Store.CreateMatch calls cfg.Validate before this runs,
+// but that check is only against the caller's own seat count — it has no
+// way to notice a Config whose MapByPlayers/PostCapByPlayers carries a
+// stray key, or is missing one, for a player count *other* than the one the
+// caller happens to be creating right now (CodeRabbit finding on PR #394).
+// A 4-seat match's Config can be missing the "5" entry entirely and still
+// pass cfg.Validate(4). EncodeConfig closes that gap itself: after
+// marshaling cfg, it runs the exact bytes it is about to write through
+// decodeConfigV1 — the same recursive, exact-key-set decode LoadMatch would
+// eventually apply on read — and refuses to produce an envelope at all if
+// that fails. This rejects a structurally-bad Config at write time, before
+// CreateMatch's transaction ever commits a row, rather than deferring the
+// same discovery to whichever LoadMatch call happens to hit it first.
 func EncodeConfig(cfg game.Config) ([]byte, error) {
 	raw, err := json.Marshal(cfg)
 	if err != nil {
 		return nil, fmt.Errorf("store: encode config: %w", err)
+	}
+	if _, err := decodeConfigV1(raw); err != nil {
+		return nil, fmt.Errorf("store: encode config: fails v1 decode: %w", err)
 	}
 	b, err := json.Marshal(configEnvelope{V: configVersion, Config: raw})
 	if err != nil {

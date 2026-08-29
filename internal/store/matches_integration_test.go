@@ -4,6 +4,7 @@ package store
 
 import (
 	"context"
+	"crypto/sha256"
 	"encoding/json"
 	mathrand "math/rand/v2"
 	"reflect"
@@ -70,7 +71,7 @@ func TestCreateMatchWritesMatchAndEverySeatRow(t *testing.T) {
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
-	matchID, err := s.CreateMatch(ctx, [32]byte{1, 2, 3}, game.DefaultConfig(), mustSeats(4), createdBy, nil, nil)
+	matchID, _, err := s.CreateMatch(ctx, [32]byte{1, 2, 3}, game.DefaultConfig(), mustSeats(4), createdBy, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateMatch: %v", err)
 	}
@@ -89,6 +90,66 @@ func TestCreateMatchWritesMatchAndEverySeatRow(t *testing.T) {
 	}
 	if seatCount != 4 {
 		t.Fatalf("match_players row count = %d, want 4", seatCount)
+	}
+}
+
+// TestCreateMatchReturnsTokensMatchingStoredHashes is the CodeRabbit finding
+// on PR #394: newUnsubscribeTokenHash minted a hash from bytes nobody kept,
+// so no unsubscribe link CreateMatch's caller could construct would ever
+// match what got stored. This asserts the actual fix — CreateMatch now
+// returns the raw per-seat tokens, one per seat, in seat order — round-trips
+// against a real row: sha256(returned raw token) must equal the seat's
+// stored unsubscribe_token_hash, for every seat, per D17's "raw-token
+// handoff at creation" (the only moment the raw value exists is right here).
+func TestCreateMatchReturnsTokensMatchingStoredHashes(t *testing.T) {
+	s := openMatchStore(t)
+	ctx := context.Background()
+	createdBy := seedUser(t, s)
+
+	matchID, tokens, err := s.CreateMatch(ctx, [32]byte{7}, game.DefaultConfig(), mustSeats(3), createdBy, nil, nil)
+	if err != nil {
+		t.Fatalf("CreateMatch: %v", err)
+	}
+	if len(tokens) != 3 {
+		t.Fatalf("len(tokens) = %d, want 3 (one per seat)", len(tokens))
+	}
+
+	// ListMatchPlayers' own query doesn't select unsubscribe_token_hash (not
+	// among match_players.sql's needs elsewhere), so this reads the raw
+	// column directly — the same shape seedUser already uses for a query
+	// this package has no generated method for.
+	rows, err := s.pool.Query(ctx,
+		`SELECT seat, unsubscribe_token_hash FROM match_players WHERE match_id = $1 ORDER BY seat`, matchID)
+	if err != nil {
+		t.Fatalf("query unsubscribe_token_hash: %v", err)
+	}
+	defer rows.Close()
+
+	seen := make(map[[32]byte]bool)
+	count := 0
+	for rows.Next() {
+		var seat game.SeatID
+		var hash []byte
+		if err := rows.Scan(&seat, &hash); err != nil {
+			t.Fatalf("scan: %v", err)
+		}
+		i := int(seat)
+		if seen[tokens[i]] {
+			t.Fatalf("seat %d: token %x duplicates an earlier seat's token", i, tokens[i])
+		}
+		seen[tokens[i]] = true
+
+		sum := sha256.Sum256(tokens[i][:])
+		if string(sum[:]) != string(hash) {
+			t.Fatalf("seat %d: sha256(returned token) = %x, want stored unsubscribe_token_hash %x", i, sum, hash)
+		}
+		count++
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("rows.Err: %v", err)
+	}
+	if count != 3 {
+		t.Fatalf("scanned %d match_players rows, want 3", count)
 	}
 }
 
@@ -111,7 +172,7 @@ func TestCreateMatchFailurePartWayLeavesNoMatch(t *testing.T) {
 		{Faction: "bad", UserID: &ghostUser},
 	}
 
-	_, err := s.CreateMatch(ctx, [32]byte{9}, game.DefaultConfig(), seats, createdBy, nil, nil)
+	_, _, err := s.CreateMatch(ctx, [32]byte{9}, game.DefaultConfig(), seats, createdBy, nil, nil)
 	if err == nil {
 		t.Fatal("CreateMatch with a seat naming a nonexistent user returned nil error, want the FK violation")
 	}
@@ -144,7 +205,7 @@ func TestCreateMatchThenLoadMatchSeedRoundTripsArbitrary(t *testing.T) {
 			want[j] = byte(gen.IntN(256))
 		}
 
-		matchID, err := s.CreateMatch(ctx, want, game.DefaultConfig(), mustSeats(2), createdBy, nil, nil)
+		matchID, _, err := s.CreateMatch(ctx, want, game.DefaultConfig(), mustSeats(2), createdBy, nil, nil)
 		if err != nil {
 			t.Fatalf("iteration %d: CreateMatch: %v", i, err)
 		}
@@ -182,7 +243,7 @@ func TestCreateMatchThenLoadMatchConfigRoundTripsExactly(t *testing.T) {
 		t.Fatal("fails closed: want must differ from DefaultConfig() in at least one field")
 	}
 
-	matchID, err := s.CreateMatch(ctx, [32]byte{4}, want, mustSeats(3), createdBy, nil, nil)
+	matchID, _, err := s.CreateMatch(ctx, [32]byte{4}, want, mustSeats(3), createdBy, nil, nil)
 	if err != nil {
 		t.Fatalf("CreateMatch: %v", err)
 	}
@@ -208,7 +269,7 @@ func TestLoadMatchReturnsMetaAndValidatesAgainstSeatCount(t *testing.T) {
 	createdBy := seedUser(t, s)
 
 	timer := int32(30)
-	matchID, err := s.CreateMatch(ctx, [32]byte{5}, game.DefaultConfig(), mustSeats(5), createdBy, &timer, nil)
+	matchID, _, err := s.CreateMatch(ctx, [32]byte{5}, game.DefaultConfig(), mustSeats(5), createdBy, &timer, nil)
 	if err != nil {
 		t.Fatalf("CreateMatch: %v", err)
 	}
