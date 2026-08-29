@@ -27,37 +27,48 @@ func TestFoldSignatureHasNoEffects(t *testing.T) {
 		t.Errorf("Fold has %d return values, want 3", foldFunc.NumOut())
 	}
 
-	// Check parameter names and types (Go reflects on the types, not names,
-	// but we can verify the types)
-	params := []struct {
-		name string
-		kind reflect.Kind
-	}{
-		{"seed [32]byte", reflect.Array},       // [32]byte
-		{"cfg game.Config", reflect.Struct},    // Config
-		{"players int", reflect.Int},           // int
-		{"log rules.OrderLog", reflect.Map},    // map type
+	// Validate exact parameter types, not just Kind
+	expectedSeed := reflect.TypeOf([32]byte{})
+	param0 := foldFunc.In(0)
+	if param0 != expectedSeed {
+		t.Errorf("parameter 0 type = %v, want [32]byte (%v)", param0, expectedSeed)
 	}
 
-	for i, param := range params {
-		inType := foldFunc.In(i)
-		if inType.Kind() != param.kind {
-			t.Errorf("parameter %d kind = %v, want %v (%s)", i, inType.Kind(), param.kind, param.name)
-		}
+	expectedConfig := reflect.TypeOf(game.Config{})
+	param1 := foldFunc.In(1)
+	if param1 != expectedConfig {
+		t.Errorf("parameter 1 type = %v, want game.Config (%v)", param1, expectedConfig)
 	}
 
-	// Check that no parameter is a function type (Effects interface), pointer
-	// to anything (context or *Store), or anything that could be a provider
-	for i := 0; i < foldFunc.NumIn(); i++ {
-		inType := foldFunc.In(i)
-		// Effects is an interface — check for interface types
-		if inType.Kind() == reflect.Interface {
-			t.Errorf("parameter %d is an interface type (possibly Effects), not allowed", i)
-		}
-		// Check for pointer types (context.Context, *Store)
-		if inType.Kind() == reflect.Ptr {
-			t.Errorf("parameter %d is a pointer type, not allowed (possibly context or provider)", i)
-		}
+	expectedPlayers := reflect.TypeOf(int(0))
+	param2 := foldFunc.In(2)
+	if param2 != expectedPlayers {
+		t.Errorf("parameter 2 type = %v, want int (%v)", param2, expectedPlayers)
+	}
+
+	expectedLog := reflect.TypeOf(rules.OrderLog{})
+	param3 := foldFunc.In(3)
+	if param3 != expectedLog {
+		t.Errorf("parameter 3 type = %v, want rules.OrderLog (%v)", param3, expectedLog)
+	}
+
+	// Validate exact return types
+	expectedState := reflect.TypeOf(rules.MatchState{})
+	retState := foldFunc.Out(0)
+	if retState != expectedState {
+		t.Errorf("return 0 type = %v, want rules.MatchState (%v)", retState, expectedState)
+	}
+
+	expectedEvents := reflect.TypeOf([]game.Event{})
+	retEvents := foldFunc.Out(1)
+	if retEvents != expectedEvents {
+		t.Errorf("return 1 type = %v, want []game.Event (%v)", retEvents, expectedEvents)
+	}
+
+	expectedError := reflect.TypeOf((*error)(nil)).Elem()
+	retError := foldFunc.Out(2)
+	if retError != expectedError {
+		t.Errorf("return 2 type = %v, want error (%v)", retError, expectedError)
 	}
 }
 
