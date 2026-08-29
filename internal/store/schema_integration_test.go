@@ -150,9 +150,13 @@ func TestSchemaOrdersSourceCheck(t *testing.T) {
 	matchID, _ := seedMatch(t, db)
 
 	for i, source := range []string{"human", "bot", "default"} {
+		// round = i+1, not i: round is 1-indexed (orders_round_positive,
+		// migration 00004) and this loop only needs three distinct rounds
+		// so the three inserts don't collide on the primary key — it is not
+		// itself asserting anything about round.
 		if _, err := db.ExecContext(ctx,
 			`INSERT INTO orders (match_id, round, seat, payload, source) VALUES ($1, $2, 0, '{}', $3)`,
-			matchID, i, source,
+			matchID, i+1, source,
 		); err != nil {
 			t.Fatalf("insert with source = %q: %v", source, err)
 		}
@@ -162,6 +166,35 @@ func TestSchemaOrdersSourceCheck(t *testing.T) {
 		`INSERT INTO orders (match_id, round, seat, payload, source) VALUES ($1, 99, 0, '{}', 'typo')`, matchID)
 	if !isCheckViolation(err) {
 		t.Fatalf("insert with source = 'typo' = %v, want a CHECK violation", err)
+	}
+}
+
+// TestSchemaOrdersRoundPositiveCheck asserts orders_round_positive
+// (migration 00004): game.RoundNumber is 1-indexed (GDD §4), so round 0 and
+// below must never reach the table, even by a path that bypasses
+// AppendOrder's own Go-level check (internal/store/orders.go) — a
+// CodeRabbit finding on PR #393 (issue #317) that checkNoRoundGap's
+// [1, maxRound] gap scan alone would let a round-0 row ride along
+// undetected whenever the rest of the log is otherwise gapless.
+func TestSchemaOrdersRoundPositiveCheck(t *testing.T) {
+	db := applyBaseSchema(t)
+	ctx := context.Background()
+	matchID, _ := seedMatch(t, db)
+
+	if _, err := db.ExecContext(ctx,
+		`INSERT INTO orders (match_id, round, seat, payload, source) VALUES ($1, 1, 0, '{}', 'human')`, matchID,
+	); err != nil {
+		t.Fatalf("insert with round = 1: %v", err)
+	}
+
+	for _, round := range []int{0, -1} {
+		_, err := db.ExecContext(ctx,
+			`INSERT INTO orders (match_id, round, seat, payload, source) VALUES ($1, $2, 0, '{}', 'human')`,
+			matchID, round,
+		)
+		if !isCheckViolation(err) {
+			t.Fatalf("insert with round = %d = %v, want a CHECK violation", round, err)
+		}
 	}
 }
 
