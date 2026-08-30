@@ -163,6 +163,21 @@ func Decode(matchID game.MatchID, rows []store.Order) (rules.OrderLog, error) {
 			seats = make(map[game.SeatID]game.Order)
 			log[row.Round] = seats
 		}
+
+		// A CodeRabbit review finding on PR #404: a duplicate (round, seat)
+		// row — reachable both from a corrupted database read and from a
+		// hand-edited/corrupted offline bundle (cmd/replay's --bundle path,
+		// which reshapes its rows into []store.Order and calls this same
+		// function) — used to overwrite the earlier payload silently, with
+		// nothing recording that two rows ever claimed the same slot. A
+		// duplicate is exactly the same kind of structurally invalid input
+		// the round-mismatch check above already refuses to paper over, so
+		// it is rejected here the same way: loudly, naming the match, round
+		// and seat, before either payload's data reaches the fold.
+		if _, dup := seats[row.Seat]; dup {
+			return nil, fmt.Errorf("orderlog: decode order (match %s, round %d, seat %d): duplicate entry for this round and seat",
+				matchID, row.Round, row.Seat)
+		}
 		seats[row.Seat] = o
 	}
 

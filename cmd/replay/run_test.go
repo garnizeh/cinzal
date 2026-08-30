@@ -190,6 +190,28 @@ func TestRunSeatOutOfRangeIsError(t *testing.T) {
 	}
 }
 
+// TestRunSeatBelowNegativeOneIsError is a CodeRabbit review finding on PR
+// #404: -1 is the documented "no seat" default (the full-state dump), but
+// anything below it (e.g. --seat=-2) was falling through the same `else`
+// branch as -1 and silently emitting the full, un-fogged MatchState for an
+// explicitly invalid seat instead of erroring — never touching, let alone
+// bypassing, fog filtering, but wrong regardless: an invalid flag value
+// must be rejected, not treated as "unset."
+func TestRunSeatBelowNegativeOneIsError(t *testing.T) {
+	path := writeTestBundle(t)
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--bundle", path, "--seat", "-2"}, &stdout, &stderr)
+	if code == 0 {
+		t.Fatal("run() with --seat=-2 succeeded, want an error")
+	}
+	if stdout.Len() != 0 {
+		t.Errorf("stdout non-empty on error: %s", stdout.String())
+	}
+	if !strings.Contains(stderr.String(), "--seat") {
+		t.Errorf("stderr = %q, want it to mention --seat", stderr.String())
+	}
+}
+
 // TestRunSeatFogNegativeAssertion is #322's own fog acceptance criterion,
 // RFC §16.3's negative-assertion standard applied to the CLI's output: "a
 // test asserts a fact hidden from that seat (a rival's position on a

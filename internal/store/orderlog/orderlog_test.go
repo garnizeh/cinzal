@@ -197,6 +197,26 @@ func TestDecodeRejectsRoundMismatch(t *testing.T) {
 	}
 }
 
+// TestDecodeRejectsDuplicateRoundSeat is a CodeRabbit review finding on PR
+// #404: two rows claiming the same (round, seat) used to overwrite the
+// earlier payload silently, in map-assignment order, with nothing recording
+// that a duplicate existed — reachable both from a corrupted database read
+// and from cmd/replay's offline --bundle path, which reshapes its own rows
+// into []store.Order and calls this same Decode. A duplicate is rejected
+// the same way TestDecodeRejectsRoundMismatch's mismatch is: loudly, before
+// either payload's data reaches a fold.
+func TestDecodeRejectsDuplicateRoundSeat(t *testing.T) {
+	rows := []store.Order{
+		row(1, 0, minimalOrder),
+		row(1, 0, minimalOrder), // duplicate (round 1, seat 0)
+	}
+
+	_, err := Decode(matchID, rows)
+	if err == nil {
+		t.Fatal("Decode with a duplicate (round, seat) row returned nil error, want a rejection")
+	}
+}
+
 // TestDecodeFreshOrderPerRow guards D47's own precondition: an absent key
 // in one row must never read as a prior row's value. Row for seat 0 sets a
 // non-zero Action.Kind; row for seat 1 (decoded after it, same round) omits

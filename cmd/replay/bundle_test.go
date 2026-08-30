@@ -4,6 +4,8 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"github.com/garnizeh/cinzal/internal/store"
 )
 
 // TestReadBundleRoundTrip is #322's own acceptance criterion applied at the
@@ -54,7 +56,7 @@ func TestReadBundleRejectsTrailingData(t *testing.T) {
 // must fail loudly on read") applied to the bundle's seed field.
 func TestReadBundleRejectsWrongSeedLength(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "short-seed.json")
-	b := Bundle{Seed: make([]byte, 31), Config: []byte(`{"v":1,"config":{}}`), OrderLog: nil}
+	b := Bundle{Seed: make([]byte, 31), Config: []byte(`{"v":1,"config":{}}`), Players: 2, OrderLog: nil}
 	if err := writeBundle(path, b); err != nil {
 		t.Fatalf("writeBundle: %v", err)
 	}
@@ -64,12 +66,12 @@ func TestReadBundleRejectsWrongSeedLength(t *testing.T) {
 	}
 }
 
-// TestReadBundleRejectsEmptyOrderLog: a bundle with no orders carries no
-// way to derive a player count, and must fail rather than guess one.
+// TestReadBundleRejectsEmptyOrderLog: a bundle with no orders cannot be
+// validated against the declared player count, and must fail rather than guess.
 func TestReadBundleRejectsEmptyOrderLog(t *testing.T) {
 	_, seed, _, _ := testFixture()
 	path := filepath.Join(t.TempDir(), "empty-log.json")
-	b := Bundle{Seed: seed[:], Config: []byte(`{"v":1,"config":{}}`), OrderLog: nil}
+	b := Bundle{Seed: seed[:], Config: []byte(`{"v":1,"config":{}}`), Players: 2, OrderLog: nil}
 	if err := writeBundle(path, b); err != nil {
 		t.Fatalf("writeBundle: %v", err)
 	}
@@ -79,9 +81,77 @@ func TestReadBundleRejectsEmptyOrderLog(t *testing.T) {
 	}
 }
 
+// TestReadBundleRejectsDuplicateRoundSeat is a CodeRabbit review finding on
+// PR #404: a bundle's order log carrying two entries for the same (round,
+// seat) — the offline counterpart of a corrupted database read — used to
+// silently overwrite the earlier payload in orderlog.Decode's map
+// assignment rather than being rejected. readBundle reshapes b.OrderLog into
+// []store.Order and calls that same orderlog.Decode (bundle.go), so this
+// proves the offline path is covered by the same rejection, not a separate
+// (and possibly missed) check.
+func TestReadBundleRejectsDuplicateRoundSeat(t *testing.T) {
+	cfg, seed, _, _ := testFixture()
+	// A genuinely valid config envelope, not a stub — DecodeConfig runs
+	// before the order log is ever reached (readBundle's own order), so a
+	// stub config would fail there first and this test would pass for the
+	// wrong reason, never actually exercising the duplicate check below it.
+	configEnvelope, err := store.EncodeConfig(cfg)
+	if err != nil {
+		t.Fatalf("EncodeConfig: %v", err)
+	}
+
+	orderLog := []BundleOrder{
+		{Round: 1, Seat: 0, Payload: []byte(`{"round":1,"route":[]}`)},
+		{Round: 1, Seat: 0, Payload: []byte(`{"round":1,"route":[]}`)}, // duplicate (round 1, seat 0)
+		{Round: 1, Seat: 1, Payload: []byte(`{"round":1,"route":[]}`)},
+	}
+	b := Bundle{Seed: seed[:], Config: configEnvelope, Players: 2, OrderLog: orderLog}
+
+	path := filepath.Join(t.TempDir(), "duplicate-round-seat.json")
+	if err := writeBundle(path, b); err != nil {
+		t.Fatalf("writeBundle: %v", err)
+	}
+
+	if _, _, _, _, err := readBundle(path); err == nil {
+		t.Fatal("readBundle with a duplicate (round, seat) order log entry returned nil error, want a rejection")
+	}
+}
+
+// TestReadBundleRejectsTruncatedHighestSeat is a CodeRabbit review finding on
+// PR #404: a bundle's declared player count must match the highest seat found
+// in the order log. If all orders for seat N are removed from an N-player
+// bundle, the declared count prevents the bundle from being silently
+// reinterpreted as an (N-1)-player game — the bundle is rejected as
+// corrupted/truncated instead.
+func TestReadBundleRejectsTruncatedHighestSeat(t *testing.T) {
+	cfg, seed, _, _ := testFixture()
+	configEnvelope, err := store.EncodeConfig(cfg)
+	if err != nil {
+		t.Fatalf("EncodeConfig: %v", err)
+	}
+
+	// A 3-player bundle with orders only for seats 0 and 1, but declared as
+	// 3-player. When readBundle validates Players against the highest seat
+	// (1), the declared 3 != derived 2, and the bundle is rejected.
+	orderLog := []BundleOrder{
+		{Round: 1, Seat: 0, Payload: []byte(`{"round":1,"route":[]}`)},
+		{Round: 1, Seat: 1, Payload: []byte(`{"round":1,"route":[]}`)},
+	}
+	b := Bundle{Seed: seed[:], Config: configEnvelope, Players: 3, OrderLog: orderLog}
+
+	path := filepath.Join(t.TempDir(), "truncated-highest-seat.json")
+	if err := writeBundle(path, b); err != nil {
+		t.Fatalf("writeBundle: %v", err)
+	}
+
+	if _, _, _, _, err := readBundle(path); err == nil {
+		t.Fatal("readBundle with a truncated highest seat (declared 3 players but only seat 0-1 in log) returned nil error, want a rejection")
+	}
+}
+
 // TestReadBundleRejectsUnknownField: a bundle field this version does not
 // know about is a decode error, mirroring D44's DisallowUnknownFields
-// discipline for the two columns this format concatenates.
+// discipline for the columns this format concatenates.
 func TestReadBundleRejectsUnknownField(t *testing.T) {
 	path := writeTestBundle(t)
 	data := mustReadFile(t, path)
@@ -97,5 +167,29 @@ func TestReadBundleRejectsUnknownField(t *testing.T) {
 
 	if _, _, _, _, err := readBundle(path2); err == nil {
 		t.Fatal("readBundle with an unknown top-level field returned nil error, want a rejection")
+	}
+}
+
+// TestReadBundleRejectsInvalidPlayerCount: the Players field must be >= 1.
+// A bundle with Players <= 0 is structurally invalid.
+func TestReadBundleRejectsInvalidPlayerCount(t *testing.T) {
+	cfg, seed, _, _ := testFixture()
+	configEnvelope, err := store.EncodeConfig(cfg)
+	if err != nil {
+		t.Fatalf("EncodeConfig: %v", err)
+	}
+
+	orderLog := []BundleOrder{
+		{Round: 1, Seat: 0, Payload: []byte(`{"round":1,"route":[]}`)},
+	}
+	b := Bundle{Seed: seed[:], Config: configEnvelope, Players: 0, OrderLog: orderLog}
+
+	path := filepath.Join(t.TempDir(), "zero-players.json")
+	if err := writeBundle(path, b); err != nil {
+		t.Fatalf("writeBundle: %v", err)
+	}
+
+	if _, _, _, _, err := readBundle(path); err == nil {
+		t.Fatal("readBundle with Players=0 returned nil error, want a rejection")
 	}
 }

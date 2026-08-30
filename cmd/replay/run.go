@@ -116,6 +116,16 @@ func run(args []string, stdout, stderr io.Writer) int {
 // game.PlayerView when --seat names one. round == 0 means "unset": fold
 // through the match's own last round, cfg.Rounds.
 func foldAndDump(stdout, stderr io.Writer, seed [32]byte, cfg game.Config, players int, log rules.OrderLog, round, seat int) int {
+	// -1 is the documented "no seat" default (full-state dump, below).
+	// Anything lower than that is not a meaningful seat value and must be
+	// rejected here rather than falling through to the `else` branch below,
+	// which would otherwise silently emit the full, un-fogged MatchState for
+	// an explicitly invalid --seat instead of erroring.
+	if seat < -1 {
+		logLine(stderr, "cmd/replay: --seat must be >= -1")
+		return 1
+	}
+
 	throughRound := game.RoundNumber(cfg.Rounds)
 	if round != 0 {
 		throughRound = game.RoundNumber(round)

@@ -69,7 +69,7 @@ func writeTestBundle(t *testing.T) string {
 		}
 	}
 
-	b := Bundle{Seed: seed[:], Config: configEnvelope, OrderLog: orderLog}
+	b := Bundle{Seed: seed[:], Config: configEnvelope, Players: players, OrderLog: orderLog}
 
 	path := filepath.Join(t.TempDir(), "bundle.json")
 	if err := writeBundle(path, b); err != nil {

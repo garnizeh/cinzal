@@ -15,14 +15,15 @@ import (
 	"github.com/garnizeh/cinzal/internal/store/orderlog"
 )
 
-// Bundle is RFC-001 §15.4's own replay bundle: "{seed, config, orderLog} for
-// a finished match, downloadable by its players... attach it to an issue
-// and cmd/replay reproduces the exact match." Issue #322 decides its wire
-// shape here, and D44 already decided the two encodings it reuses: this is
-// "the JSONB columns concatenated, not a fourth format" — matches.config and
-// orders.payload travel exactly as those columns store them, never
+// Bundle is RFC-001 §15.4's own replay bundle: "{seed, config, players,
+// orderLog} for a finished match, downloadable by its players... attach it
+// to an issue and cmd/replay reproduces the exact match." Issue #322 decides
+// its wire shape here, and D44 already decided the two encodings it reuses:
+// this is "the JSONB columns concatenated, not a fourth format" — matches.config
+// and orders.payload travel exactly as those columns store them, never
 // re-derived from a decoded value. board_notes is excluded by construction
-// (D18): Bundle carries nothing beyond the three values a fold needs.
+// (D18): Bundle carries nothing beyond the four values a fold needs
+// (including the validated player count added in PR #404).
 type Bundle struct {
 	// Seed is the match's 32-byte seed, exactly as matches.seed stores it.
 	// []byte, not [32]byte, so encoding/json's built-in []byte<->base64
@@ -40,6 +41,14 @@ type Bundle struct {
 	// bytes, and reading one decodes it through the same store.DecodeConfig
 	// every other reader of matches.config already uses.
 	Config json.RawMessage `json:"config"`
+
+	// Players is the number of seats in the match, explicitly stored to
+	// validate against the order log's actual content. A bundle with no orders
+	// for seat N is truncated and must be rejected, not silently reinterpreted
+	// as a (N-1)-player game. This field is validated in readBundle by
+	// comparing against the maximum seat index found in the order log —
+	// on mismatch, the bundle is rejected as corrupted or hand-edited.
+	Players int `json:"players"`
 
 	// OrderLog is every orders row for the match, one entry per (round,
 	// seat), in the same (round, seat) ascending order
@@ -61,18 +70,25 @@ type BundleOrder struct {
 }
 
 // exportBundleFromDB assembles a Bundle straight from matchID's own rows —
-// GetMatch for seed/config, ListOrdersForMatch for the log — with no decode
-// or re-encode step in between, so a bundle exported this way is byte-for-
-// byte the same data the database itself holds. This is #322's own
-// acceptance criterion: "a bundle exported from a match and a bundle
-// assembled from that match's rows are equal" — true here by construction,
-// since both are the identical rows, untouched.
+// GetMatch for seed/config, ListOrdersForMatch for the log, ListMatchPlayers
+// for the player count — with no decode or re-encode step in between, so a
+// bundle exported this way is byte-for-byte the same data the database itself
+// holds. This is #322's own acceptance criterion: "a bundle exported from a
+// match and a bundle assembled from that match's rows are equal" — true here
+// by construction, since all data comes straight from the identical rows,
+// untouched. The Players field is populated from the match_players row count
+// and validated in readBundle.
 func exportBundleFromDB(ctx context.Context, db store.DBTX, matchID game.MatchID) (Bundle, error) {
 	q := store.New(db)
 
 	m, err := q.GetMatch(ctx, matchID)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("cmd/replay: export bundle: get match %s: %w", matchID, err)
+	}
+
+	seats, err := q.ListMatchPlayers(ctx, matchID)
+	if err != nil {
+		return Bundle{}, fmt.Errorf("cmd/replay: export bundle: list seats for match %s: %w", matchID, err)
 	}
 
 	rows, err := q.ListOrdersForMatch(ctx, matchID)
@@ -88,6 +104,7 @@ func exportBundleFromDB(ctx context.Context, db store.DBTX, matchID game.MatchID
 	return Bundle{
 		Seed:     m.Seed,
 		Config:   json.RawMessage(m.Config),
+		Players:  len(seats),
 		OrderLog: orderLog,
 	}, nil
 }
@@ -97,6 +114,26 @@ func exportBundleFromDB(ctx context.Context, db store.DBTX, matchID game.MatchID
 // reorders struct fields) and OrderLog is already a slice in
 // ListOrdersForMatch's fixed order, so two exports of the same match rows
 // produce byte-identical files.
+//
+// A CodeRabbit review finding on PR #404: json.MarshalIndent compacts a
+// nested json.RawMessage's own bytes before indenting the surrounding
+// document, so Config's and each BundleOrder.Payload's bytes on disk here
+// are not guaranteed to match matches.config's/orders.payload's original
+// stored bytes verbatim (whitespace/escaping may differ) — only the decoded
+// JSON value is guaranteed identical. That is the actual contract: nothing
+// in this package ever compares a bundle file's raw bytes against the
+// database's raw bytes. Bundle.Config's own "verbatim"/"byte-fidelity"
+// language above describes exportBundleFromDB's assembly step — Config and
+// Payload are copied straight from the query rows with no decode-then-
+// re-encode in between, so building a Bundle cannot itself introduce drift —
+// not a promise about this function's on-disk formatting. Every reader
+// (store.DecodeConfig, orderlog.Decode) parses structurally, and both
+// #322's byte-identity acceptance criteria check either the fold's dump
+// output (TestReplayMatchAndBundleProduceByteIdenticalOutput) or
+// exportBundleFromDB's return value against an independently assembled
+// Bundle (TestExportBundleFromDBEqualsAssembledFromRows) — neither compares
+// this file's on-disk bytes to the row's original bytes, so semantic JSON
+// equivalence is the whole requirement here.
 func writeBundle(path string, b Bundle) error {
 	data, err := json.MarshalIndent(b, "", "  ")
 	if err != nil {
@@ -110,8 +147,7 @@ func writeBundle(path string, b Bundle) error {
 }
 
 // readBundle reads and decodes a Bundle from path and turns it into the same
-// three fold inputs the --match path gets from the database, plus the
-// player count a bundle deliberately carries no roster for.
+// fold inputs the --match path gets from the database.
 //
 // cfg is decoded through store.DecodeConfig — a bundle's config bytes get
 // exactly the same D44 corruption checks a database row does, never a
@@ -120,14 +156,12 @@ func writeBundle(path string, b Bundle) error {
 // round-gap check ListOrdersForMatch's own rows are put through. Neither
 // check is reimplemented here.
 //
-// players is derived from the highest seat index the log actually names,
-// not stored in the bundle: RFC §15.4/D18 define the bundle as exactly
-// {seed, config, orderLog}, and a fourth, redundant player-count field
-// would be exactly the kind of value that could silently disagree with
-// what the log itself implies. This is the same number Fold's own
-// per-round seat-completeness check would otherwise discover one round at
-// a time — deriving it up front instead only changes when the same
-// completeness gap is reported, not whether it is.
+// players is read from the bundle's explicit Players field (PR #404 finding)
+// and validated against the highest seat index in the order log: if the
+// declared player count disagrees with the actual orders, the bundle is
+// rejected as corrupted or hand-edited. This catch truncated bundles — if a
+// 3-player bundle loses all orders for seat 2, players would wrongly be
+// derived as 2 instead of being rejected as an incomplete/corrupted bundle.
 func readBundle(path string) (seed [32]byte, cfg game.Config, log rules.OrderLog, players int, err error) {
 	data, readErr := os.ReadFile(path)
 	if readErr != nil {
@@ -154,6 +188,10 @@ func readBundle(path string) (seed [32]byte, cfg game.Config, log rules.OrderLog
 	}
 	copy(seed[:], b.Seed)
 
+	if b.Players < 1 {
+		return seed, cfg, nil, 0, fmt.Errorf("cmd/replay: bundle %s: players must be >= 1, got %d", path, b.Players)
+	}
+
 	cfg, err = store.DecodeConfig(b.Config)
 	if err != nil {
 		return seed, game.Config{}, nil, 0, fmt.Errorf("cmd/replay: bundle %s: decode config: %w", path, err)
@@ -168,7 +206,12 @@ func readBundle(path string) (seed [32]byte, cfg game.Config, log rules.OrderLog
 		}
 	}
 	if maxSeat < 0 {
-		return seed, cfg, nil, 0, fmt.Errorf("cmd/replay: bundle %s: order log is empty, cannot derive player count", path)
+		return seed, cfg, nil, 0, fmt.Errorf("cmd/replay: bundle %s: order log is empty, cannot validate player count", path)
+	}
+
+	derivedPlayers := maxSeat + 1
+	if b.Players != derivedPlayers {
+		return seed, cfg, nil, 0, fmt.Errorf("cmd/replay: bundle %s: declared players (%d) does not match highest seat in order log (%d) — bundle may be corrupted or truncated", path, b.Players, derivedPlayers)
 	}
 
 	// matchID is used only inside orderlog.Decode's own error messages — a
@@ -180,5 +223,5 @@ func readBundle(path string) (seed [32]byte, cfg game.Config, log rules.OrderLog
 		return seed, cfg, nil, 0, fmt.Errorf("cmd/replay: bundle %s: decode order log: %w", path, err)
 	}
 
-	return seed, cfg, log, maxSeat + 1, nil
+	return seed, cfg, log, derivedPlayers, nil
 }
