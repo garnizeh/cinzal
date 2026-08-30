@@ -64,17 +64,22 @@ guarantee just quietly stops holding.
 
 ## 4. Fan-out
 
-Grep for anything you corrected elsewhere in the tree. A wrong statement has
-twice, on this repo, also lived in another document or issue. Check:
+Search for anything you corrected elsewhere in the tree — **with the Memex
+MCP for documentation, and CodeGraph for code**, not manual `grep`; semantic
+search catches a paraphrased restatement that a keyword search misses,
+which is exactly the shape this check exists to catch. Fall back to `grep`
+only if the relevant MCP is unavailable. A wrong statement has twice, on this
+repo, also lived in another document or issue. Check:
 `docs/decisions/README.md` catalogue rows, roadmap §3 status lines, `CLAUDE.md`'s
 "Repository state" paragraph, `CONTRIBUTING.md`'s gate table, `Makefile` target
 comments, code comments quoting a spec sentence.
 
 **This covers more than wrong statements — it covers every fact you changed,
 including bare numbers.** A revision bump, a decision count, an issue range: if
-one file states it, grep the whole repo for the old value before calling the
-PR done, not just the files you already know cite it. `rtk grep -rn "<old
-value>"` is one command; missing a second citation site is a second review
+one file states it, search the whole repo for the old value before calling the
+PR done, not just the files you already know cite it (`rtk grep -rn "<old
+value>"` is the fallback if Memex is unavailable, but Memex's own search
+should be the first move) — missing a second citation site is a second review
 round. Found on PR #362 (D53): the RFC's own header was bumped r47 → r48, but
 `CLAUDE.md`'s document index cites the same revision number on its own line,
 one line away from the decision-range line that *was* checked — and it was
