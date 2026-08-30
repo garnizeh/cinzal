@@ -58,6 +58,14 @@ means inventing a requirement.
 - [`.claude/reference/gh-recipes.md`](../reference/gh-recipes.md) — the `gh api`
   incantations that work here, including the ones that do **not**
   (`gh issue view` is broken; `-f body=@file` does not expand the file).
+- The [`codebase-memory`](https://github.com/DeusData/codebase-memory-mcp) MCP
+  server keeps an indexed call/dependency graph of this repo (project name
+  `home-userone-Code-github-garnizeh-cinzal`). For structural questions —
+  who calls X, what X calls, dead code, high fan-out/fan-in, impact of a local
+  diff — prefer its `search_graph`/`trace_path`/`detect_changes` tools (or the
+  `codebase-memory` skill/agents) over grep or the generic `Explore` agent;
+  fall back to grep for literal text search or when `check_index_coverage`
+  reports a gap.
 
 ## Repository authority
 
