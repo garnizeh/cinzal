@@ -10,6 +10,11 @@
 -- reads safely, unlike orders.payload or events.payload. Each call is still
 -- scoped to one (match_id, round): no query here returns another match's or
 -- another round's row.
+--
+-- DeleteMatchSummaryByMatch is issue #321's ClearProjections, alongside
+-- events.sql's DeleteEventsByMatch: cmd/replay --rebuild's first step (M4),
+-- clearing one match's derived rows — both tables, one transaction — before
+-- a fresh fold regenerates them.
 
 -- name: UpsertMatchSummary :one
 INSERT INTO match_summary (
@@ -21,3 +26,7 @@ ON CONFLICT (match_id, round) DO UPDATE
   SET submitted_seats = excluded.submitted_seats,
       updated_at = excluded.updated_at
 RETURNING *;
+
+-- name: DeleteMatchSummaryByMatch :exec
+DELETE FROM match_summary
+WHERE match_id = $1;
