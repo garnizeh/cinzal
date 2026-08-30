@@ -96,7 +96,7 @@ func Fold(seed [32]byte, cfg game.Config, players int, log rules.OrderLog) (rule
 	}
 
 	// Check for rounds beyond cfg.Rounds in the log
-	for round := game.RoundNumber(cfg.Rounds + 1); round <= game.RoundNumber(cfg.Rounds + 1000); round++ {
+	for round := game.RoundNumber(cfg.Rounds + 1); round <= game.RoundNumber(cfg.Rounds+1000); round++ {
 		if _, hasRound := log[round]; hasRound {
 			return rules.MatchState{}, nil, fmt.Errorf("order log contains round %d beyond cfg.Rounds (%d)", round, cfg.Rounds)
 		}
