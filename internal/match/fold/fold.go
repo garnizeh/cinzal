@@ -59,6 +59,24 @@ func Fold(seed [32]byte, cfg game.Config, players int, log rules.OrderLog) (rule
 		return rules.MatchState{}, nil, fmt.Errorf("order log contains invalid round %d (rounds start at 1)", lowestInvalid)
 	}
 
+	// Reject any round number above cfg.Rounds in the log, scanning every
+	// key rather than walking forward from cfg.Rounds+1 and stopping at the
+	// first gap — a sparse log (e.g. only cfg.Rounds+2 present, cfg.Rounds+1
+	// absent) would otherwise slip past that walk and have its out-of-range
+	// order silently dropped. Same deterministic-lowest-round selection as
+	// the round<1 scan above.
+	beyondFound := false
+	var lowestBeyond game.RoundNumber
+	for round := range log {
+		if round > game.RoundNumber(cfg.Rounds) && (!beyondFound || round < lowestBeyond) {
+			beyondFound = true
+			lowestBeyond = round
+		}
+	}
+	if beyondFound {
+		return rules.MatchState{}, nil, fmt.Errorf("order log contains round %d beyond cfg.Rounds (%d)", lowestBeyond, cfg.Rounds)
+	}
+
 	// Accumulate events across all rounds
 	var allEvents []game.Event
 
@@ -93,17 +111,6 @@ func Fold(seed [32]byte, cfg game.Config, players int, log rules.OrderLog) (rule
 		}
 
 		allEvents = append(allEvents, events...)
-	}
-
-	// Check for rounds beyond cfg.Rounds in the log
-	for round := game.RoundNumber(cfg.Rounds + 1); round <= game.RoundNumber(cfg.Rounds+1000); round++ {
-		if _, hasRound := log[round]; hasRound {
-			return rules.MatchState{}, nil, fmt.Errorf("order log contains round %d beyond cfg.Rounds (%d)", round, cfg.Rounds)
-		}
-		// Optimization: stop checking after first missing round
-		if _, nextRound := log[round+1]; !nextRound {
-			break
-		}
 	}
 
 	// Fails closed: assert that we have actual results, not a pathological log

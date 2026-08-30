@@ -2,6 +2,7 @@ package fold
 
 import (
 	"encoding/json"
+	"fmt"
 	"reflect"
 	"testing"
 
@@ -189,6 +190,47 @@ func TestFoldErrorOnRoundBelowOne(t *testing.T) {
 		t.Fatal("Fold() with round 0 returned no error, want error identifying round 0")
 	}
 	wantMsg := "order log contains invalid round 0 (rounds start at 1)"
+	if err.Error() != wantMsg {
+		t.Errorf("Fold() error = %q, want %q", err.Error(), wantMsg)
+	}
+}
+
+// TestFoldErrorOnRoundAboveCfgRounds is #319's acceptance criterion 4c: a
+// log with a round number above cfg.Rounds returns an error naming that
+// round. Uses a sparse log with a gap right before the out-of-range round
+// (cfg.Rounds+1 absent, cfg.Rounds+2 present) — a regression case for a bug
+// where Fold walked forward from cfg.Rounds+1 and stopped at the first
+// missing round, silently accepting an out-of-range order sitting past that
+// gap instead of rejecting it.
+func TestFoldErrorOnRoundAboveCfgRounds(t *testing.T) {
+	cfg := game.DefaultConfig()
+	seed := [32]byte{3}
+
+	idleOrder := game.Order{
+		Action: game.ActionOrder{Kind: game.ActionNothing},
+		Stance: game.StanceOrder{Stance: game.StanceNeutral},
+	}
+
+	validLog := rules.OrderLog{}
+	for round := 1; round <= cfg.Rounds; round++ {
+		validLog[game.RoundNumber(round)] = map[game.SeatID]game.Order{
+			0: idleOrder,
+			1: idleOrder,
+		}
+	}
+
+	// cfg.Rounds+1 stays absent (the gap); cfg.Rounds+2 is the only
+	// out-of-range entry, and must still be caught.
+	validLog[game.RoundNumber(cfg.Rounds+2)] = map[game.SeatID]game.Order{
+		0: idleOrder,
+		1: idleOrder,
+	}
+
+	_, _, err := Fold(seed, cfg, 2, validLog)
+	if err == nil {
+		t.Fatal("Fold() with a round beyond cfg.Rounds past a gap returned no error, want error identifying that round")
+	}
+	wantMsg := fmt.Sprintf("order log contains round %d beyond cfg.Rounds (%d)", cfg.Rounds+2, cfg.Rounds)
 	if err.Error() != wantMsg {
 		t.Errorf("Fold() error = %q, want %q", err.Error(), wantMsg)
 	}
