@@ -100,15 +100,23 @@ var (
 	// even though the outer statement's own FROM clause names the CTE, not
 	// the table.
 	tableRefRe = regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+(events|match_summary)\b`)
+	// fromListRe matches an entire comma-separated FROM list — the legacy
+	// implicit-join form "FROM matches, events" — so a table named after a
+	// comma, not directly after FROM, is still caught. tableRefRe alone
+	// misses this: "events" there is preceded by "," rather than FROM or
+	// JOIN. Scoped to the FROM clause itself (identifiers immediately
+	// following FROM and each subsequent comma) rather than any comma in
+	// the query, so a column named "events" in a SELECT list doesn't
+	// false-positive.
+	fromListRe = regexp.MustCompile(`(?i)\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)`)
 )
 
 // isProjectionRead reports whether body is a genuine read of events or
 // match_summary: its leading statement is SELECT or WITH (a CTE), and
-// somewhere in the body a FROM or JOIN clause names one of the two tables.
-// A JOIN read (SELECT * FROM matches JOIN events ON ...) and a CTE read
-// (WITH e AS (SELECT * FROM events) SELECT * FROM e) both count, not just a
-// direct single-table SELECT ... FROM. An INSERT ... ON CONFLICT ...
-// RETURNING (UpsertMatchSummary, UpsertOrder, CreateMatch,
+// somewhere in the body a FROM or JOIN clause names one of the two tables —
+// directly (FROM events, JOIN events), inside a comma-separated FROM list
+// (FROM matches, events), or inside a CTE's own inner SELECT. An INSERT ...
+// ON CONFLICT ... RETURNING (UpsertMatchSummary, UpsertOrder, CreateMatch,
 // CreateMatchPlayer elsewhere in this package) is a write that merely
 // returns the row just written — its leading keyword is INSERT, not SELECT
 // or WITH — so it is deliberately not classified as a read here.
@@ -116,7 +124,18 @@ func isProjectionRead(body string) bool {
 	if !leadingSelectOrWithRe.MatchString(body) {
 		return false
 	}
-	return tableRefRe.MatchString(body)
+	if tableRefRe.MatchString(body) {
+		return true
+	}
+	for _, m := range fromListRe.FindAllStringSubmatch(body, -1) {
+		for _, tbl := range strings.Split(m[1], ",") {
+			switch strings.ToLower(strings.TrimSpace(tbl)) {
+			case "events", "match_summary":
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // allowlistEntryRe matches one structured allow-list line: a query name, a
@@ -371,6 +390,31 @@ func TestProjectionReadAllowlistDetectsJoinRead(t *testing.T) {
 	}
 	if len(violations) == 0 {
 		t.Fatal("want a violation for an unlisted JOIN read of events with an empty allow-list, got none")
+	}
+}
+
+// TestProjectionReadAllowlistDetectsCommaJoinRead is
+// TestProjectionReadAllowlistDetectsJoinRead's counterpart for the legacy
+// implicit-join form: events named in a comma-separated FROM list (FROM
+// matches, events), rather than after an explicit FROM or JOIN keyword,
+// must still be classified as a read. This is the form tableRefRe alone
+// missed — "events" here is preceded by "," not FROM or JOIN.
+func TestProjectionReadAllowlistDetectsCommaJoinRead(t *testing.T) {
+	dir := t.TempDir()
+	writeQueryFixture(t, dir, "events.sql", strings.Join([]string{
+		"-- name: ListMatchesWithEventsCommaJoin :many",
+		"SELECT matches.id FROM matches, events WHERE events.match_id = matches.id;",
+		"",
+	}, "\n"))
+	allowlist := filepath.Join(dir, "allowlist.txt")
+	writeQueryFixture(t, dir, "allowlist.txt", "# nothing allowed\n")
+
+	violations, err := checkProjectionReadAllowlist(dir, allowlist)
+	if err != nil {
+		t.Fatalf("checkProjectionReadAllowlist: %v", err)
+	}
+	if len(violations) == 0 {
+		t.Fatal("want a violation for an unlisted comma-join read of events with an empty allow-list, got none")
 	}
 }
 
