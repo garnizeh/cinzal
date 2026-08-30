@@ -91,33 +91,74 @@ func parseProjectionQueryBlocks(dir string) ([]projectionQueryBlock, error) {
 }
 
 var (
-	leadingSelectRe    = regexp.MustCompile(`(?is)^\s*SELECT\b`)
-	fromEventsRe       = regexp.MustCompile(`(?i)\bFROM\s+events\b`)
-	fromMatchSummaryRe = regexp.MustCompile(`(?i)\bFROM\s+match_summary\b`)
+	leadingSelectOrWithRe = regexp.MustCompile(`(?is)^\s*(SELECT|WITH)\b`)
+	// tableRefRe matches either table named after FROM or JOIN — the two
+	// clauses SQL uses to pull rows from a table — so a plain single-table
+	// SELECT, a JOIN read, and a CTE's own inner SELECT (WITH e AS (SELECT
+	// * FROM events) SELECT * FROM e) are all recognized alike: the CTE
+	// case matches because its defining SELECT still says "FROM events"
+	// even though the outer statement's own FROM clause names the CTE, not
+	// the table.
+	tableRefRe = regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+(events|match_summary)\b`)
 )
 
 // isProjectionRead reports whether body is a genuine read of events or
-// match_summary: its leading statement is SELECT, referencing one of the
-// two tables in a FROM clause. An INSERT ... ON CONFLICT ... RETURNING
-// (UpsertMatchSummary, UpsertOrder, CreateMatch, CreateMatchPlayer
-// elsewhere in this package) is a write that merely returns the row just
-// written — its leading keyword is INSERT, not SELECT — so it is
-// deliberately not classified as a read here.
+// match_summary: its leading statement is SELECT or WITH (a CTE), and
+// somewhere in the body a FROM or JOIN clause names one of the two tables.
+// A JOIN read (SELECT * FROM matches JOIN events ON ...) and a CTE read
+// (WITH e AS (SELECT * FROM events) SELECT * FROM e) both count, not just a
+// direct single-table SELECT ... FROM. An INSERT ... ON CONFLICT ...
+// RETURNING (UpsertMatchSummary, UpsertOrder, CreateMatch,
+// CreateMatchPlayer elsewhere in this package) is a write that merely
+// returns the row just written — its leading keyword is INSERT, not SELECT
+// or WITH — so it is deliberately not classified as a read here.
 func isProjectionRead(body string) bool {
-	if !leadingSelectRe.MatchString(body) {
+	if !leadingSelectOrWithRe.MatchString(body) {
 		return false
 	}
-	return fromEventsRe.MatchString(body) || fromMatchSummaryRe.MatchString(body)
+	return tableRefRe.MatchString(body)
+}
+
+// allowlistEntryRe matches one structured allow-list line: a query name, a
+// caller, and a safety justification, separated by "|". All three fields
+// are mandatory and must be non-blank after trimming — issue #321's
+// acceptance criterion is "an allow-list with a stated caller," and a bare
+// query name states no caller at all. scripts/bots-isolation-allowlist.txt
+// carries a caller/justification too, but as a free-standing comment above
+// the identifier line that nothing parses or enforces; this format instead
+// makes the caller and justification part of the parsed entry itself, so a
+// future entry that omits either is rejected rather than silently accepted.
+var allowlistEntryRe = regexp.MustCompile(`^([^|]+)\|([^|]+)\|([^|]+)$`)
+
+// parseAllowlistEntry parses one non-blank, non-comment allow-list line
+// into its query/caller/justification fields. Returns an error for a bare
+// query name, a line missing one or more "|" separators, or any field that
+// is empty after trimming whitespace — malformed input is rejected, not
+// coerced into a best guess.
+func parseAllowlistEntry(line string) (query, caller, justification string, err error) {
+	m := allowlistEntryRe.FindStringSubmatch(line)
+	if m == nil {
+		return "", "", "", fmt.Errorf("want \"query | caller | justification\", got %q", line)
+	}
+	query = strings.TrimSpace(m[1])
+	caller = strings.TrimSpace(m[2])
+	justification = strings.TrimSpace(m[3])
+	if query == "" || caller == "" || justification == "" {
+		return "", "", "", fmt.Errorf("query, caller, and justification must all be non-empty, got %q", line)
+	}
+	return query, caller, justification, nil
 }
 
 // checkProjectionReadAllowlist enumerates every query under queriesDir,
 // classifies which are genuine reads of events/match_summary
-// (isProjectionRead), and cross-checks that set against allowlistPath —
-// one bare query name per line, blank lines and #-comments ignored, the
-// same shape scripts/bots-isolation-allowlist.txt already uses. It returns
-// one violation string per problem found: a qualifying read missing from
-// the allow-list, or an allow-list entry naming a query that does not
-// exist. A nil/empty result with a nil error means the package is clean.
+// (isProjectionRead), and cross-checks that set against allowlistPath — one
+// structured "query | caller | justification" entry per line
+// (parseAllowlistEntry), blank lines and #-comments ignored. It returns one
+// violation string per problem found: a qualifying read missing from the
+// allow-list, an allow-list entry naming a query that does not exist, or a
+// malformed allow-list line (missing a field, or a bare query name with no
+// caller/justification at all). A nil/empty result with a nil error means
+// the package is clean.
 func checkProjectionReadAllowlist(queriesDir, allowlistPath string) ([]string, error) {
 	blocks, err := parseProjectionQueryBlocks(queriesDir)
 	if err != nil {
@@ -129,12 +170,19 @@ func checkProjectionReadAllowlist(queriesDir, allowlistPath string) ([]string, e
 		return nil, fmt.Errorf("read allow-list %q: %w", allowlistPath, err)
 	}
 	allowed := make(map[string]bool)
+	var malformed []string
 	for _, line := range strings.Split(string(allowlistData), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-		allowed[line] = true
+		query, _, _, err := parseAllowlistEntry(line)
+		if err != nil {
+			malformed = append(malformed, fmt.Sprintf(
+				"allow-list %q: malformed entry: %v", allowlistPath, err))
+			continue
+		}
+		allowed[query] = true
 	}
 
 	known := make(map[string]bool, len(blocks))
@@ -146,7 +194,7 @@ func checkProjectionReadAllowlist(queriesDir, allowlistPath string) ([]string, e
 		}
 	}
 
-	var violations []string
+	violations := append([]string(nil), malformed...)
 	for _, name := range reads {
 		if !allowed[name] {
 			violations = append(violations, fmt.Sprintf(
@@ -213,7 +261,7 @@ func TestProjectionReadAllowlistFailsClosedOnStaleEntry(t *testing.T) {
 	dir := t.TempDir()
 	writeQueryFixture(t, dir, "events.sql", "-- name: DeleteEventsByMatch :exec\nDELETE FROM events WHERE match_id = $1;\n")
 	allowlist := filepath.Join(dir, "allowlist.txt")
-	writeQueryFixture(t, dir, "allowlist.txt", "ListEventsForMatch\n")
+	writeQueryFixture(t, dir, "allowlist.txt", "ListEventsForMatch | cmd/replay | test fixture, not a real caller\n")
 
 	violations, err := checkProjectionReadAllowlist(dir, allowlist)
 	if err != nil {
@@ -230,7 +278,7 @@ func TestProjectionReadAllowlistPassesWhenListed(t *testing.T) {
 	dir := t.TempDir()
 	writeQueryFixture(t, dir, "events.sql", "-- name: ListEventsForMatch :many\nSELECT * FROM events WHERE match_id = $1;\n")
 	allowlist := filepath.Join(dir, "allowlist.txt")
-	writeQueryFixture(t, dir, "allowlist.txt", "ListEventsForMatch\n")
+	writeQueryFixture(t, dir, "allowlist.txt", "ListEventsForMatch | cmd/replay | test fixture, not a real caller\n")
 
 	violations, err := checkProjectionReadAllowlist(dir, allowlist)
 	if err != nil {
@@ -274,5 +322,75 @@ func TestProjectionReadAllowlistFailsClosedOnMissingQueriesDir(t *testing.T) {
 	missing := filepath.Join(t.TempDir(), "does-not-exist")
 	if _, err := checkProjectionReadAllowlist(missing, "testdata/projections-read-allowlist.txt"); err == nil {
 		t.Fatal("want an error reading a nonexistent queries dir, got nil")
+	}
+}
+
+// TestProjectionReadAllowlistDetectsCTERead proves isProjectionRead's CTE
+// case: a query whose outer statement is "WITH ... SELECT" and whose
+// defining sub-SELECT reads events in a FROM clause must still be
+// classified as a read, even though the outer statement's own FROM clause
+// names the CTE (e) rather than the table. Run against an empty allow-list,
+// so a classifier that missed this form would pass here — the same bug
+// the finding this test exists for described.
+func TestProjectionReadAllowlistDetectsCTERead(t *testing.T) {
+	dir := t.TempDir()
+	writeQueryFixture(t, dir, "events.sql", strings.Join([]string{
+		"-- name: ListRecentEventNames :many",
+		"WITH e AS (SELECT * FROM events WHERE match_id = $1)",
+		"SELECT kind FROM e;",
+		"",
+	}, "\n"))
+	allowlist := filepath.Join(dir, "allowlist.txt")
+	writeQueryFixture(t, dir, "allowlist.txt", "# nothing allowed\n")
+
+	violations, err := checkProjectionReadAllowlist(dir, allowlist)
+	if err != nil {
+		t.Fatalf("checkProjectionReadAllowlist: %v", err)
+	}
+	if len(violations) == 0 {
+		t.Fatal("want a violation for an unlisted CTE read of events with an empty allow-list, got none")
+	}
+}
+
+// TestProjectionReadAllowlistDetectsJoinRead is TestProjectionReadAllowlistDetectsCTERead's
+// counterpart for a JOIN read: events named after JOIN rather than FROM
+// must still be classified as a read.
+func TestProjectionReadAllowlistDetectsJoinRead(t *testing.T) {
+	dir := t.TempDir()
+	writeQueryFixture(t, dir, "events.sql", strings.Join([]string{
+		"-- name: ListMatchesWithEvents :many",
+		"SELECT matches.id FROM matches JOIN events ON events.match_id = matches.id;",
+		"",
+	}, "\n"))
+	allowlist := filepath.Join(dir, "allowlist.txt")
+	writeQueryFixture(t, dir, "allowlist.txt", "# nothing allowed\n")
+
+	violations, err := checkProjectionReadAllowlist(dir, allowlist)
+	if err != nil {
+		t.Fatalf("checkProjectionReadAllowlist: %v", err)
+	}
+	if len(violations) == 0 {
+		t.Fatal("want a violation for an unlisted JOIN read of events with an empty allow-list, got none")
+	}
+}
+
+// TestProjectionReadAllowlistRejectsBareQueryNameEntry is the allow-list
+// parser's own fail-closed case: a bare query name with no stated caller or
+// justification must be rejected as malformed, not silently accepted as an
+// approval. Uses a query that genuinely reads events, on an allow-list
+// containing only its bare name, so the only way this test could pass by
+// accident is if the bare entry were wrongly treated as valid.
+func TestProjectionReadAllowlistRejectsBareQueryNameEntry(t *testing.T) {
+	dir := t.TempDir()
+	writeQueryFixture(t, dir, "events.sql", "-- name: ListEventsForMatch :many\nSELECT * FROM events WHERE match_id = $1;\n")
+	allowlist := filepath.Join(dir, "allowlist.txt")
+	writeQueryFixture(t, dir, "allowlist.txt", "ListEventsForMatch\n")
+
+	violations, err := checkProjectionReadAllowlist(dir, allowlist)
+	if err != nil {
+		t.Fatalf("checkProjectionReadAllowlist: %v", err)
+	}
+	if len(violations) == 0 {
+		t.Fatal("want a violation for a bare query-name entry with no caller or justification, got none")
 	}
 }
