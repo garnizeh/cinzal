@@ -113,6 +113,16 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 		return 1
 	}
 
+	// Declared at function scope, not inside the if below, so it is callable
+	// explicitly right before rendering (line ~318) rather than only via
+	// defer at function return — a sweep that finishes before the first
+	// 10ms tick would otherwise report zero heap-churn samples at render
+	// time even though fold allocations were recorded, because nothing had
+	// stopped the sampler (and taken its final synchronous sample, see
+	// heapchurn.go) yet. The defer below still covers every early-return
+	// path between here and the render call, as a leak guard; stop is
+	// idempotent (heapchurn.go), so calling it twice is safe.
+	var stopHeapChurnSampler func()
 	if *foldMetricsHTMLPath != "" {
 		// Only started when the artefact is actually requested — a ticker
 		// goroutine sampling runtime/metrics for the whole process's
@@ -121,10 +131,8 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 		// milliseconds), and runtime/metrics.Read is documented as cheap to
 		// call repeatedly (unlike runtime.ReadMemStats), so this interval
 		// costs nothing worth measuring against a sweep's own runtime.
-		// Stopped once every configuration has run and the artefact has
-		// been rendered, below.
-		stopHeapChurnSampler := opsmetrics.StartHeapChurnSampler(10 * time.Millisecond)
-		defer stopHeapChurnSampler()
+		stopHeapChurnSampler = opsmetrics.StartHeapChurnSampler(10 * time.Millisecond)
+		defer func() { stopHeapChurnSampler() }()
 	}
 
 	sha, err := getGitSHA()
@@ -316,6 +324,15 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 	}
 
 	if *foldMetricsHTMLPath != "" {
+		// Stop the sampler — synchronously taking its final heap-allocation
+		// sample (heapchurn.go) — before rendering, not after: a sweep that
+		// completes before the first 10ms tick would otherwise have
+		// recorded fold allocations but zero heap-churn deltas at this
+		// point, and the deferred stop above runs too late (after this
+		// whole function returns) to fix that. Safe to call again via that
+		// defer; stop is idempotent.
+		stopHeapChurnSampler()
+
 		// Rendered after every configuration in the sweep has run, from
 		// opsmetrics.Default — the same instance RunMatch (driver.go)
 		// observed into for every match this process completed, across
@@ -347,7 +364,11 @@ func writeFoldMetricsHTML(path string) error {
 	defer func() { _ = f.Close() }() // safety net; the explicit Close below reports the real error
 
 	snap := opsmetrics.Default.Snapshot()
-	snap.Label = "bot+telemetry-diluted reference"
+	// Names the process explicitly, not just the D51 qualifier — the
+	// standalone HTML artifact is sometimes viewed without its companion
+	// baseline Markdown, where only the qualifier previously appeared and
+	// left the reader to guess which binary produced it.
+	snap.Label = "cmd/simulate — bot+telemetry-diluted reference"
 
 	if err := snap.WriteHTML(f); err != nil {
 		return fmt.Errorf("render %s: %w", path, err)

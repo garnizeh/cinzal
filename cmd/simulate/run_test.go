@@ -15,6 +15,7 @@ import (
 
 	"github.com/garnizeh/cinzal/internal/bots"
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/opsmetrics"
 	"github.com/garnizeh/cinzal/internal/telemetry"
 )
 
@@ -362,6 +363,13 @@ func TestRunFailsClosedBeforeAnyWork(t *testing.T) {
 // dashboard artefact: --fold-metrics-html renders opsmetrics.Default's
 // snapshot, labeled per D51, after the sweep completes.
 func TestRunWritesFoldMetricsHTML(t *testing.T) {
+	// Isolate from opsmetrics.Default's process-wide state: without a fresh
+	// instance here, a sample left behind by an earlier test sharing the
+	// same test binary's Default would make the "no samples" assertion
+	// below pass even if this code path stopped calling Observe entirely.
+	restore := opsmetrics.SetDefault(opsmetrics.NewFoldStats())
+	defer restore()
+
 	dir := t.TempDir()
 	out := filepath.Join(dir, "sweep.csv")
 	htmlPath := filepath.Join(dir, "fold-metrics.html")

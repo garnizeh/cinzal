@@ -52,11 +52,12 @@ func TestObserveAndSnapshotCount(t *testing.T) {
 }
 
 // TestSnapshotPercentiles checks the nearest-rank computation against a
-// small, fully-known dataset: 100 samples of 1ms..100ms. p50 should be the
-// 50th-smallest sample (50ms, 0-indexed rank 49→ this function's
-// int(p*n)=50th element, i.e. 51ms) and p99 the 99th (100ms) — exact values
-// documented here so a future change to the percentile method shows up as an
-// intentional diff, not a silent drift.
+// small, fully-known dataset: 100 samples of 1ms..100ms. percentile uses the
+// nearest-rank method, 1-based rank = max(1, ceil(p*n)), returned as
+// sorted[rank-1]. p50: ceil(0.50*100)=50 → sorted[49] = 50ms. p99:
+// ceil(0.99*100)=99 → sorted[98] = 99ms — the 99th-smallest of 100, not the
+// maximum. Exact values documented here so a future change to the
+// percentile method shows up as an intentional diff, not a silent drift.
 func TestSnapshotPercentiles(t *testing.T) {
 	s := NewFoldStats()
 	for i := 1; i <= 100; i++ {
@@ -68,13 +69,51 @@ func TestSnapshotPercentiles(t *testing.T) {
 		t.Fatalf("Count = %d, want 100", snap.Count)
 	}
 
-	wantP50 := 51 * time.Millisecond  // rank = int(0.50*100) = 50 → sorted[50] = 51ms (0-indexed)
-	wantP99 := 100 * time.Millisecond // rank = int(0.99*100) = 99 → sorted[99] = 100ms
+	wantP50 := 50 * time.Millisecond // rank = ceil(0.50*100) = 50 → sorted[49] = 50ms (0-indexed)
+	wantP99 := 99 * time.Millisecond // rank = ceil(0.99*100) = 99 → sorted[98] = 99ms
 	if snap.P50 != wantP50 {
 		t.Errorf("P50 = %v, want %v", snap.P50, wantP50)
 	}
 	if snap.P99 != wantP99 {
 		t.Errorf("P99 = %v, want %v", snap.P99, wantP99)
+	}
+}
+
+// TestPercentileRegressionTwoSamplesP50 is CodeRabbit's own regression case
+// on PR #398: with exactly 2 samples, p50's nearest rank is
+// ceil(0.5*2)=1 — the lower sample. The pre-fix truncating formula
+// (int(p*n), not ceil) computed rank=1 too here by coincidence at n=2, but
+// diverges for other n (see TestSnapshotPercentiles above) — this case
+// pins the n=2 boundary explicitly since it is the smallest n where p50 is
+// ever ambiguous between "lower" and "upper".
+func TestPercentileRegressionTwoSamplesP50(t *testing.T) {
+	s := NewFoldStats()
+	s.Observe(10*time.Millisecond, 0)
+	s.Observe(20*time.Millisecond, 0)
+
+	snap := s.Snapshot()
+	want := 10 * time.Millisecond // rank = ceil(0.5*2) = 1 → sorted[0] = 10ms, the lower sample
+	if snap.P50 != want {
+		t.Errorf("P50 over 2 samples = %v, want %v (the lower sample)", snap.P50, want)
+	}
+}
+
+// TestPercentileRegressionHundredSamplesP99 is CodeRabbit's own regression
+// case on PR #398: with 100 samples, p99's nearest rank is
+// ceil(0.99*100)=99 — the 99th-smallest, not the maximum (rank 100). The
+// pre-fix truncating formula returned sorted[99], the maximum, for this
+// exact n — the bug this fix and TestSnapshotPercentiles' updated
+// expectation both correct.
+func TestPercentileRegressionHundredSamplesP99(t *testing.T) {
+	s := NewFoldStats()
+	for i := 1; i <= 100; i++ {
+		s.Observe(time.Duration(i)*time.Millisecond, 0)
+	}
+
+	snap := s.Snapshot()
+	want := 99 * time.Millisecond // rank = ceil(0.99*100) = 99 → sorted[98] = 99ms, not the max (100ms)
+	if snap.P99 != want {
+		t.Errorf("P99 over 100 samples = %v, want %v (not the maximum, 100ms)", snap.P99, want)
 	}
 }
 

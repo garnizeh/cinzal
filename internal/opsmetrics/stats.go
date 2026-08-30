@@ -1,6 +1,7 @@
 package opsmetrics
 
 import (
+	"math"
 	"math/rand"
 	"sort"
 	"sync"
@@ -151,15 +152,22 @@ func (s *FoldStats) Snapshot() FoldSnapshot {
 // non-empty duration slice, using the nearest-rank method: the smallest
 // value at or past ceil(p*n) samples. This is exact given the reservoir's
 // contents — no interpolation, which would invent a duration nothing was
-// ever observed to take.
+// ever observed to take. rank is 1-based per the nearest-rank definition
+// (max(1, ceil(p*n))); sorted is 0-indexed, hence rank-1 below. Previously
+// this truncated (int(p*n)) instead of applying ceil, which silently
+// selected the wrong sample — e.g. p50 over 2 samples chose the upper one
+// instead of the lower.
 func percentile(sorted []time.Duration, p float64) time.Duration {
 	n := len(sorted)
 	if n == 0 {
 		return 0
 	}
-	rank := int(p * float64(n))
-	if rank >= n {
-		rank = n - 1
+	rank := int(math.Ceil(p * float64(n)))
+	if rank < 1 {
+		rank = 1
 	}
-	return sorted[rank]
+	if rank > n {
+		rank = n
+	}
+	return sorted[rank-1]
 }
