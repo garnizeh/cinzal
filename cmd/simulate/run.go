@@ -11,12 +11,15 @@ import (
 	"fmt"
 	"io"
 	"maps"
+	"os"
 	"os/exec"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/garnizeh/cinzal/internal/bots"
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/opsmetrics"
 	"github.com/garnizeh/cinzal/internal/telemetry"
 )
 
@@ -59,6 +62,7 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 	breakdownPath := fs.String("breakdown", "", "optional second CSV: issue #205's per-round, per-card and Tier IV decompositions of §22 rows 1, 6 and 4 (see breakdown.go)")
 	seedFlag := fs.String("seed", defaultRootSeedString, "root seed string; the 32-byte seed is SHA-256 of this string")
 	workers := fs.Int("workers", 0, "matches to run concurrently per configuration; <=0 uses GOMAXPROCS")
+	foldMetricsHTMLPath := fs.String("fold-metrics-html", "", "optional: render RFC §7.3's fold duration/allocation-share dashboard artefact (D45) to this path after the sweep completes")
 	var sweepRaw sweepFlags
 	fs.Var(&sweepRaw, "sweep", "Field=v1,v2,... — repeatable; names a game.Config field to sweep")
 
@@ -107,6 +111,20 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 			logLine(stderr, "  %s", m)
 		}
 		return 1
+	}
+
+	if *foldMetricsHTMLPath != "" {
+		// Only started when the artefact is actually requested — a ticker
+		// goroutine sampling runtime/metrics for the whole process's
+		// lifetime has no reader otherwise. 10ms keeps the sampler live
+		// through even a small sweep (a handful of matches complete in low
+		// milliseconds), and runtime/metrics.Read is documented as cheap to
+		// call repeatedly (unlike runtime.ReadMemStats), so this interval
+		// costs nothing worth measuring against a sweep's own runtime.
+		// Stopped once every configuration has run and the artefact has
+		// been rendered, below.
+		stopHeapChurnSampler := opsmetrics.StartHeapChurnSampler(10 * time.Millisecond)
+		defer stopHeapChurnSampler()
 	}
 
 	sha, err := getGitSHA()
@@ -297,10 +315,44 @@ func runWithDeps(args []string, stderr io.Writer, runMatches matchRunner, getGit
 		}
 	}
 
+	if *foldMetricsHTMLPath != "" {
+		// Rendered after every configuration in the sweep has run, from
+		// opsmetrics.Default — the same instance RunMatch (driver.go)
+		// observed into for every match this process completed, across
+		// every configuration, not just the last one. Label matches D51's
+		// naming: cmd/simulate's own share is diluted by bot Decide calls
+		// and telemetry CSV writes, never a "fold-only" number the way
+		// cmd/replay's eventual snapshot will be.
+		if err := writeFoldMetricsHTML(*foldMetricsHTMLPath); err != nil {
+			logLine(stderr, "cmd/simulate: fold metrics HTML: %v", err)
+			return 1
+		}
+	}
+
 	if anyErr {
 		return 1
 	}
 	return 0
+}
+
+// writeFoldMetricsHTML renders opsmetrics.Default's current snapshot to
+// path, labeled per D51 as cmd/simulate's own reference measurement — never
+// compared against FoldAllocShareThreshold in M3 (see FoldSnapshot.WriteHTML
+// itself for the rendering rule this defers to).
+func writeFoldMetricsHTML(path string) error {
+	f, err := os.Create(path)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", path, err)
+	}
+	defer func() { _ = f.Close() }() // safety net; the explicit Close below reports the real error
+
+	snap := opsmetrics.Default.Snapshot()
+	snap.Label = "bot+telemetry-diluted reference"
+
+	if err := snap.WriteHTML(f); err != nil {
+		return fmt.Errorf("render %s: %w", path, err)
+	}
+	return f.Close()
 }
 
 func parseTier(s string) (bots.Tier, error) {

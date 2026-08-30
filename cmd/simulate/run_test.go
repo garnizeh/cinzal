@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/csv"
 	"errors"
+	"html"
 	"io"
 	"os"
 	"path/filepath"
@@ -354,5 +355,62 @@ func TestRunFailsClosedBeforeAnyWork(t *testing.T) {
 				t.Error("stderr is empty, want a message naming the problem")
 			}
 		})
+	}
+}
+
+// TestRunWritesFoldMetricsHTML is #320's acceptance criterion for the
+// dashboard artefact: --fold-metrics-html renders opsmetrics.Default's
+// snapshot, labeled per D51, after the sweep completes.
+func TestRunWritesFoldMetricsHTML(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "sweep.csv")
+	htmlPath := filepath.Join(dir, "fold-metrics.html")
+
+	args := append(realArgs(out), "--fold-metrics-html", htmlPath)
+	var stderr bytes.Buffer
+	code := runWithDeps(args, &stderr, RunMany, fakeGitSHA)
+	if code != 0 {
+		t.Fatalf("run() = %d, want 0; stderr:\n%s", code, stderr.String())
+	}
+
+	data, err := os.ReadFile(htmlPath)
+	if err != nil {
+		t.Fatalf("ReadFile(%s) = %v", htmlPath, err)
+	}
+	// html/template escapes "+" to "&#43;" in its output (part of its
+	// standard context-aware escaping), so the label's literal "+" does not
+	// survive unescaped — unescape before matching rather than asserting on
+	// the escaped form, which would tie this test to html/template's own
+	// escaping table.
+	renderedHTML := html.UnescapeString(string(data))
+
+	if !strings.Contains(renderedHTML, "Cinzal fold metrics") {
+		t.Error("HTML output does not contain the dashboard title")
+	}
+	if !strings.Contains(renderedHTML, "bot+telemetry-diluted reference") {
+		t.Error("HTML output does not carry D51's cmd/simulate label")
+	}
+	if strings.Contains(renderedHTML, "no samples") {
+		t.Error("HTML output reports \"no samples\" after a real sweep ran matches — Observe was not called")
+	}
+}
+
+// TestRunFoldMetricsHTMLCreateFailureIsAnError checks the flag's own
+// fails-closed behaviour: an unwritable path is a hard error, not a silently
+// skipped artefact.
+func TestRunFoldMetricsHTMLCreateFailureIsAnError(t *testing.T) {
+	dir := t.TempDir()
+	out := filepath.Join(dir, "sweep.csv")
+	// A path inside a nonexistent directory: os.Create fails.
+	badPath := filepath.Join(dir, "does-not-exist", "fold-metrics.html")
+
+	args := append(realArgs(out), "--fold-metrics-html", badPath)
+	var stderr bytes.Buffer
+	code := runWithDeps(args, &stderr, RunMany, fakeGitSHA)
+	if code == 0 {
+		t.Fatal("run() = 0, want non-zero for an unwritable --fold-metrics-html path")
+	}
+	if stderr.Len() == 0 {
+		t.Error("stderr is empty, want a message naming the problem")
 	}
 }

@@ -1,0 +1,32 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>Cinzal fold metrics — bot&#43;telemetry-diluted reference</title></head>
+<body>
+<h1>Fold metrics — bot&#43;telemetry-diluted reference</h1>
+<p>RFC-001 &sect;7.3's falsifiability trigger for the no-snapshot decision. Samples: 3000.</p>
+<table border="1" cellpadding="4" cellspacing="0">
+<tr><th>metric</th><th>value</th><th>threshold</th><th>verdict</th></tr>
+<tr>
+  <td>fold duration p50</td>
+  <td>8.983612ms</td>
+  <td></td>
+  <td></td>
+</tr>
+<tr>
+  <td>fold duration p99</td>
+  <td>52.451558ms</td>
+  <td>50ms (&sect;7.3)</td>
+  <td>FAIL</td>
+</tr>
+<tr>
+  <td>fold allocation share (bot&#43;telemetry-diluted reference)</td>
+  <td>94.26%</td>
+  <td>20.00% (&sect;7.3, deferred to M5)</td>
+  <td>reference only — not compared</td>
+</tr>
+</table>
+<p><em>Per D51: this process's allocation share is a labeled reference measurement,
+not a validated bound on a production server's ratio. The real comparison against
+the 20% line happens at M5, once cmd/server mixes fold work with HTTP handling,
+templ rendering, pgx queries, and SSE — the workload &sect;7.3's figure was chosen
+against. Neither M3 process shares that mix.</em></p>
+</body></html>

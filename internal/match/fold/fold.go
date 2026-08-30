@@ -2,8 +2,10 @@ package fold
 
 import (
 	"fmt"
+	"time"
 
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/opsmetrics"
 	"github.com/garnizeh/cinzal/internal/rules"
 )
 
@@ -125,4 +127,38 @@ func Fold(seed [32]byte, cfg game.Config, players int, log rules.OrderLog) (rule
 	}
 
 	return s, allEvents, nil
+}
+
+// FoldMeasured wraps Fold with RFC-001 §7.3's own instrumentation (D45): a
+// timer covering everything Fold does — before it is invoked to when it
+// returns, so initial() and every Resolve call in the fold count as one
+// number, matching what §7.3's own arithmetic table treats as one fold and
+// what a caller actually experiences as latency — and, on success, one
+// Observe call recording that duration plus the estimated allocation into
+// opsmetrics.Default.
+//
+// FoldMeasured lives here rather than in top-level internal/match for the
+// same reason Fold does (D49): it returns a rules.MatchState, and
+// internal/match's own exported surface must stay free of that type so the
+// fog gate's direct-import check (scripts/check-fog-boundary.sh) stays
+// congruent with the property it enforces. internal/match's own tick (M4)
+// imports this package for exactly this function; cmd/replay will too, once
+// #322 builds it. cmd/simulate cannot import internal/match/fold at all —
+// the simulate-dependency gate (#199) restricts it to rules, bots, game,
+// telemetry, opsmetrics — so it calls opsmetrics.Default.Observe directly
+// around its own per-match sequence of Resolve calls instead (D45); see
+// cmd/simulate/driver.go's RunMatch.
+//
+// A failed fold records nothing: an error means there is no duration or
+// allocation figure worth attributing to "one fold," and Observe-ing a
+// number for a fold that never completed would silently inflate the
+// duration/allocation-share statistics with failure-path noise no operator
+// asked to see.
+func FoldMeasured(seed [32]byte, cfg game.Config, players int, log rules.OrderLog) (rules.MatchState, []game.Event, error) {
+	start := time.Now()
+	s, events, err := Fold(seed, cfg, players, log)
+	if err == nil {
+		opsmetrics.Default.Observe(time.Since(start), opsmetrics.EstimateFoldBytes(len(log)))
+	}
+	return s, events, err
 }

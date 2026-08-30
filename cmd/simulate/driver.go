@@ -4,9 +4,11 @@ import (
 	"fmt"
 	"runtime"
 	"sync"
+	"time"
 
 	"github.com/garnizeh/cinzal/internal/bots"
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/opsmetrics"
 	"github.com/garnizeh/cinzal/internal/rules"
 	"github.com/garnizeh/cinzal/internal/telemetry"
 )
@@ -56,7 +58,22 @@ type MatchResult struct {
 // when the recorded order log does not hold exactly cfg.Rounds*players
 // orders in total.
 func RunMatch(seed [32]byte, cfg game.Config, players int, bot bots.Bot) (MatchResult, error) {
+	// foldDuration accumulates only the span a real fold would ever spend:
+	// rules.NewMatch (standing in for RFC §7.1's initial()) plus every
+	// rules.Resolve call — never bot.Decide/rules.ProjectView, which have no
+	// equivalent in a real fold at all (a replay reconstructs state from an
+	// EXISTING order log; nothing ever decides an order inside it). Summing
+	// these two spans separately, rather than timing the whole function,
+	// is what keeps this number comparable to
+	// internal/match/fold.FoldMeasured's — D45's own instruction: cmd/simulate
+	// "call[s] opsmetrics.Default.Observe... timing that match's own sequence
+	// of Resolve calls the same way FoldMeasured times Fold's," not the
+	// whole simulated match including bot decision-making.
+	var foldDuration time.Duration
+
+	newMatchStart := time.Now()
 	s, err := rules.NewMatch(seed, cfg, players)
+	foldDuration += time.Since(newMatchStart)
 	if err != nil {
 		return MatchResult{}, fmt.Errorf("cmd/simulate: RunMatch: %w", err)
 	}
@@ -76,7 +93,9 @@ func RunMatch(seed [32]byte, cfg game.Config, players int, bot bots.Bot) (MatchR
 		}
 		log[game.RoundNumber(round)] = orders
 
+		resolveStart := time.Now()
 		next, roundEvents, err := rules.Resolve(s, orders, cfg, rules.NewRNG(seed, round))
+		foldDuration += time.Since(resolveStart)
 		if err != nil {
 			return MatchResult{}, fmt.Errorf("cmd/simulate: RunMatch: round %d: Resolve: %w", round, err)
 		}
@@ -88,6 +107,12 @@ func RunMatch(seed [32]byte, cfg game.Config, players int, bot bots.Bot) (MatchR
 	if err := validateComplete(s, log, cfg, players); err != nil {
 		return MatchResult{}, fmt.Errorf("cmd/simulate: RunMatch: %w", err)
 	}
+
+	// Recorded only once the match is known-complete (validateComplete just
+	// passed): a match that errored out partway through has no "one fold"
+	// duration or allocation figure worth attributing to §7.3's metrics,
+	// the same fails-closed reasoning FoldMeasured itself applies.
+	opsmetrics.Default.Observe(foldDuration, opsmetrics.EstimateFoldBytes(cfg.Rounds))
 
 	summary, err := telemetry.Match(s, log, events, cfg)
 	if err != nil {

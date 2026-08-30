@@ -205,7 +205,7 @@ bots-isolation:
 bots-isolation-selftest:
 	./scripts/check-bots-isolation_test.sh
 
-## simulate-deps  assert cmd/simulate depends on only rules/bots/game/telemetry
+## simulate-deps  assert cmd/simulate depends on only rules/bots/game/telemetry/opsmetrics
 simulate-deps:
 	./scripts/check-simulate-deps.sh
 
