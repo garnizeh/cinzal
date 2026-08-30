@@ -15,6 +15,10 @@ to understand the problem, write it in the scratchpad, not the repo.
 
 ## 1. Re-read the authority, in this order
 
+**Use the Memex MCP to search the specs and decision log**, not manual `grep`
+— it finds the changelog entry and the neighbouring decision a keyword search
+misses. Fall back to `grep`/`Read` only if Memex is unavailable.
+
 1. **The changelog** of the GDD and the RFC. Both are heavily changelogged and
    later entries correct earlier sections. Check the RFC's "Companion doc"
    header for which GDD revision it is paired with.
@@ -31,6 +35,11 @@ testcontainers, benchstat), fetch current docs with Context7 rather than
 recalling API shapes.
 
 ## 2. Read the code that already exists
+
+**Use the CodeGraph MCP for this**, not `grep`/`find` — one `codegraph_explore`
+call returns a symbol's verbatim source plus its callers and blast radius,
+which is what "find the nearest existing analogue" actually needs. Fall back
+to `grep`/`find` only if CodeGraph is unavailable.
 
 - `scripts/packages.txt` is the declared package graph. Any new package changes it.
 - `internal/game` is a **leaf**: shared vocabulary only, imports nothing, and no

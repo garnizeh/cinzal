@@ -61,7 +61,11 @@ rtk gh api repos/garnizeh/cinzal/issues/<n>/comments --jq '.[] | "--- \(.user.lo
 Comments are not decoration here — issues on this repo get amended in comments,
 and a later comment often narrows or corrects the body. Read them all.
 
-Then follow every link the issue makes:
+Then follow every link the issue makes. **Use the Memex MCP for this** — the
+GDD, the RFC, the roadmap and `docs/decisions/` are all indexed there, and
+semantic search surfaces a section's changelog history and cross-references
+that a keyword `grep` misses. Fall back to `grep`/`Read` only if Memex is
+unavailable.
 
 - **Spec anchor** — open the cited GDD/RFC section *and read that document's
   changelog first*. Later changelog entries correct earlier sections. A brief

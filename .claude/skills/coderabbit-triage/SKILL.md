@@ -200,8 +200,11 @@ finding against the specs.
   wrong — it did on a suggestion that would have introduced `game.State`,
   inverting D01.
 - **Findings point past their own file.** Twice here the real bug was a spec
-  section or an unrelated issue carrying the same wrong statement. When a finding
-  exposes a wrong statement, **grep for it elsewhere.**
+  section or an unrelated issue carrying the same wrong statement. When a
+  finding exposes a wrong statement, **search for it elsewhere** — the Memex
+  MCP for documentation, the CodeGraph MCP for code, not manual `grep`;
+  semantic search catches a paraphrased restatement a keyword search misses.
+  Fall back to `grep` only if the relevant MCP is unavailable.
 - **Out-of-scope findings become issues.** A reply saying "pre-existing" is not
   enough on its own — file it and link the issue in the reply.
 
@@ -213,7 +216,11 @@ CodeRabbit right that there's a problem; this is about the *fix* — reproduce
 the specific behavior the finding claims (a throwaway probe test, a doc
 lookup, tracing the actual code path) rather than trusting the suggested diff
 or the review's own reasoning at face value, and confirm the full gate suite
-is still green before the commit goes out. This is deliberately **not** a
+is still green before the commit goes out. Trace the code path with the
+**CodeGraph MCP** and any doc lookup with the **Memex MCP**, not `grep`/`Read`
+— both return the caller/blast-radius or cross-reference context this step
+actually needs in one call. Fall back to `grep`/`Read` only if the relevant
+MCP is unavailable. This is deliberately **not** a
 re-run of `delivery-review`'s full checklist — that is calibrated for opening
 a PR, and repeating its fan-out/self-consistency/hygiene passes on every small
 fixup would be ceremony, not signal. It is narrower: did you confirm this fix

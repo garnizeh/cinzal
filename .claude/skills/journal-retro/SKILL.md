@@ -60,10 +60,13 @@ A journal entry records what someone believed was true, or did, at write
 time — treat it as a lead, not a fact. For every candidate from Step 1:
 
 - If the entry says a file was updated ("Updated `WORKFLOW.md`,
-  `coderabbit-triage/SKILL.md`..."), grep that file now for the claimed
-  content. Files drift after the entry was written; a fix an entry describes
-  as landed can have been reverted, superseded, or never actually match what
-  the entry says.
+  `coderabbit-triage/SKILL.md`..."), search that file now for the claimed
+  content — with the **Memex MCP**, not manual `grep`, since a fix can have
+  been reworded rather than reverted outright and a keyword search would miss
+  that it's still there in different words. Fall back to `grep`/`Read` only if
+  Memex is unavailable. Files drift after the entry was written; a fix an
+  entry describes as landed can have been reverted, superseded, or never
+  actually match what the entry says.
 - Check `.claude/projects/*/memory/MEMORY.md` and its linked files — a
   cross-entry pattern may already be captured there (the `blocked`-label
   example above already is:

@@ -23,14 +23,18 @@ Check the RFC's "Companion doc" header: it names the GDD revision it is paired
 with. If the GDD has moved past it and your edit depends on the difference, that
 mismatch is part of your change.
 
-**Grep for the statement you are about to correct.** A wrong sentence in one
-document has, twice on this repo, also existed in another — the real bug was a
-spec section carrying the same wrong claim somewhere else. Search the GDD, the
-RFC, the roadmap, `docs/decisions/`, `CLAUDE.md` and the code comments — **and
-any open GitHub issue you have already read in this session that quoted the
-same text** (an issue's spec-anchor line often echoes the sentence verbatim).
+**Search for the statement you are about to correct — with the Memex MCP, not
+manual `grep`.** A wrong sentence in one document has, twice on this repo,
+also existed in another — the real bug was a spec section carrying the same
+wrong claim somewhere else. Memex's semantic search finds a paraphrased or
+reworded restatement that a literal `grep` misses; search the GDD, the RFC,
+the roadmap, `docs/decisions/`, `CLAUDE.md` and the code comments — **and any
+open GitHub issue you have already read in this session that quoted the same
+text** (an issue's spec-anchor line often echoes the sentence verbatim, and
+`gh api`/`gh search` is still the right tool for that part, not Memex).
 Missing this on the first pass turned one correction into three follow-up
-rounds once — check `gh api` for the phrase, not just the repo tree.
+rounds once. Fall back to `grep` across the repo tree only if Memex is
+unavailable.
 
 ## Making the edit
 
