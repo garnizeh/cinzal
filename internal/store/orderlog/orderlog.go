@@ -87,14 +87,24 @@ func Load(ctx context.Context, db store.DBTX, matchID game.MatchID) (rules.Order
 	if err != nil {
 		return nil, fmt.Errorf("orderlog: list orders for match %s: %w", matchID, err)
 	}
-	return fromRows(matchID, rows)
+	return Decode(matchID, rows)
 }
 
-// fromRows is Load's decode-and-shape logic, split out so it can be unit
-// tested against hand-built rows with no database involved
-// (orderlog_test.go) — the gap check and the decode strictness are pure
-// functions of the rows once fetched.
-func fromRows(matchID game.MatchID, rows []store.Order) (rules.OrderLog, error) {
+// Decode is Load's decode-and-shape logic, exported so a caller that already
+// holds []store.Order rows from somewhere other than ListOrdersForMatch can
+// reuse the identical D44 decode discipline — same strictness, same gap
+// check — rather than reimplementing it. cmd/replay's --bundle path (#322)
+// is exactly this: a replay bundle's order log arrives as JSON read from a
+// file, not a database row set, but once it is reshaped into []store.Order
+// (round, seat, payload — the same three fields ListOrdersForMatch's own
+// rows carry) it needs to pass through the same corruption/staleness checks
+// a database-sourced log does, or a hand-edited bundle could smuggle a
+// structurally invalid order log past --bundle that --match would have
+// rejected. Split out, prior to this export, so it could be unit tested
+// against hand-built rows with no database involved (orderlog_test.go) — the
+// gap check and the decode strictness are pure functions of the rows once
+// fetched, regardless of where they came from.
+func Decode(matchID game.MatchID, rows []store.Order) (rules.OrderLog, error) {
 	log := make(rules.OrderLog)
 
 	for _, row := range rows {
