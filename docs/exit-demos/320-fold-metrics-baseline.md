@@ -9,7 +9,7 @@
 
 | | |
 |---|---|
-| Git SHA | `5e9cb1e77f00111abe485802f9f1d5319f14bb2b` (regenerated after CodeRabbit's PR #398 fixes: `percentile`'s ceil-based nearest-rank, `StartHeapChurnSampler`'s stop-takes-a-final-sample, and this file's own HTML `Label`) |
+| Git SHA | `5e9cb1e77f00111abe485802f9f1d5319f14bb2b` (regenerated after CodeRabbit's review findings — raised on PR #398, but landed in the follow-up PR #400 after a staging mistake dropped them from #398's own merge — for `percentile`'s ceil-based nearest-rank, `StartHeapChurnSampler`'s stop-takes-a-final-sample, and this file's own HTML `Label`) |
 | Root seed (default) | `cinzal-simulate-default-root-seed-v1` (SHA-256: `e4c50a633bfa5326029d36fcc00ea91af9510b523942539d4f89ed107866aa09`) |
 | Matches | 3,000 |
 | Players | 4 |
@@ -40,7 +40,7 @@ Allocation share is `opsmetrics.EstimateFoldBytes` summed over all 3,000 matches
 
 ## What changed since the first capture
 
-CodeRabbit's review of PR #398 found three real bugs in the measurement code itself, fixed in the same PR, which is why this document's numbers moved slightly from their first-committed values (p50 8.98ms→8.66ms, p99 52.45ms→48.68ms, allocation share 94.26%→94.24%) and this artifact was regenerated rather than left stale:
+CodeRabbit's review of PR #398 found three real bugs in the measurement code itself. A staging mistake dropped the fixes from #398's own merge commit despite its message describing them (see #399); they actually landed in the follow-up PR #400. Either way, this is why this document's numbers moved slightly from their first-committed values (p50 8.98ms→8.66ms, p99 52.45ms→48.68ms, allocation share 94.26%→94.24%) and this artifact was regenerated rather than left stale:
 
 - `opsmetrics.percentile` truncated (`int(p*n)`) instead of applying the ceil-based nearest-rank formula its own doc comment already specified — selecting the wrong sample rank by one position (e.g. p99 over 100 samples returned the maximum instead of the 99th-smallest). Fixed; see `internal/opsmetrics/stats_test.go`'s regression cases.
 - `StartHeapChurnSampler`'s `stop` only signaled its goroutine to exit — it took no final sample — so a sweep finishing before the first 10ms tick would report zero heap-churn samples despite real fold allocations. `stop` now blocks until one final synchronous sample lands. This baseline's own sweep ran long enough that the bug never triggered here, but `cmd/simulate/run.go` also now calls `stop` explicitly before rendering rather than only via `defer` at function return, closing the gap for a shorter sweep.
