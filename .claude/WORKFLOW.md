@@ -226,6 +226,12 @@ tool, an empty `go list`, an unreadable config all report failure, never a skip.
   touched, which is what decides which layer is missing coverage.
 - Full suite → `gates-run`.
 - `internal/rules/gen` or hot paths → `bench-run` (20% per case, 10% geomean).
+  `query_graph` (Cypher) exposes per-function `transitive_loop_depth`,
+  `linear_scan_in_loop`, and `alloc_in_loop` — a query filtered to
+  `is_test = false` and the touched package names the real hot-path
+  candidates instead of guessing which function earns a benchmark (verified
+  against this repo: `internal/rules.Resolve`, `internal/rules/gen.Generate`,
+  and `internal/rules.NewMatch` top the list at `transitive_loop_depth = 8`).
 
 **A docs-only diff gets no signal from `make check`** — skip it and record what
 you verified instead. The secret scan still runs unconditionally in CI, on
@@ -310,12 +316,21 @@ skipped check is written down as skipped rather than counted as passed.
   commit is coherent and buildable alone.
 - **Read the changelog before trusting a spec section.** Later entries correct
   earlier ones.
-- **Prefer the indexed call graph over grep for structural questions** — who
-  calls X, what X calls, dead code, blast radius of a diff — in any stage
-  (`codebase-memory` skill/agents, or the `codebase-memory-mcp` tools
-  directly; see `skills/README.md`). Grep still wins for literal text search,
-  and is the fallback whenever `check_index_coverage` reports a gap on the
-  path in question.
+- **Prefer the indexed graph over `rtk grep`/a spawned `Explore` agent, in any
+  stage** (`codebase-memory` skill/agents, or the `codebase-memory-mcp` tools
+  directly; see `skills/README.md`). This covers both halves of what grep
+  gets asked to do here: `search_graph`/`trace_path`/`detect_changes` for
+  structural questions (who calls X, dead code, blast radius of a diff), and
+  `search_code` for literal/pattern text search — it runs the same grep
+  underneath but returns deduplicated, importance-ranked function hits with
+  call counts instead of raw matched lines, at a fraction of the tokens
+  (verified: `search_code(pattern="func Resolve")` returned 5 ranked hits for
+  ~120 raw matches in a couple hundred tokens). `get_graph_schema` first, then
+  `query_graph` (Cypher), covers what neither of those two can express — see
+  Stage 3's hot-path use below. Grep/`Read` stay the tool for prose the graph
+  doesn't index (GDD/RFC/decision docs — that's Memex's job, per
+  `issue-intake`/`decision-record`) and are the fallback wherever
+  `check_index_coverage` reports a gap on the path in question.
 - **Confirm before actions outside the pipeline's own shape** —
   force-pushing, pushing straight to `main`, deleting any branch other than
   the one this task itself opened and just squash-merged, or

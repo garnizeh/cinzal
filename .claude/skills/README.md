@@ -60,12 +60,20 @@ means inventing a requirement.
   (`gh issue view` is broken; `-f body=@file` does not expand the file).
 - The [`codebase-memory`](https://github.com/DeusData/codebase-memory-mcp) MCP
   server keeps an indexed call/dependency graph of this repo (project name
-  `home-userone-Code-github-garnizeh-cinzal`). For structural questions —
-  who calls X, what X calls, dead code, high fan-out/fan-in, impact of a local
-  diff — prefer its `search_graph`/`trace_path`/`detect_changes` tools (or the
-  `codebase-memory` skill/agents) over grep or the generic `Explore` agent;
-  fall back to grep for literal text search or when `check_index_coverage`
-  reports a gap.
+  `home-userone-Code-github-garnizeh-cinzal`). Prefer it over `rtk grep` or the
+  generic `Explore` agent in this repo: `search_graph`/`trace_path`/
+  `detect_changes` for structural questions (who calls X, what X calls, dead
+  code, high fan-out/fan-in, impact of a local diff); `search_code` in place
+  of `rtk grep` for pattern/text search in Go files — same underlying grep,
+  but deduplicated into containing functions, ranked by importance, with
+  call-in/out counts, for a fraction of the tokens a raw grep dump costs;
+  `query_graph` (Cypher, `get_graph_schema` first) for anything those can't
+  express, including per-function `transitive_loop_depth`/
+  `linear_scan_in_loop`/`alloc_in_loop` — the concrete way to find hot-path
+  candidates before `bench-run` instead of guessing (see
+  [`WORKFLOW.md`](../WORKFLOW.md) Stage 3). Fall back to grep/`Read` for
+  prose the graph doesn't index (GDD/RFC/decisions — Memex's job) or wherever
+  `check_index_coverage` reports a gap.
 
 ## Repository authority
 
