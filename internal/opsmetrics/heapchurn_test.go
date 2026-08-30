@@ -46,6 +46,37 @@ func TestStartHeapChurnSamplerStopIsIdempotent(t *testing.T) {
 	stop() // must not panic
 }
 
+// TestStartHeapChurnSamplerStopSamplesBeforeFirstTick is PR #398's
+// CodeRabbit-found regression: a sampler stopped before its first tick
+// interval elapses must still record whatever churn happened in that
+// window, not report zero. Before this fix, stop only signaled the
+// sampling goroutine to exit — it took no final sample of its own — so a
+// caller stopping faster than one tick (a short cmd/simulate sweep, or
+// this test) saw an accumulator stuck at its initial value even though
+// real allocation happened. The long interval here (never expected to
+// tick on its own within the test's runtime) isolates stop's own final
+// sample as the only possible source of the recorded churn.
+func TestStartHeapChurnSamplerStopSamplesBeforeFirstTick(t *testing.T) {
+	s := NewFoldStats()
+	stop := s.StartHeapChurnSampler(time.Hour)
+
+	// Allocate enough that the delta is unmistakable against the test
+	// binary's own background churn, mirroring the positive-delta test
+	// above — but stop immediately after, before any tick could fire.
+	sink := make([][]byte, 8)
+	for i := range sink {
+		sink[i] = make([]byte, 1<<20) // 1MB
+	}
+	_ = sink
+
+	stop() // blocks until the final synchronous sample is added
+
+	churn := atomic.LoadUint64(&s.heapChurn)
+	if churn == 0 {
+		t.Fatal("heap-churn accumulator is 0 after stop(), despite ~8MB allocated before any tick could fire — stop must take a final sample")
+	}
+}
+
 // TestStartHeapChurnSamplerPackageLevel is a smoke test for the
 // package-level convenience wrapper around Default.
 func TestStartHeapChurnSamplerPackageLevel(t *testing.T) {

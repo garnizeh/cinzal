@@ -21,33 +21,48 @@ const heapAllocsBytesMetric = "/gc/heap/allocs:bytes"
 // invocation does not want running unasked.
 //
 // Returns a stop function; call it to end sampling. Safe to call more than
-// once — later calls after the first are no-ops.
+// once — later calls after the first are no-ops. stop blocks until a final
+// synchronous sample has been taken and added, so a sweep shorter than one
+// tick interval still contributes its own heap churn rather than reporting
+// zero — the caller (cmd/simulate's run.go) relies on this to have a real
+// number ready the instant stop returns, not merely "eventually."
 func (s *FoldStats) StartHeapChurnSampler(interval time.Duration) (stop func()) {
 	sample := []metrics.Sample{{Name: heapAllocsBytesMetric}}
 	metrics.Read(sample)
 	last := readHeapAllocsBytes(sample)
 
+	// addDelta and last are touched only inside this goroutine — both from
+	// the ticker case and from the stopCh case below — so no synchronization
+	// is needed between them. The caller-facing stop function synchronizes
+	// only via stopCh/doneCh, never by touching last or sample directly.
+	addDelta := func() {
+		metrics.Read(sample)
+		cur := readHeapAllocsBytes(sample)
+		if cur >= last {
+			atomic.AddUint64(&s.heapChurn, cur-last)
+		}
+		// cur < last cannot happen — this is a cumulative counter — but if
+		// the runtime ever changes that guarantee, skipping the add rather
+		// than underflowing an unsigned delta is the fail-safe direction:
+		// heap churn only ever undercounts, never wraps to a huge false
+		// spike.
+		last = cur
+	}
+
 	ticker := time.NewTicker(interval)
-	done := make(chan struct{})
+	stopCh := make(chan struct{})
+	doneCh := make(chan struct{})
 	var stopped int32
 
 	go func() {
+		defer close(doneCh)
 		for {
 			select {
 			case <-ticker.C:
-				metrics.Read(sample)
-				cur := readHeapAllocsBytes(sample)
-				if cur >= last {
-					atomic.AddUint64(&s.heapChurn, cur-last)
-				}
-				// cur < last cannot happen — this is a cumulative counter —
-				// but if the runtime ever changes that guarantee, skipping
-				// the add rather than underflowing an unsigned delta is the
-				// fail-safe direction: heap churn only ever undercounts,
-				// never wraps to a huge false spike.
-				last = cur
-			case <-done:
+				addDelta()
+			case <-stopCh:
 				ticker.Stop()
+				addDelta() // final sample, covers whatever the last tick missed
 				return
 			}
 		}
@@ -55,7 +70,8 @@ func (s *FoldStats) StartHeapChurnSampler(interval time.Duration) (stop func()) 
 
 	return func() {
 		if atomic.CompareAndSwapInt32(&stopped, 0, 1) {
-			close(done)
+			close(stopCh)
+			<-doneCh // block until the final sample above has been added
 		}
 	}
 }
