@@ -751,6 +751,36 @@ func TestSchemaRateLimitsColumnsAndPrimaryKey(t *testing.T) {
 	}
 }
 
+// TestSchemaEventsTableCommentPresent and
+// TestSchemaMatchSummaryTableCommentPresent are #321's own acceptance
+// criterion: "Both tables' COMMENT ON TABLE (from the schema task) is
+// asserted present by a test, so deleting it is a test failure rather than
+// a silent loss of the one warning a psql reader gets" — migration
+// 00001_base_schema.sql's own COMMENT ON TABLE events/match_summary,
+// stating "never authority."
+func TestSchemaEventsTableCommentPresent(t *testing.T) {
+	db := applyBaseSchema(t)
+	assertTableCommentPresent(t, db, "events")
+}
+
+func TestSchemaMatchSummaryTableCommentPresent(t *testing.T) {
+	db := applyBaseSchema(t)
+	assertTableCommentPresent(t, db, "match_summary")
+}
+
+func assertTableCommentPresent(t *testing.T, db *sql.DB, table string) {
+	t.Helper()
+	var comment sql.NullString
+	if err := db.QueryRowContext(context.Background(),
+		"SELECT obj_description($1::regclass, 'pg_class')", table,
+	).Scan(&comment); err != nil {
+		t.Fatalf("query obj_description for %s: %v", table, err)
+	}
+	if !comment.Valid || comment.String == "" {
+		t.Fatalf("COMMENT ON TABLE %s is absent — the one warning a psql reader gets that this table is a derived, rebuildable projection, never authority (RFC-001 §7.1-7.3)", table)
+	}
+}
+
 // isUniqueViolation and isCheckViolation decode pgx's wrapped Postgres
 // error code rather than matching on message text, which goose/pgx do not
 // guarantee stays stable across versions.

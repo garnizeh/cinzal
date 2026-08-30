@@ -11,6 +11,16 @@ import (
 	"github.com/garnizeh/cinzal/internal/game"
 )
 
+const deleteMatchSummaryByMatch = `-- name: DeleteMatchSummaryByMatch :exec
+DELETE FROM match_summary
+WHERE match_id = $1
+`
+
+func (q *Queries) DeleteMatchSummaryByMatch(ctx context.Context, matchID game.MatchID) error {
+	_, err := q.db.Exec(ctx, deleteMatchSummaryByMatch, matchID)
+	return err
+}
+
 const upsertMatchSummary = `-- name: UpsertMatchSummary :one
 
 INSERT INTO match_summary (
@@ -42,6 +52,11 @@ type UpsertMatchSummaryParams struct {
 // reads safely, unlike orders.payload or events.payload. Each call is still
 // scoped to one (match_id, round): no query here returns another match's or
 // another round's row.
+//
+// DeleteMatchSummaryByMatch is issue #321's ClearProjections, alongside
+// events.sql's DeleteEventsByMatch: cmd/replay --rebuild's first step (M4),
+// clearing one match's derived rows — both tables, one transaction — before
+// a fresh fold regenerates them.
 func (q *Queries) UpsertMatchSummary(ctx context.Context, arg UpsertMatchSummaryParams) (MatchSummary, error) {
 	row := q.db.QueryRow(ctx, upsertMatchSummary, arg.MatchID, arg.Round, arg.SubmittedSeats)
 	var i MatchSummary

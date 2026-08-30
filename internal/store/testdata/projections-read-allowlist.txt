@@ -1,0 +1,28 @@
+# The explicit surface of SELECT/WITH queries this package may run against
+# events or match_summary — RFC-001 §7.1's "nothing reads them as
+# authority" (issue #321). An allow-list, not a deny-list, the same
+# reasoning as scripts/bots-isolation-allowlist.txt: read by
+# projections_test.go's TestProjectionReadsAreAllowlisted, which enumerates
+# every -- name: query in internal/store/queries/*.sql whose SQL body is a
+# genuine read of events or match_summary — a direct SELECT ... FROM, a
+# JOIN against either table, or a CTE (WITH ...) whose defining SELECT reads
+# one of them all count — an INSERT ... RETURNING (UpsertMatchSummary) is a
+# write, not a read, and is not in scope here — and fails the build if one
+# isn't listed below with a stated caller, or if an entry here names a query
+# that no longer exists.
+#
+# One structured entry per line: "query | caller | justification" — the
+# query name after "-- name: " (not qualified), the caller that issues it,
+# and why reading a derived, rebuildable projection is safe for that
+# specific use (never treated as authority over the order log — see the
+# header above). Unlike scripts/bots-isolation-allowlist.txt's own
+# free-standing comment-above-identifier convention, all three fields here
+# are parsed and mandatory: a bare query name, or a line missing a field, is
+# rejected as malformed rather than silently accepted as an approval.
+# Blank lines and lines starting with # are ignored.
+#
+# M3's own queries here are InsertEventsBatch, DeleteEventsByMatch,
+# UpsertMatchSummary and DeleteMatchSummaryByMatch — none of them a read.
+# This list is empty today: cmd/replay --rebuild (M4) is the first
+# regenerator of these tables, not a reader of them, and no lobby/recap read
+# path exists yet. When M4/M5 add one, its structured entry goes here.
