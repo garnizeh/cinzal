@@ -40,6 +40,25 @@ func Fold(seed [32]byte, cfg game.Config, players int, log rules.OrderLog) (rule
 		return s, []game.Event{}, nil
 	}
 
+	// Reject any round number below 1 in the log — a round key of 0 or
+	// negative is structurally invalid, not merely absent, and must be
+	// named explicitly rather than silently ignored by the 1..cfg.Rounds
+	// loop below (#319 acceptance criterion: "a round number below 1...
+	// returns an error naming the round"). Scanned by lowest offending
+	// round, never map iteration order, so the reported round is
+	// deterministic (RFC §6.3: no map-range order).
+	invalidFound := false
+	var lowestInvalid game.RoundNumber
+	for round := range log {
+		if round < 1 && (!invalidFound || round < lowestInvalid) {
+			invalidFound = true
+			lowestInvalid = round
+		}
+	}
+	if invalidFound {
+		return rules.MatchState{}, nil, fmt.Errorf("order log contains invalid round %d (rounds start at 1)", lowestInvalid)
+	}
+
 	// Accumulate events across all rounds
 	var allEvents []game.Event
 
