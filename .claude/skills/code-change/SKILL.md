@@ -75,11 +75,8 @@ rule the GDD does not state, that is a `docs-change` or a `decision-record`
 landing before this one — not a comment explaining the deviation.
 
 **Match the surrounding code.** Comment density here is high and load-bearing:
-comments say *why*, and cite the decision or spec section. Follow that.
-Locate the nearest existing analogue with the **CodeGraph MCP**
-(`codegraph_explore`), not `grep`/`find` — one call returns its verbatim
-source plus who calls it, which is what "match the surrounding code" actually
-needs. Fall back to `grep`/`find` only if CodeGraph is unavailable.
+comments say *why*, and cite the decision or spec section. Find the nearest
+existing analogue and read it end to end to understand the local idiom.
 
 **Build artifacts go in `bin/`.** Always `-o bin/...`; a bare `go build` drops a
 binary at the repo root.

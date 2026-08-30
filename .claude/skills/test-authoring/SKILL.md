@@ -38,9 +38,7 @@ regressions this suite exists to catch.
 
 **Table-driven, with the case name saying what it protects.** Match the
 surrounding style — the existing tests name the loophole, not the input.
-Find the nearest existing test with the **CodeGraph MCP** (`codegraph_explore`),
-not `grep`/`find` — it returns the test's source and what it exercises in one
-call. Fall back to `grep`/`find` only if CodeGraph is unavailable.
+Find the nearest existing test and read it to understand the test patterns.
 
 **A new randomness consumer needs its index-count assertion in the same PR,
 including its truncation case.** An unaccounted draw is a replay divergence with
