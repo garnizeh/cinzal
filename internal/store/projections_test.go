@@ -100,16 +100,47 @@ var (
 	// even though the outer statement's own FROM clause names the CTE, not
 	// the table.
 	tableRefRe = regexp.MustCompile(`(?i)\b(?:FROM|JOIN)\s+(events|match_summary)\b`)
-	// fromListRe matches an entire comma-separated FROM list — the legacy
-	// implicit-join form "FROM matches, events" — so a table named after a
-	// comma, not directly after FROM, is still caught. tableRefRe alone
-	// misses this: "events" there is preceded by "," rather than FROM or
-	// JOIN. Scoped to the FROM clause itself (identifiers immediately
-	// following FROM and each subsequent comma) rather than any comma in
-	// the query, so a column named "events" in a SELECT list doesn't
-	// false-positive.
-	fromListRe = regexp.MustCompile(`(?i)\bFROM\s+([a-zA-Z_][a-zA-Z0-9_]*(?:\s*,\s*[a-zA-Z_][a-zA-Z0-9_]*)*)`)
+	// fromClauseRe captures an entire comma-separated FROM list verbatim —
+	// the legacy implicit-join form "FROM matches, events" — from the FROM
+	// keyword up to whatever ends the list: an explicit JOIN, WHERE, GROUP
+	// BY, HAVING, ORDER BY, LIMIT, WINDOW, UNION, FOR UPDATE/SHARE, a
+	// closing paren, a semicolon, or end of string. It hands the raw list
+	// text to fromListTables for per-item parsing rather than trying to
+	// validate each item's shape itself, so a table named after a comma —
+	// with or without an alias — is still caught. Scoped to the FROM
+	// clause itself rather than any comma in the query, so a column named
+	// "events" in a SELECT list doesn't false-positive. tableRefRe already
+	// handles a single FROM/JOIN table correctly even with an alias (FROM
+	// events AS e still matches "events", since the alias trails the
+	// matched word); this pair exists only for the multi-table list form.
+	fromClauseRe = regexp.MustCompile(`(?is)\bFROM\s+(.*?)(?:\bJOIN\b|\bWHERE\b|\bGROUP\s+BY\b|\bHAVING\b|\bORDER\s+BY\b|\bLIMIT\b|\bWINDOW\b|\bUNION\b|\bFOR\s+(?:UPDATE|SHARE)\b|[;)]|$)`)
+	// fromListItemTableRe extracts the leading table identifier from one
+	// comma-separated FROM-list item, stopping at the first character that
+	// can't be part of a (possibly schema-qualified) identifier — which is
+	// exactly where an "AS <alias>" or a bare trailing alias begins, so
+	// both are discarded for free: "events AS e", "events e", and bare
+	// "events" all yield "events".
+	fromListItemTableRe = regexp.MustCompile(`(?i)^([a-zA-Z_][a-zA-Z0-9_.]*)`)
 )
+
+// fromListTables splits a FROM clause (as captured by fromClauseRe) on its
+// top-level commas and returns the bare table name for each item, with any
+// "AS <alias>"/bare trailing alias and any schema qualifier (public.events
+// -> events) stripped.
+func fromListTables(clause string) []string {
+	var tables []string
+	for _, item := range strings.Split(clause, ",") {
+		name := fromListItemTableRe.FindString(strings.TrimSpace(item))
+		if name == "" {
+			continue
+		}
+		if idx := strings.LastIndex(name, "."); idx >= 0 {
+			name = name[idx+1:]
+		}
+		tables = append(tables, strings.ToLower(name))
+	}
+	return tables
+}
 
 // isProjectionRead reports whether body is a genuine read of events or
 // match_summary: its leading statement is SELECT or WITH (a CTE), and
@@ -127,9 +158,9 @@ func isProjectionRead(body string) bool {
 	if tableRefRe.MatchString(body) {
 		return true
 	}
-	for _, m := range fromListRe.FindAllStringSubmatch(body, -1) {
-		for _, tbl := range strings.Split(m[1], ",") {
-			switch strings.ToLower(strings.TrimSpace(tbl)) {
+	for _, m := range fromClauseRe.FindAllStringSubmatch(body, -1) {
+		for _, tbl := range fromListTables(m[1]) {
+			switch tbl {
 			case "events", "match_summary":
 				return true
 			}
@@ -415,6 +446,32 @@ func TestProjectionReadAllowlistDetectsCommaJoinRead(t *testing.T) {
 	}
 	if len(violations) == 0 {
 		t.Fatal("want a violation for an unlisted comma-join read of events with an empty allow-list, got none")
+	}
+}
+
+// TestProjectionReadAllowlistDetectsAliasedCommaJoinRead is
+// TestProjectionReadAllowlistDetectsCommaJoinRead's counterpart when both
+// sides of the comma-separated FROM list carry an explicit alias: an
+// aliased non-projection table (matches AS m) precedes an aliased
+// projection table (events AS e). fromListRe used to stop at "matches" —
+// the " AS m" text broke its bare-identifier-list shape — so the aliased
+// "events" item was never reached at all.
+func TestProjectionReadAllowlistDetectsAliasedCommaJoinRead(t *testing.T) {
+	dir := t.TempDir()
+	writeQueryFixture(t, dir, "events.sql", strings.Join([]string{
+		"-- name: ListMatchesWithEventsAliasedCommaJoin :many",
+		"SELECT matches.id FROM matches AS m, events AS e WHERE events.match_id = matches.id;",
+		"",
+	}, "\n"))
+	allowlist := filepath.Join(dir, "allowlist.txt")
+	writeQueryFixture(t, dir, "allowlist.txt", "# nothing allowed\n")
+
+	violations, err := checkProjectionReadAllowlist(dir, allowlist)
+	if err != nil {
+		t.Fatalf("checkProjectionReadAllowlist: %v", err)
+	}
+	if len(violations) == 0 {
+		t.Fatal("want a violation for an unlisted aliased comma-join read of events with an empty allow-list, got none")
 	}
 }
 
