@@ -17,6 +17,7 @@ github.com/garnizeh/cinzal/internal/debug
 github.com/garnizeh/cinzal/internal/game
 github.com/garnizeh/cinzal/internal/mail
 github.com/garnizeh/cinzal/internal/match
+github.com/garnizeh/cinzal/internal/match/fold
 github.com/garnizeh/cinzal/internal/render
 github.com/garnizeh/cinzal/internal/rules
 github.com/garnizeh/cinzal/internal/rules/gen
