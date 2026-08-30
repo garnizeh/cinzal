@@ -111,10 +111,14 @@ rtk gh pr view <n> --json state,mergedAt,mergeCommit
 ```
 
 `state: "MERGED"` means it merged regardless of what the local error said —
-do not retry the merge command. Only if `state` is still `"OPEN"` did the
-merge itself actually fail. This happened for real, twice in one session
-(#397, #398 — see #399/#401): the local error was mistaken for a stalled
-merge needing a retry, until the second occurrence made the pattern visible.
+do not retry the merge command. `state: "OPEN"` means the merge itself
+actually failed — that is the only case a retry belongs to. A third value,
+`state: "CLOSED"` with `mergedAt` null, means the PR was closed without
+merging (by a human, or some other action) — stop the close-out entirely and
+report that plainly; retrying the merge on a closed PR is not the fix. This
+happened for real, twice in one session (#397, #398 — see #399/#401): the
+local error was mistaken for a stalled merge needing a retry, until the
+second occurrence made the pattern visible.
 
 ## 4. Close-out — same turn, every time
 

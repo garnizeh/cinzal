@@ -48,18 +48,7 @@ rtk git commit -m "<subject>"
 rtk git push -u origin HEAD
 ```
 
-**Verify the commit actually contains what its message claims, before
-pushing.** `git add` with multiple paths in one invocation aborts staging
-**every** path in the list the instant one pathspec doesn't match — including
-the valid ones listed alongside it. A follow-up single-file `git add` for the
-failed path, plus a `git status` read straight after, can look like
-confirmation everything is staged: the file list shows every path, and the
-one column that actually distinguishes staged from unstaged
-(`git status --short`'s leading character — a space means *not* staged) is
-easy to misread at a glance. This happened for real on PR #398 (#399): a
-commit message described 5 fixes across 9 files, but only 1 file was ever
-staged, and `main` briefly carried 4 unfixed bugs the commit claimed to have
-fixed. Check the real diff, not the status line:
+**Verify the commit actually contains what its message claims, before pushing.** `git add` with multiple paths in one invocation aborts staging **every** path in the list the instant one pathspec doesn't match — including the valid ones listed alongside it. A follow-up single-file `git add` for the failed path, plus a `git status` read straight after, can look like confirmation everything is staged: the file list shows every path, and the one column that actually distinguishes staged from unstaged (`git status --short`'s leading character — a space means *not* staged) is easy to misread at a glance. This happened for real on PR #398 (#399): a commit message described 5 fixes across 9 files, but only 1 file was ever staged, and `main` briefly carried 4 unfixed bugs the commit claimed to have fixed. Check the real diff, not the status line:
 
 ```bash
 rtk git show --stat HEAD    # every file the commit message claims must appear here
