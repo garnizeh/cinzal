@@ -6,6 +6,7 @@ import (
 
 	"github.com/garnizeh/cinzal/internal/bots"
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/opsmetrics"
 	"github.com/garnizeh/cinzal/internal/rules"
 )
 
@@ -192,4 +193,75 @@ func TestValidateComplete(t *testing.T) {
 			t.Error("validateComplete() = nil, want an error for a required seat replaced by an out-of-range SeatID")
 		}
 	})
+}
+
+// TestRunMatchObservesFoldMetricsOnSuccess is #320's own wiring test:
+// RunMatch must record exactly one opsmetrics sample per completed match, on
+// the same instrumentation contract internal/match/fold.FoldMeasured uses
+// (D45 — cmd/simulate cannot import internal/match/fold, so it calls
+// opsmetrics.Default.Observe directly). Uses an isolated FoldStats via
+// opsmetrics.SetDefault rather than the shared Default, so this test's
+// assertion does not depend on what other tests in this binary already
+// recorded.
+func TestRunMatchObservesFoldMetricsOnSuccess(t *testing.T) {
+	scoped := opsmetrics.NewFoldStats()
+	restore := opsmetrics.SetDefault(scoped)
+	defer restore()
+
+	cfg := game.DefaultConfig()
+	bot := bots.For(bots.Drifter)
+	var seed [32]byte
+	seed[0] = 0xf0
+
+	if _, err := RunMatch(seed, cfg, 3, bot); err != nil {
+		t.Fatalf("RunMatch() = %v", err)
+	}
+
+	snap := scoped.Snapshot()
+	if snap.Count != 1 {
+		t.Fatalf("opsmetrics.Default.Snapshot().Count = %d after one successful RunMatch, want 1", snap.Count)
+	}
+	if snap.P99 == 0 {
+		t.Error("Snapshot().P99 = 0 after a real match — a match that emits nothing must fail this test, not pass it with a zero duration")
+	}
+}
+
+// TestRunMatchInstrumentationDoesNotChangeResult is the determinism
+// guarantee wiring in fold-duration timing must never threaten: RunMatch's
+// own MatchResult (final state, events, order log) is byte-identical
+// whether or not opsmetrics is actively recording, since the instrumentation
+// added in #320 sits entirely outside the game-state computation. Compared
+// via reflect.DeepEqual the same way TestRunMatchDeterministic already
+// compares two runs of RunMatch against each other.
+func TestRunMatchInstrumentationDoesNotChangeResult(t *testing.T) {
+	cfg := game.DefaultConfig()
+	bot := bots.For(bots.Operator)
+	var seed [32]byte
+	seed[0] = 0xf1
+
+	scopedA := opsmetrics.NewFoldStats()
+	restoreA := opsmetrics.SetDefault(scopedA)
+	resultA, err := RunMatch(seed, cfg, 4, bot)
+	restoreA()
+	if err != nil {
+		t.Fatalf("RunMatch() (instrumented A) = %v", err)
+	}
+
+	scopedB := opsmetrics.NewFoldStats()
+	restoreB := opsmetrics.SetDefault(scopedB)
+	resultB, err := RunMatch(seed, cfg, 4, bot)
+	restoreB()
+	if err != nil {
+		t.Fatalf("RunMatch() (instrumented B) = %v", err)
+	}
+
+	if !reflect.DeepEqual(resultA.Final, resultB.Final) {
+		t.Error("Final state differs between two instrumented RunMatch calls over the same seed/cfg/players")
+	}
+	if !reflect.DeepEqual(resultA.Events, resultB.Events) {
+		t.Error("Events differ between two instrumented RunMatch calls over the same seed/cfg/players")
+	}
+	if !reflect.DeepEqual(resultA.Log, resultB.Log) {
+		t.Error("Log differs between two instrumented RunMatch calls over the same seed/cfg/players")
+	}
 }
