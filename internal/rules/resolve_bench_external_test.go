@@ -1,4 +1,14 @@
-package rules
+// Package rules_test (external): debug.SetGCPercent(-1) in
+// measureResolveAllocationBudget is a process-wide side effect, and the
+// deferred restore only undoes it after the call returns — it does not make
+// the mutation itself invisible to whatever else is running in the same test
+// binary meanwhile. internal/rules' own tests do no I/O and touch no ambient
+// state at all (test-authoring's own rule), so this measurement lives in the
+// external rules_test package instead, the same isolation
+// newmatch_external_test.go and its siblings already use, reaching only
+// rules.NewMatch/rules.Resolve/rules.NewRNG — everything this file needs is
+// already exported.
+package rules_test
 
 import (
 	"runtime"
@@ -7,6 +17,7 @@ import (
 
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/opsmetrics"
+	"github.com/garnizeh/cinzal/internal/rules"
 )
 
 // resolveBenchConfig is a pinned literal snapshot of game.DefaultConfig(),
@@ -84,16 +95,16 @@ func BenchmarkResolve(b *testing.B) {
 
 	for _, players := range []int{2, 3, 4, 5} {
 		b.Run(playersLabel(players), func(b *testing.B) {
-			s, err := NewMatch(seed, cfg, players)
+			s, err := rules.NewMatch(seed, cfg, players)
 			if err != nil {
-				b.Fatalf("NewMatch(players=%d) = %v", players, err)
+				b.Fatalf("rules.NewMatch(players=%d) = %v", players, err)
 			}
 			orders := resolveBenchIdleOrders(players)
 
 			b.ReportAllocs()
 			for b.Loop() {
-				if _, _, err := Resolve(s, orders, cfg, NewRNG(seed, 1)); err != nil {
-					b.Fatalf("Resolve(players=%d) = %v", players, err)
+				if _, _, err := rules.Resolve(s, orders, cfg, rules.NewRNG(seed, 1)); err != nil {
+					b.Fatalf("rules.Resolve(players=%d) = %v", players, err)
 				}
 			}
 		})
@@ -144,9 +155,9 @@ func measureResolveAllocationBudget(tb testing.TB) (initBytes, resolveBytes uint
 	var before, after runtime.MemStats
 
 	runtime.ReadMemStats(&before)
-	s, err := NewMatch(seed, cfg, players)
+	s, err := rules.NewMatch(seed, cfg, players)
 	if err != nil {
-		tb.Fatalf("NewMatch() = %v", err)
+		tb.Fatalf("rules.NewMatch() = %v", err)
 	}
 	runtime.ReadMemStats(&after)
 	initBytes = after.TotalAlloc - before.TotalAlloc
@@ -163,10 +174,10 @@ func measureResolveAllocationBudget(tb testing.TB) (initBytes, resolveBytes uint
 	var totalResolveBytes uint64
 	for round := 1; round <= cfg.Rounds; round++ {
 		runtime.ReadMemStats(&before)
-		next, _, err := Resolve(s, orders, cfg, NewRNG(seed, round))
+		next, _, err := rules.Resolve(s, orders, cfg, rules.NewRNG(seed, round))
 		runtime.ReadMemStats(&after)
 		if err != nil {
-			tb.Fatalf("Resolve() round %d: %v", round, err)
+			tb.Fatalf("rules.Resolve() round %d: %v", round, err)
 		}
 		totalResolveBytes += after.TotalAlloc - before.TotalAlloc
 		s = next
