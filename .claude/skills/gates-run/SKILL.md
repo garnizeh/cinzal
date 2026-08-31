@@ -23,6 +23,28 @@ lint test bench-regression-selftest prod dev
 
 ---
 
+## Normalize before starting: `go fmt` / `go fix`
+
+Run both before `make check` and before any review pass, not after — a diff
+still carrying gofmt drift or a pre-modernization idiom is noise none of the
+gates below are meant to catch, and it's cheaper to normalize once, up front,
+than to have a reviewer flag it as a finding.
+
+```bash
+rtk go fmt ./...
+rtk go fix ./...
+```
+
+**`go fix` is a real rewrite, not a formatter — its output is a diff to read,
+never a step to trust blind.** It has already produced a file that failed to
+compile on this repo: a `T{...}; x.Field = v` merge that folded the
+assignment into the struct literal but left the original field in place too,
+so the literal ended up with the same field named twice — caught only by the
+`lint`/`test` gates this step is supposed to precede, not by `go fix` itself.
+After running it, re-run `go build ./...` and `go vet ./...` (or just go
+straight to `make check`) before treating the tree as clean, and read
+`git diff` for anything it touched that you did not expect.
+
 ## The governing principle
 
 **Every check here fails closed.** Missing tool, empty `go list` output,
