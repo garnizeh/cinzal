@@ -157,6 +157,43 @@ printf '%s\n' "$out" | grep -q 'named no internal/ package at all' ||
 	fail "zero internal deps: expected the nothing-inspected message, got: $out"
 
 # ---------------------------------------------------------------------------
+# Case 3b (go list -deps itself reports nothing): the guard one line above the
+# internal_deps-empty guard Case 3 exercises — `[ -n "$deps" ]`, on the raw
+# `go list -deps` output before the internal/-prefix filter ever runs. Real
+# `go`, run against a real package, always names the package itself even with
+# zero imports (verified by hand: `go list -deps` on a no-import package
+# still prints its own path), so this can only be reached by faking `go`
+# itself — a minimal stand-in on PATH that answers `list -m` and reports
+# nothing for `list -deps`, leaving every other tool this script needs
+# (bash, grep, sed, dirname, wc) resolving from the ambient PATH unchanged.
+# ---------------------------------------------------------------------------
+emptydeps="$tmp/empty-go-list-deps"
+mkdir -p "$emptydeps/cmd/target"
+gomod "$emptydeps"
+cat >"$emptydeps/cmd/target/main.go" <<'EOF'
+package main
+
+func main() {}
+EOF
+printf 'game\n' >"$emptydeps/allowlist.txt"
+
+fake_go_bin="$tmp/fake-go-bin"
+mkdir -p "$fake_go_bin"
+cat >"$fake_go_bin/go" <<'EOF'
+#!/usr/bin/env bash
+case "$1 $2" in
+	"list -m") echo "fixture" ;;
+	"list -deps") exit 0 ;;
+	*) exit 1 ;;
+esac
+EOF
+chmod +x "$fake_go_bin/go"
+
+out="$(PATH="$fake_go_bin:$PATH" REPLAY_DEPS_TEST_ROOT="$emptydeps" REPLAY_DEPS_TEST_PKG="./cmd/target" REPLAY_DEPS_TEST_ALLOWLIST="$emptydeps/allowlist.txt" bash "$GATE" 2>&1)" && code=0 || code=$?
+[ "$code" -eq 1 ] || fail "empty go list -deps: expected exit 1, got $code: $out"
+printf '%s\n' "$out" | grep -q 'reported nothing' || fail "empty go list -deps: expected the reported-nothing message, got: $out"
+
+# ---------------------------------------------------------------------------
 # Case 4 (missing allow-list): unreadable path must fail closed rather than
 # default to permissive or empty.
 # ---------------------------------------------------------------------------

@@ -210,8 +210,16 @@ simulate-deps:
 	./scripts/check-simulate-deps.sh
 
 ## replay-deps  assert cmd/replay cannot reach an effect provider (RFC-001 §7.4, D49)
+#
+# The REPLAY_DEPS_TEST_ROOT/_PKG/_ALLOWLIST overrides check-replay-deps.sh
+# honours exist solely for replay-deps-selftest, below, to point go list at a
+# synthetic fixture module (see the script's own header). `env -u` strips all
+# three here so an ambient copy of any of them in the caller's shell can never
+# silently redirect `make replay-deps` away from the real ./cmd/replay and
+# scripts/replay-deps-allowlist.txt — a false green on the one gate this
+# whole file's header warns against (CodeRabbit review on PR #417).
 replay-deps:
-	./scripts/check-replay-deps.sh
+	env -u REPLAY_DEPS_TEST_ROOT -u REPLAY_DEPS_TEST_PKG -u REPLAY_DEPS_TEST_ALLOWLIST ./scripts/check-replay-deps.sh
 
 ## replay-deps-selftest  fixture coverage for check-replay-deps.sh (issue #324)
 #
