@@ -3,7 +3,7 @@ package opsmetrics
 import (
 	"math"
 	"math/rand"
-	"sort"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -25,8 +25,8 @@ const reservoirCapacity = 10_000
 // an allocated struct, array, or slice can be relied upon to be 64-bit
 // aligned").
 type FoldStats struct {
-	allocBytes uint64 // atomic: Σ estimatedFoldBytes across every Observe call
-	heapChurn  uint64 // atomic: Σ heap-churn deltas StartHeapChurnSampler has recorded
+	allocBytes atomic.Uint64 // atomic: Σ estimatedFoldBytes across every Observe call
+	heapChurn  uint64        // atomic: Σ heap-churn deltas StartHeapChurnSampler has recorded
 
 	mu        sync.Mutex
 	durations []time.Duration // reservoir, len <= reservoirCapacity
@@ -87,7 +87,7 @@ func (s *FoldStats) Observe(dur time.Duration, estimatedBytes uint64) {
 	}
 	s.mu.Unlock()
 
-	atomic.AddUint64(&s.allocBytes, estimatedBytes)
+	s.allocBytes.Add(estimatedBytes)
 }
 
 // FoldSnapshot is a point-in-time read of a FoldStats instance: the two RFC
@@ -133,14 +133,14 @@ func (s *FoldStats) Snapshot() FoldSnapshot {
 	snap := FoldSnapshot{Count: int(n)}
 
 	if len(durations) > 0 {
-		sort.Slice(durations, func(i, j int) bool { return durations[i] < durations[j] })
+		slices.Sort(durations)
 		snap.P50 = percentile(durations, 0.50)
 		snap.P99 = percentile(durations, 0.99)
 	}
 
 	churn := atomic.LoadUint64(&s.heapChurn)
 	if churn > 0 {
-		alloc := atomic.LoadUint64(&s.allocBytes)
+		alloc := s.allocBytes.Load()
 		snap.AllocShare = float64(alloc) / float64(churn)
 		snap.HasAllocShare = true
 	}
@@ -162,12 +162,6 @@ func percentile(sorted []time.Duration, p float64) time.Duration {
 	if n == 0 {
 		return 0
 	}
-	rank := int(math.Ceil(p * float64(n)))
-	if rank < 1 {
-		rank = 1
-	}
-	if rank > n {
-		rank = n
-	}
+	rank := min(max(int(math.Ceil(p*float64(n))), 1), n)
 	return sorted[rank-1]
 }

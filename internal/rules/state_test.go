@@ -200,14 +200,12 @@ func cloneTestState() MatchState {
 					Sight:    map[game.NodeID]game.RoundSet{0: 0b101},
 					Obscured: map[game.NodeID]game.RoundSet{1: 0b010},
 					Trail: []game.StampedTrailEntry{{
-						TrailEntry: game.TrailEntry{
-							Kind:   game.EventConfrontation,
-							Node:   0,
-							Actor:  &actor,
-							Target: &target,
-							Item:   &item,
-						},
-						Round: 1,
+						Kind:   game.EventConfrontation,
+						Node:   0,
+						Actor:  &actor,
+						Target: &target,
+						Item:   &item,
+						Round:  1,
 					}},
 				},
 			},
@@ -430,28 +428,24 @@ func TestCloneArchive(t *testing.T) {
 		Sight:    map[game.NodeID]game.RoundSet{0: 0b101, 1: 0b010},
 		Obscured: map[game.NodeID]game.RoundSet{2: 0b001},
 		Trail: []game.StampedTrailEntry{{
-			TrailEntry: game.TrailEntry{
-				Kind:   game.EventConfrontation,
-				Node:   0,
-				Actor:  &actor,
-				Target: &target,
-				Item:   &item,
-			},
-			Round: 1,
+			Kind:   game.EventConfrontation,
+			Node:   0,
+			Actor:  &actor,
+			Target: &target,
+			Item:   &item,
+			Round:  1,
 		}},
 	}
 	want := game.SeatArchive{
 		Sight:    map[game.NodeID]game.RoundSet{0: 0b101, 1: 0b010},
 		Obscured: map[game.NodeID]game.RoundSet{2: 0b001},
 		Trail: []game.StampedTrailEntry{{
-			TrailEntry: game.TrailEntry{
-				Kind:   game.EventConfrontation,
-				Node:   0,
-				Actor:  &actor,
-				Target: &target,
-				Item:   &item,
-			},
-			Round: 1,
+			Kind:   game.EventConfrontation,
+			Node:   0,
+			Actor:  &actor,
+			Target: &target,
+			Item:   &item,
+			Round:  1,
 		}},
 	}
 

@@ -38,7 +38,7 @@ func TestSnapshotZeroSamples(t *testing.T) {
 func TestObserveAndSnapshotCount(t *testing.T) {
 	s := NewFoldStats()
 	const n = 250
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s.Observe(time.Duration(i+1)*time.Millisecond, 1000)
 	}
 
@@ -124,7 +124,7 @@ func TestPercentileRegressionHundredSamplesP99(t *testing.T) {
 func TestReservoirCapBounded(t *testing.T) {
 	s := NewFoldStats()
 	const n = reservoirCapacity + 5_000
-	for i := 0; i < n; i++ {
+	for i := range n {
 		s.Observe(time.Duration(i)*time.Nanosecond, 0)
 	}
 
@@ -149,10 +149,10 @@ func TestObserveConcurrentSafe(t *testing.T) {
 
 	var wg sync.WaitGroup
 	wg.Add(goroutines)
-	for g := 0; g < goroutines; g++ {
+	for g := range goroutines {
 		go func(g int) {
 			defer wg.Done()
-			for i := 0; i < perGoroutine; i++ {
+			for i := range perGoroutine {
 				s.Observe(time.Duration(i+1)*time.Microsecond, 100)
 			}
 		}(g)

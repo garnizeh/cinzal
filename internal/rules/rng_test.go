@@ -106,7 +106,7 @@ func TestNextDerivationIsHMAC(t *testing.T) {
 func TestSeqIncrementsPerDraw(t *testing.T) {
 	rng := NewRNG(testSeed(2), 1)
 
-	for i := uint32(0); i < 5; i++ {
+	for i := range uint32(5) {
 		if rng.Seq() != i {
 			t.Fatalf("Seq() = %d before draw %d, want %d", rng.Seq(), i, i)
 		}

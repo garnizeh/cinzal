@@ -86,7 +86,7 @@ func TestAttemptAssignNodeTypesSucceedsOnSparseGraph(t *testing.T) {
 	}
 
 	successes := 0
-	for seed := 0; seed < 20; seed++ {
+	for seed := range 20 {
 		rand, count := countingRand(seed)
 		types, ok := attemptAssignNodeTypes(rand, n, neighbors)
 		if !ok {
@@ -137,7 +137,7 @@ func TestAttemptAssignNodeTypesDeadlocksOnCompleteGraph(t *testing.T) {
 	}
 	neighbors := completeGraphNeighbors(n)
 
-	for seed := 0; seed < 50; seed++ {
+	for seed := range 50 {
 		rand, _ := countingRand(seed)
 		if _, ok := attemptAssignNodeTypes(rand, n, neighbors); ok {
 			t.Fatalf("seed=%d: attemptAssignNodeTypes succeeded on K4, want failure — a Warehouse and Border can never be non-adjacent there", seed)
@@ -184,7 +184,7 @@ func TestAssignNodeTypesRetriesThenGivesUp(t *testing.T) {
 func TestAssignNodeTypesSucceedsEventually(t *testing.T) {
 	for _, tc := range propertyCases() {
 		t.Run(tc.name, func(t *testing.T) {
-			for seed := 0; seed < 50; seed++ {
+			for seed := range 50 {
 				rand := newTestRand(seed)
 				sizes := sectorSizes(tc.params.Nodes)
 				sector := assignSectors(rand, tc.params.Nodes, sizes)

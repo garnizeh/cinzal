@@ -23,7 +23,7 @@ func TestStartHeapChurnSamplerRecordsPositiveDelta(t *testing.T) {
 	// something unmistakable to see even alongside the test binary's own
 	// background allocation.
 	var sink [][]byte
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		sink = append(sink, make([]byte, 1<<20)) // 1MB
 		time.Sleep(10 * time.Millisecond)
 	}
