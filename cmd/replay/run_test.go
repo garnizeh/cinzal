@@ -284,3 +284,97 @@ func TestRunDefaultDumpIsFullMatchState(t *testing.T) {
 		t.Errorf("decoded MatchState has %d players, want 2", len(state.Players))
 	}
 }
+
+// The tests below are issue #323's own flag-validation contract for
+// --rebuild/--all/--include-active. None of them reach a database — every
+// case is rejected during flag validation, before run() ever calls
+// store.Open — mirroring how TestRunRejectsBundleCombinedWithDB and its
+// neighbours above test the dump-mode flags with no data source at all.
+
+// TestRunRejectsAllWithoutRebuild: --all names a scope for --rebuild, not a
+// mode of its own — there is no "dump every match" feature.
+func TestRunRejectsAllWithoutRebuild(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--db", "postgres://x", "--all"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("run() with --all and no --rebuild = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "--rebuild") {
+		t.Errorf("stderr = %q, want it to mention --rebuild", stderr.String())
+	}
+}
+
+// TestRunRejectsAllCombinedWithMatch: --all rebuilds every eligible match;
+// naming one with --match at the same time is a contradiction, not a
+// narrowing of --all's scope.
+func TestRunRejectsAllCombinedWithMatch(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--db", "postgres://x", "--match", "m", "--all", "--rebuild"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("run() with --all and --match = %d, want 1", code)
+	}
+}
+
+// TestRunRejectsRebuildWithoutMatchOrAll: --rebuild needs to know which
+// match(es) to touch.
+func TestRunRejectsRebuildWithoutMatchOrAll(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--db", "postgres://x", "--rebuild"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("run() with --rebuild and no --match/--all = %d, want 1", code)
+	}
+}
+
+// TestRunRejectsRebuildWithBundle: --rebuild writes to the database named
+// by --db; a bundle is a file with no projections of its own to rebuild.
+func TestRunRejectsRebuildWithBundle(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--bundle", "x.json", "--rebuild"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("run() with --rebuild and --bundle = %d, want 1", code)
+	}
+}
+
+// TestRunRejectsRebuildWithExportBundle: mutually exclusive write/export
+// modes against the same --match.
+func TestRunRejectsRebuildWithExportBundle(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--db", "postgres://x", "--match", "m", "--rebuild", "--export-bundle", "out.json"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("run() with --rebuild and --export-bundle = %d, want 1", code)
+	}
+}
+
+// TestRunRejectsRebuildWithSeat: --seat selects a dump shape; --rebuild
+// does not dump anything.
+func TestRunRejectsRebuildWithSeat(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--db", "postgres://x", "--match", "m", "--rebuild", "--seat", "0"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("run() with --rebuild and --seat = %d, want 1", code)
+	}
+}
+
+// TestRunRejectsRebuildWithRound: --round bounds a dump; a rebuild always
+// regenerates the whole match, since events/match_summary have no partial
+// concept — a half-rebuilt match would leave later rounds' rows stale.
+func TestRunRejectsRebuildWithRound(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--db", "postgres://x", "--match", "m", "--rebuild", "--round", "3"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("run() with --rebuild and --round = %d, want 1", code)
+	}
+}
+
+// TestRunRejectsIncludeActiveWithoutRebuild: --include-active only
+// modifies --rebuild's own scope rule; it does nothing on its own.
+func TestRunRejectsIncludeActiveWithoutRebuild(t *testing.T) {
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--db", "postgres://x", "--match", "m", "--include-active"}, &stdout, &stderr)
+	if code != 1 {
+		t.Fatalf("run() with --include-active and no --rebuild = %d, want 1", code)
+	}
+	if !strings.Contains(stderr.String(), "--rebuild") {
+		t.Errorf("stderr = %q, want it to mention --rebuild", stderr.String())
+	}
+}
