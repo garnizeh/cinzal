@@ -150,7 +150,7 @@ No Node, no frontend build step, and no Docker for the rules engine — `interna
 
 ## The CI gates
 
-Seven checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
+Eight checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
 
 | Gate | Asserts |
 |---|---|
@@ -161,6 +161,7 @@ Seven checks make the architecture real rather than conventional. They are not s
 | **Dependency scan** | No `go.mod`/`go.sum` dependency carries a known OSV/GHSA vulnerability |
 | **Bots isolation** | `internal/bots`'s production code cannot name `MatchState`, the graph, or the match seed |
 | **Simulate dependencies** | `cmd/simulate` depends on nothing but `internal/rules`, `internal/bots`, `internal/game` and `internal/telemetry` |
+| **Replay dependencies** | `cmd/replay` depends on nothing outside a committed allow-list, so its fold path can never reach an effect provider |
 
 If one of these blocks you, the answer is almost never to weaken the gate.
 
@@ -184,7 +185,7 @@ rtk gh api repos/garnizeh/cinzal/branches/main/protection --jq .required_status_
 
 ### A docs-only pull request does not pay for a Go toolchain
 
-The other five gates above, plus lint/test/build, run through CI's `check` job as `make check-nosecrets` — everything `make check` runs except the secret scan and the dependency scan (see the Makefile's own comment on that split). That job, and `replay`'s cross-OS matrix, skip themselves on a pull request whose diff cannot touch `internal/`, `cmd/`, `scripts/`, `go.mod`/`go.sum`, `Makefile`, `.golangci.yml`, or this repository's CI definitions — a decision record, a GDD/RFC edit, a roadmap update ([#336](https://github.com/garnizeh/cinzal/issues/336)). The check that decides this (`.github/actions/changed-paths`) fails **open**: if it cannot resolve the base commit to diff against, it reports "touched" and everything runs, the same posture `check-secrets.sh` takes when its own commit range does not resolve.
+The other six gates above, plus lint/test/build, run through CI's `check` job as `make check-nosecrets` — everything `make check` runs except the secret scan and the dependency scan (see the Makefile's own comment on that split). That job, and `replay`'s cross-OS matrix, skip themselves on a pull request whose diff cannot touch `internal/`, `cmd/`, `scripts/`, `go.mod`/`go.sum`, `Makefile`, `.golangci.yml`, or this repository's CI definitions — a decision record, a GDD/RFC edit, a roadmap update ([#336](https://github.com/garnizeh/cinzal/issues/336)). The check that decides this (`.github/actions/changed-paths`) fails **open**: if it cannot resolve the base commit to diff against, it reports "touched" and everything runs, the same posture `check-secrets.sh` takes when its own commit range does not resolve.
 
 **Neither the secret scan nor the dependency scan participates in this gate, on purpose.** Both run in their own CI jobs, unconditionally, on every pull request. A credential pasted into a decision record is exactly the case the secret scan exists to catch, so it must never be skippable by what a diff touches; a newly-disclosed CVE against a dependency already sitting in `go.sum` is a fact about time, not about this diff, so the dependency scan can't be skippable by path either — see [The dependency-vulnerability gate](#the-dependency-vulnerability-gate) below. `bench-compare`'s own path check (below) uses the same `changed-paths` action but a narrower, unrelated path list — internal/rules/gen and its own gate definition — because what it decides is whether there is anything to benchmark, not whether there is anything to build.
 
@@ -200,6 +201,12 @@ RFC-001 §16.4 states `cmd/simulate` "needs only `rules` and `bots`" — a depen
 
 `make bots-isolation-selftest` drives the gate against fixtures for each failure mode — a named `rules.MatchState`, a `:=`-inferred local that never spells the type name, a bare `[32]byte` with no `rules` import at all, a dot-import, a `doc.go`-only package (VACUOUS, not a pass), a parse error, and a missing allow-list — the same standard `check-bench-regression_test.sh` is held to below.
 
+### The replay dependency gate
+
+RFC-001 §7.4 makes a dependency claim about `cmd/replay`, not just about `internal/rules`: the fold's own execution must never dispatch an effect, or a rebuild re-sends every historical notification the match ever generated. `internal/match/fold.FoldThrough` already runs `cmd/replay`'s fold with a null effect sink, but that is a runtime property — [D49](docs/decisions/D49-fold-package-boundary.md), decided while scoping this gate, names `scripts/check-replay-deps.sh` as the compile-time proof standing next to it: `go list -deps ./cmd/replay`'s `internal/` subset must be a subset of a committed allow-list, `scripts/replay-deps-allowlist.txt` ([#324](https://github.com/garnizeh/cinzal/issues/324)). The allow-list is `internal/game`, `internal/rules` (its own `internal/rules/gen` dependency included), `internal/match/fold`, `internal/opsmetrics` (D45's fold-duration/allocation metrics, pulled in transitively by `FoldMeasured` — the same allowance `cmd/simulate` already has), `internal/store` and `internal/store/orderlog`. `internal/mail`, `internal/web` and anything else fail the gate; widening the list is a deliberate, reviewed change, same discipline as `scripts/bots-isolation-allowlist.txt`.
+
+Same shape as the simulate dependency gate — a plain `go list`/`grep` pipeline — but unlike it, this one carries a fixture selftest (`make replay-deps-selftest`, `scripts/check-replay-deps_test.sh`): #324's own acceptance criteria required proof of every failure mode, including the positive case a plain dependency check exists to catch — a mail-shaped provider package introduced into the graph — a bar the simulate gate was never held to. Because `go list -deps` needs a real, buildable `go.mod` to run against, the selftest points the gate at a synthetic fixture module via environment-variable overrides (`REPLAY_DEPS_TEST_ROOT`/`_PKG`/`_ALLOWLIST`), the same idiom `check-rules-purity_test.sh` uses for the same reason, rather than the target-directory argument `check-bots-isolation.go`'s AST walk takes.
+
 ### The dependency-vulnerability gate
 
 Surfaced during [#372](https://github.com/garnizeh/cinzal/pull/372) ([#311](https://github.com/garnizeh/cinzal/issues/311)'s PR): CodeRabbit's SAST step flagged `github.com/moby/go-archive` v0.2.0 — a `testcontainers-go` transitive dependency, since bumped — as carrying GHSA-hfg8-hc9c-6c3h / GO-2026-6253, a tar-extraction path-traversal CVE. Nothing in `make check` would have caught it ([#373](https://github.com/garnizeh/cinzal/issues/373)).
@@ -210,7 +217,7 @@ Two tools, not one, because neither alone is sufficient. `govulncheck ./...`'s c
 
 ### The benchmark regression gate
 
-**`bench-compare` is also required**, but shaped differently from the seven above: it only runs on a pull request that touches `internal/rules/gen`, this workflow, its own path-gate action (`.github/actions/changed-paths`), `check-bench-regression.sh`, or the `Makefile` — most pull requests skip it rather than pass it. When it runs, it benchmarks the base commit and this pull request's merge commit back to back on the same runner and fails for real past a 20%-per-case or 10%-geomean threshold (`scripts/check-bench-regression.sh`).
+**`bench-compare` is also required**, but shaped differently from the eight above: it only runs on a pull request that touches `internal/rules/gen`, this workflow, its own path-gate action (`.github/actions/changed-paths`), `check-bench-regression.sh`, or the `Makefile` — most pull requests skip it rather than pass it. When it runs, it benchmarks the base commit and this pull request's merge commit back to back on the same runner and fails for real past a 20%-per-case or 10%-geomean threshold (`scripts/check-bench-regression.sh`).
 
 It started advisory (issue #113) because two data points could not characterise real CI-runner noise against those thresholds, and was promoted to required in [#127](https://github.com/garnizeh/cinzal/issues/127) once seven real same-runner comparisons had landed with zero false positives — worst single-case drift +6.27%, worst geomean 0.93%, both comfortably inside the thresholds.
 

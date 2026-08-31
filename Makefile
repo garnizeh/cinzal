@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check generate-check-selftest packages purity purity-selftest fog debug-isolation secrets vuln bots-isolation bots-isolation-selftest simulate-deps check check-nosecrets replay clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check generate-check-selftest packages purity purity-selftest fog debug-isolation secrets vuln bots-isolation bots-isolation-selftest simulate-deps replay-deps replay-deps-selftest check check-nosecrets replay clean
 
 ## help      list these targets
 help:
@@ -209,6 +209,27 @@ bots-isolation-selftest:
 simulate-deps:
 	./scripts/check-simulate-deps.sh
 
+## replay-deps  assert cmd/replay cannot reach an effect provider (RFC-001 §7.4, D49)
+#
+# The REPLAY_DEPS_TEST_ROOT/_PKG/_ALLOWLIST overrides check-replay-deps.sh
+# honours exist solely for replay-deps-selftest, below, to point go list at a
+# synthetic fixture module (see the script's own header). `env -u` strips all
+# three here so an ambient copy of any of them in the caller's shell can never
+# silently redirect `make replay-deps` away from the real ./cmd/replay and
+# scripts/replay-deps-allowlist.txt — a false green on the one gate this
+# whole file's header warns against (CodeRabbit review on PR #417).
+replay-deps:
+	env -u REPLAY_DEPS_TEST_ROOT -u REPLAY_DEPS_TEST_PKG -u REPLAY_DEPS_TEST_ALLOWLIST ./scripts/check-replay-deps.sh
+
+## replay-deps-selftest  fixture coverage for check-replay-deps.sh (issue #324)
+#
+# Deterministic and fast — a synthetic fixture module, nothing about the real
+# cmd/replay involved — so like purity-selftest and bots-isolation-selftest
+# this carries none of the noise that would keep it out of `check`. See
+# scripts/check-replay-deps_test.sh's own comment.
+replay-deps-selftest:
+	./scripts/check-replay-deps_test.sh
+
 # Paths holding generated output, named explicitly rather than as a
 # directory wildcard: sqlc's output (issue #315) lands directly in
 # internal/store, package store, alongside hand-written repository code
@@ -283,6 +304,19 @@ generate-check-selftest:
 # deterministic and fast enough to belong on that line, not held out the way
 # bench-compare is.
 #
+# replay-deps and replay-deps-selftest joined in issue #324, same shape as
+# simulate-deps above — go list -deps against a committed allow-list — but,
+# unlike simulate-deps, WITH a selftest. That is a deliberate asymmetry, not
+# an inconsistency with the "a plain go list/grep... needs no selftest"
+# reasoning two paragraphs up: #324's own acceptance criteria require proof
+# of every failure mode, including the positive case (a mail-shaped package
+# introduced into cmd/replay's graph), a bar simulate-deps (issue #199) was
+# never held to. check-replay-deps.sh still shells out to go list rather
+# than walking syntax, so its selftest needs a real, buildable fixture
+# module the way purity-selftest's does (environment-variable overrides
+# pointing go list at a temp module), not a target-directory argument the
+# way bots-isolation-selftest's AST walk takes one.
+#
 # generate-check and generate-check-selftest joined this line in issue
 # #316, once GENERATED_SQLC held a real path (sqlc's output, issue #315) for
 # generate-check to actually compare against. Before that landing, this
@@ -337,7 +371,7 @@ generate-check-selftest:
 # this file: `make help` should keep pointing a contributor at `make check`,
 # not offer a target that quietly skips the secret scan as an equally
 # visible option. CI calls it by its full name instead of through `help`.
-check-nosecrets: packages purity purity-selftest fog debug-isolation bots-isolation bots-isolation-selftest simulate-deps generate-check generate-check-selftest lint test bench-regression-selftest prod dev
+check-nosecrets: packages purity purity-selftest fog debug-isolation bots-isolation bots-isolation-selftest simulate-deps replay-deps replay-deps-selftest generate-check generate-check-selftest lint test bench-regression-selftest prod dev
 
 check: check-nosecrets secrets vuln
 

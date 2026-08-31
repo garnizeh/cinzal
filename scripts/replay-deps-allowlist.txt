@@ -1,0 +1,49 @@
+# The explicit set of internal/ packages cmd/replay's dependency graph may
+# reach — RFC-001 §7.4: the fold path must never be able to dispatch an
+# effect (mail, SSE, a notification-shaped HTTP client), on pain of a
+# rebuild re-sending every historical notification.
+#
+# Read by scripts/check-replay-deps.sh. An allow-list, not a deny-list
+# (issue #324, following scripts/bots-isolation-allowlist.txt's own
+# discipline): a deny-list naming internal/mail passes silently the day
+# someone adds internal/notify. A package reaching cmd/replay's graph must
+# be added here deliberately, in a pull request that can explain why it is
+# still not an effect provider.
+#
+# One bare suffix per line — the part of the import path after
+# "internal/". Blank lines and lines starting with # are ignored.
+
+# internal/game — shared vocabulary (game.Config, game.Event, IDs). A leaf;
+# cannot itself reach an effect provider.
+game
+
+# internal/rules — the pure fold logic itself (Resolve, Project, NewMatch).
+# RFC §6.1 already forbids this package any I/O.
+rules
+
+# internal/rules/gen — rules' own transitive family (internal/rules/initial.go,
+# gen_bridge.go), never imported directly by cmd/replay but always reached
+# through internal/rules.
+rules/gen
+
+# internal/match/fold — Fold/FoldMeasured, the exact per-round Resolve loop
+# cmd/replay runs with a null effect sink (D49:
+# docs/decisions/D49-fold-package-boundary.md). D49 moved this out of
+# top-level internal/match specifically so a fog-boundary gate could forbid
+# it from internal/web; it is legitimate here.
+match/fold
+
+# internal/opsmetrics — D45's fold-duration/allocation metrics, pulled in
+# transitively by match/fold.FoldMeasured. Stdlib-only leaf: imports nothing
+# from internal/game or internal/rules, so it cannot itself carry a
+# MatchState or dispatch anything. Same allowance cmd/simulate already has
+# (scripts/check-simulate-deps.sh, D45/#320).
+opsmetrics
+
+# internal/store — the pgx/v5 repository layer cmd/replay reads a match's
+# rows through.
+store
+
+# internal/store/orderlog — the order-log codec store.ListOrdersForMatch
+# decodes through.
+store/orderlog
