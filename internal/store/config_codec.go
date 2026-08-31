@@ -136,7 +136,7 @@ func DecodeConfig(data []byte) (game.Config, error) {
 	if err := dec.Decode(&env); err != nil {
 		return game.Config{}, fmt.Errorf("store: decode config envelope: %w", err)
 	}
-	// Mirrors orderlog.fromRows' own trailing-data guard (CodeRabbit finding
+	// Mirrors orderlog.Decode's own trailing-data guard (CodeRabbit finding
 	// on PR #393): json.Decoder.Decode stops at the first complete value, so
 	// without this check a payload with garbage appended after a
 	// well-formed envelope would decode successfully and silently ignore

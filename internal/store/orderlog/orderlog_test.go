@@ -8,7 +8,7 @@ import (
 	"github.com/garnizeh/cinzal/internal/store"
 )
 
-// This file unit-tests fromRows directly — the decode/group/gap-check logic
+// This file unit-tests Decode directly — the decode/group/gap-check logic
 // Load wraps around a real database call — against hand-built rows, with no
 // Postgres involved. The full pipeline (AppendOrder -> Load against real
 // Postgres, including the resubmission-upsert and human-flips-source
@@ -34,22 +34,22 @@ const minimalOrder = `{"round":1,"route":[]}`
 // minimalOrderForRound builds a syntactically complete Order payload whose
 // own Round field is r, for fixtures that need several distinct rounds
 // (each row's payload must agree with the row's own round now that
-// fromRows rejects a mismatch — see TestFromRowsRejectsRoundMismatch
+// Decode rejects a mismatch — see TestDecodeRejectsRoundMismatch
 // below) but don't need a named constant per round.
 func minimalOrderForRound(r game.RoundNumber) string {
 	return fmt.Sprintf(`{"round":%d,"route":[]}`, r)
 }
 
-func TestFromRowsGroupsByRoundAndSeat(t *testing.T) {
+func TestDecodeGroupsByRoundAndSeat(t *testing.T) {
 	rows := []store.Order{
 		row(1, 0, minimalOrder),
 		row(1, 1, minimalOrder),
 		row(2, 0, minimalOrderForRound(2)),
 	}
 
-	log, err := fromRows(matchID, rows)
+	log, err := Decode(matchID, rows)
 	if err != nil {
-		t.Fatalf("fromRows: %v", err)
+		t.Fatalf("Decode: %v", err)
 	}
 
 	if len(log) != 2 {
@@ -69,21 +69,21 @@ func TestFromRowsGroupsByRoundAndSeat(t *testing.T) {
 	}
 }
 
-func TestFromRowsEmptyRowsIsEmptyLogNoError(t *testing.T) {
-	log, err := fromRows(matchID, nil)
+func TestDecodeEmptyRowsIsEmptyLogNoError(t *testing.T) {
+	log, err := Decode(matchID, nil)
 	if err != nil {
-		t.Fatalf("fromRows(nil): %v", err)
+		t.Fatalf("Decode(nil): %v", err)
 	}
 	if len(log) != 0 {
 		t.Fatalf("len(log) = %d, want 0 (a fresh match has no gap)", len(log))
 	}
 }
 
-// TestFromRowsRejectsRoundGap is issue #317's own acceptance criterion:
+// TestDecodeRejectsRoundGap is issue #317's own acceptance criterion:
 // "OrderLog returns rounds in a form that folds in order; a match with a
 // gap in its rounds (round 3 missing) is an error, not a silently short
 // fold."
-func TestFromRowsRejectsRoundGap(t *testing.T) {
+func TestDecodeRejectsRoundGap(t *testing.T) {
 	rows := []store.Order{
 		row(1, 0, minimalOrder),
 		row(2, 0, minimalOrderForRound(2)),
@@ -91,47 +91,47 @@ func TestFromRowsRejectsRoundGap(t *testing.T) {
 		row(4, 0, minimalOrderForRound(4)),
 	}
 
-	_, err := fromRows(matchID, rows)
+	_, err := Decode(matchID, rows)
 	if err == nil {
-		t.Fatal("fromRows with round 3 missing returned nil error, want a gap error")
+		t.Fatal("Decode with round 3 missing returned nil error, want a gap error")
 	}
 }
 
-func TestFromRowsSingleRoundNoGap(t *testing.T) {
+func TestDecodeSingleRoundNoGap(t *testing.T) {
 	rows := []store.Order{row(1, 0, minimalOrder)}
-	if _, err := fromRows(matchID, rows); err != nil {
-		t.Fatalf("fromRows: %v", err)
+	if _, err := Decode(matchID, rows); err != nil {
+		t.Fatalf("Decode: %v", err)
 	}
 }
 
-// TestFromRowsRejectsRoundZero is a CodeRabbit review finding on PR #393
+// TestDecodeRejectsRoundZero is a CodeRabbit review finding on PR #393
 // (issue #317): checkNoRoundGap's gap scan only walks [1, maxRound], so a
 // round-0 row sitting alongside an otherwise gapless 1..maxRound run would
 // pass unnoticed if round < 1 were not rejected outright. game.RoundNumber
 // is 1-indexed (GDD §4); round 0 is never valid, gap or no gap.
-func TestFromRowsRejectsRoundZero(t *testing.T) {
+func TestDecodeRejectsRoundZero(t *testing.T) {
 	rows := []store.Order{
 		row(0, 0, minimalOrderForRound(0)),
 		row(1, 0, minimalOrder),
 		row(2, 0, minimalOrderForRound(2)),
 	}
 
-	_, err := fromRows(matchID, rows)
+	_, err := Decode(matchID, rows)
 	if err == nil {
-		t.Fatal("fromRows with a round-0 row returned nil error, want a rejection (rounds are 1-indexed)")
+		t.Fatal("Decode with a round-0 row returned nil error, want a rejection (rounds are 1-indexed)")
 	}
 }
 
-// TestFromRowsDecodesFieldsCorrectly proves the decoded Order actually
+// TestDecodeFieldsCorrectly proves the decoded Order actually
 // carries the payload's real values through, not just that no error
 // occurred.
-func TestFromRowsDecodesFieldsCorrectly(t *testing.T) {
+func TestDecodeFieldsCorrectly(t *testing.T) {
 	const payload = `{"round":1,"route":[1,2,3],"action":{"kind":"deliver"},"stance":{"stance":"neutral","stake":0}}`
 	rows := []store.Order{row(1, 2, payload)}
 
-	log, err := fromRows(matchID, rows)
+	log, err := Decode(matchID, rows)
 	if err != nil {
-		t.Fatalf("fromRows: %v", err)
+		t.Fatalf("Decode: %v", err)
 	}
 
 	got := log[1][2]
@@ -146,71 +146,91 @@ func TestFromRowsDecodesFieldsCorrectly(t *testing.T) {
 	}
 }
 
-// TestFromRowsRejectsUnknownField is D44's corruption guard for orders:
+// TestDecodeRejectsUnknownField is D44's corruption guard for orders:
 // DisallowUnknownFields catches a stray key rather than silently dropping
 // it.
-func TestFromRowsRejectsUnknownField(t *testing.T) {
+func TestDecodeRejectsUnknownField(t *testing.T) {
 	rows := []store.Order{row(1, 0, `{"round":1,"route":[],"totally_unknown_field":true}`)}
-	if _, err := fromRows(matchID, rows); err == nil {
-		t.Fatal("fromRows with an unknown JSON field returned nil error, want a decode error")
+	if _, err := Decode(matchID, rows); err == nil {
+		t.Fatal("Decode with an unknown JSON field returned nil error, want a decode error")
 	}
 }
 
-// TestFromRowsRejectsMalformedPayload asserts a genuinely corrupt payload
+// TestDecodeRejectsMalformedPayload asserts a genuinely corrupt payload
 // (not valid JSON at all) fails rather than decoding to a zero Order.
-func TestFromRowsRejectsMalformedPayload(t *testing.T) {
+func TestDecodeRejectsMalformedPayload(t *testing.T) {
 	rows := []store.Order{row(1, 0, `{not json`)}
-	if _, err := fromRows(matchID, rows); err == nil {
-		t.Fatal("fromRows with malformed JSON returned nil error, want a decode error")
+	if _, err := Decode(matchID, rows); err == nil {
+		t.Fatal("Decode with malformed JSON returned nil error, want a decode error")
 	}
 }
 
-// TestFromRowsRejectsTrailingData is a CodeRabbit review finding on PR
+// TestDecodeRejectsTrailingData is a CodeRabbit review finding on PR
 // #393: json.Decoder.Decode returns as soon as it has read one complete
 // JSON value and never checks whether the stream holds more after it, so a
 // payload of a valid order object followed by a second top-level JSON
 // value must not decode successfully with the trailing value silently
 // dropped.
-func TestFromRowsRejectsTrailingData(t *testing.T) {
+func TestDecodeRejectsTrailingData(t *testing.T) {
 	rows := []store.Order{row(1, 0, `{"round":1,"route":[]}{"unexpected":"trailing value"}`)}
-	if _, err := fromRows(matchID, rows); err == nil {
-		t.Fatal("fromRows with trailing JSON after the order returned nil error, want a rejection")
+	if _, err := Decode(matchID, rows); err == nil {
+		t.Fatal("Decode with trailing JSON after the order returned nil error, want a rejection")
 	}
 }
 
-// TestFromRowsRejectsRoundMismatch is a CodeRabbit review finding on PR
-// #393: fromRows decoded a payload's own Round field but never checked it
+// TestDecodeRejectsRoundMismatch is a CodeRabbit review finding on PR
+// #393: Decode decoded a payload's own Round field but never checked it
 // against the row it was actually stored under, so a payload claiming
 // round 1 while its row was written under round 2 would decode cleanly and
 // land in log[2] carrying a value that says it's for round 1 —
-// TestFromRowsGroupsByRoundAndSeat above had exactly this shape by
+// TestDecodeGroupsByRoundAndSeat above had exactly this shape by
 // accident before this test (and that fixture) were added.
-func TestFromRowsRejectsRoundMismatch(t *testing.T) {
+func TestDecodeRejectsRoundMismatch(t *testing.T) {
 	rows := []store.Order{
 		// row stored under round 2, payload claims round 1.
 		row(2, 0, minimalOrder),
 	}
 
-	_, err := fromRows(matchID, rows)
+	_, err := Decode(matchID, rows)
 	if err == nil {
-		t.Fatal("fromRows with a payload round that disagrees with its row's round returned nil error, want a rejection")
+		t.Fatal("Decode with a payload round that disagrees with its row's round returned nil error, want a rejection")
 	}
 }
 
-// TestFromRowsFreshOrderPerRow guards D47's own precondition: an absent key
+// TestDecodeRejectsDuplicateRoundSeat is a CodeRabbit review finding on PR
+// #404: two rows claiming the same (round, seat) used to overwrite the
+// earlier payload silently, in map-assignment order, with nothing recording
+// that a duplicate existed — reachable both from a corrupted database read
+// and from cmd/replay's offline --bundle path, which reshapes its own rows
+// into []store.Order and calls this same Decode. A duplicate is rejected
+// the same way TestDecodeRejectsRoundMismatch's mismatch is: loudly, before
+// either payload's data reaches a fold.
+func TestDecodeRejectsDuplicateRoundSeat(t *testing.T) {
+	rows := []store.Order{
+		row(1, 0, minimalOrder),
+		row(1, 0, minimalOrder), // duplicate (round 1, seat 0)
+	}
+
+	_, err := Decode(matchID, rows)
+	if err == nil {
+		t.Fatal("Decode with a duplicate (round, seat) row returned nil error, want a rejection")
+	}
+}
+
+// TestDecodeFreshOrderPerRow guards D47's own precondition: an absent key
 // in one row must never read as a prior row's value. Row for seat 0 sets a
 // non-zero Action.Kind; row for seat 1 (decoded after it, same round) omits
 // it entirely and must decode to the reserved-invalid zero, not seat 0's
 // Deal.
-func TestFromRowsFreshOrderPerRow(t *testing.T) {
+func TestDecodeFreshOrderPerRow(t *testing.T) {
 	rows := []store.Order{
 		row(1, 0, `{"round":1,"route":[],"action":{"kind":"deal","item":"shiv"}}`),
 		row(1, 1, `{"round":1,"route":[]}`),
 	}
 
-	log, err := fromRows(matchID, rows)
+	log, err := Decode(matchID, rows)
 	if err != nil {
-		t.Fatalf("fromRows: %v", err)
+		t.Fatalf("Decode: %v", err)
 	}
 
 	if log[1][1].Action.Kind != 0 {

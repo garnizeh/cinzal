@@ -356,7 +356,7 @@ func TestDecodeConfigRejectsPostCapByPlayersMissingKey(t *testing.T) {
 	}
 }
 
-// TestDecodeConfigRejectsTrailingData mirrors orderlog.fromRows' own guard
+// TestDecodeConfigRejectsTrailingData mirrors orderlog.Decode's own guard
 // (a CodeRabbit finding on PR #393, issue #317): a payload with garbage
 // appended after a well-formed envelope must not silently decode as if the
 // garbage weren't there.

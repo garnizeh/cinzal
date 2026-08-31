@@ -87,14 +87,24 @@ func Load(ctx context.Context, db store.DBTX, matchID game.MatchID) (rules.Order
 	if err != nil {
 		return nil, fmt.Errorf("orderlog: list orders for match %s: %w", matchID, err)
 	}
-	return fromRows(matchID, rows)
+	return Decode(matchID, rows)
 }
 
-// fromRows is Load's decode-and-shape logic, split out so it can be unit
-// tested against hand-built rows with no database involved
-// (orderlog_test.go) — the gap check and the decode strictness are pure
-// functions of the rows once fetched.
-func fromRows(matchID game.MatchID, rows []store.Order) (rules.OrderLog, error) {
+// Decode is Load's decode-and-shape logic, exported so a caller that already
+// holds []store.Order rows from somewhere other than ListOrdersForMatch can
+// reuse the identical D44 decode discipline — same strictness, same gap
+// check — rather than reimplementing it. cmd/replay's --bundle path (#322)
+// is exactly this: a replay bundle's order log arrives as JSON read from a
+// file, not a database row set, but once it is reshaped into []store.Order
+// (round, seat, payload — the same three fields ListOrdersForMatch's own
+// rows carry) it needs to pass through the same corruption/staleness checks
+// a database-sourced log does, or a hand-edited bundle could smuggle a
+// structurally invalid order log past --bundle that --match would have
+// rejected. Split out, prior to this export, so it could be unit tested
+// against hand-built rows with no database involved (orderlog_test.go) — the
+// gap check and the decode strictness are pure functions of the rows once
+// fetched, regardless of where they came from.
+func Decode(matchID game.MatchID, rows []store.Order) (rules.OrderLog, error) {
 	log := make(rules.OrderLog)
 
 	for _, row := range rows {
@@ -152,6 +162,21 @@ func fromRows(matchID game.MatchID, rows []store.Order) (rules.OrderLog, error) 
 		if !ok {
 			seats = make(map[game.SeatID]game.Order)
 			log[row.Round] = seats
+		}
+
+		// A CodeRabbit review finding on PR #404: a duplicate (round, seat)
+		// row — reachable both from a corrupted database read and from a
+		// hand-edited/corrupted offline bundle (cmd/replay's --bundle path,
+		// which reshapes its rows into []store.Order and calls this same
+		// function) — used to overwrite the earlier payload silently, with
+		// nothing recording that two rows ever claimed the same slot. A
+		// duplicate is exactly the same kind of structurally invalid input
+		// the round-mismatch check above already refuses to paper over, so
+		// it is rejected here the same way: loudly, naming the match, round
+		// and seat, before either payload's data reaches the fold.
+		if _, dup := seats[row.Seat]; dup {
+			return nil, fmt.Errorf("orderlog: decode order (match %s, round %d, seat %d): duplicate entry for this round and seat",
+				matchID, row.Round, row.Seat)
 		}
 		seats[row.Seat] = o
 	}
