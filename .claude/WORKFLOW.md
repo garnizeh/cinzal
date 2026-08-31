@@ -173,15 +173,6 @@ A task that cannot cite a spec anchor **is a decision** — file it as one rathe
 than inventing the requirement. A document containing a merely *wrong sentence*
 is neither: it is a `docs-change`, because there is nothing to weigh.
 
-**Locating what already exists:** the repo's indexed call graph
-(`codebase-memory-mcp`, project `home-userone-Code-github-garnizeh-cinzal`)
-answers "what governs this" and "what already calls this" in one query —
-`search_graph` to find a symbol, `trace_path` for its callers/callees,
-`get_architecture` for orientation — where grep or a spawned `Explore` agent
-would need several. Run `check_index_coverage` on any path a brief leans on
-before treating a negative or exhaustive claim from the graph as settled;
-partial/skipped/stale coverage falls back to grep on the reported range.
-
 ---
 
 ## Stage 2 — Execute
@@ -200,15 +191,8 @@ Whatever the kind, four constraints hold:
 4. **The documents change first.** A rule or architectural change lands in the
    GDD or the RFC with a changelog entry before it lands in code.
 
-**Before editing:** `trace_path` (both directions) on anything about to change
-signature or behavior — a caller outside the plan's file list is scope creep
-about to happen, not after. `get_code_snippet` for the exact current source of
-a symbol beats re-reading a whole file to change one function.
-
 **Gate to Verify:** the diff is complete for the plan's scope, probe edits are
-reverted, and nothing beyond the issue's scope crept in — `detect_changes`
-maps the actual diff to affected symbols; anything it surfaces outside the
-plan's file list is the scope-creep check made concrete, not a formality.
+reverted, and nothing beyond the issue's scope crept in.
 
 ---
 
@@ -221,17 +205,9 @@ does not apply.
 tool, an empty `go list`, an unreadable config all report failure, never a skip.
 **A gate that passes when it cannot run is worse than no gate.**
 
-- New guarantee → `test-authoring` places it in the right RFC §16.1 layer;
-  `detect_changes` (same graph as Stage 2) names the symbols the diff actually
-  touched, which is what decides which layer is missing coverage.
+- New guarantee → `test-authoring` places it in the right RFC §16.1 layer.
 - Full suite → `gates-run`.
 - `internal/rules/gen` or hot paths → `bench-run` (20% per case, 10% geomean).
-  `query_graph` (Cypher) exposes per-function `transitive_loop_depth`,
-  `linear_scan_in_loop`, and `alloc_in_loop` — a query filtered to
-  `is_test = false` and the touched package names the real hot-path
-  candidates instead of guessing which function earns a benchmark (verified
-  against this repo: `internal/rules.Resolve`, `internal/rules/gen.Generate`,
-  and `internal/rules.NewMatch` top the list at `transitive_loop_depth = 8`).
 
 **A docs-only diff gets no signal from `make check`** — skip it and record what
 you verified instead. The secret scan still runs unconditionally in CI, on
@@ -249,7 +225,7 @@ closed out.
 
 | Skill | Gate before it |
 |---|---|
-| `delivery-review` | Read the whole diff; walk all five standing obligations; ask the fog question in writing — `trace_path`/`detect_changes` confirm the diff's blast radius doesn't reach `render`/`web` before answering it |
+| `delivery-review` | Read the whole diff; walk all five standing obligations; ask the fog question in writing |
 | `pr-publish` | `delivery-review` came back clean — that is the approval to publish, no separate one needed. The body **is** the commit message. `Fixes #<n>` is present, literally |
 | `coderabbit-triage` | Every finding fixed or answered — **including the ones that live only in the review body** — looping fix → verify → push → reply until none remain raised against the head |
 | `merge-closeout` | CodeRabbit's main PR comment reads exactly "No actionable comments were generated in the recent review. 🎉" against the current head. This gate is **checked, not asked for** — meeting it is what runs the merge, same turn, no separate go-ahead |
@@ -316,21 +292,6 @@ skipped check is written down as skipped rather than counted as passed.
   commit is coherent and buildable alone.
 - **Read the changelog before trusting a spec section.** Later entries correct
   earlier ones.
-- **Prefer the indexed graph over `rtk grep`/a spawned `Explore` agent, in any
-  stage** (`codebase-memory` skill/agents, or the `codebase-memory-mcp` tools
-  directly; see `skills/README.md`). This covers both halves of what grep
-  gets asked to do here: `search_graph`/`trace_path`/`detect_changes` for
-  structural questions (who calls X, dead code, blast radius of a diff), and
-  `search_code` for literal/pattern text search — it runs the same grep
-  underneath but returns deduplicated, importance-ranked function hits with
-  call counts instead of raw matched lines, at a fraction of the tokens
-  (verified: `search_code(pattern="func Resolve")` returned 5 ranked hits for
-  ~120 raw matches in a couple hundred tokens). `get_graph_schema` first, then
-  `query_graph` (Cypher), covers what neither of those two can express — see
-  Stage 3's hot-path use below. Grep/`Read` stay the tool for prose the graph
-  doesn't index (GDD/RFC/decision docs — that's Memex's job, per
-  `issue-intake`/`decision-record`) and are the fallback wherever
-  `check_index_coverage` reports a gap on the path in question.
 - **Confirm before actions outside the pipeline's own shape** —
   force-pushing, pushing straight to `main`, deleting any branch other than
   the one this task itself opened and just squash-merged, or
