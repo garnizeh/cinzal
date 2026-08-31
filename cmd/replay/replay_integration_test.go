@@ -169,11 +169,15 @@ func TestExportBundleFromDBEqualsAssembledFromRows(t *testing.T) {
 	if err != nil {
 		t.Fatalf("GetMatch: %v", err)
 	}
+	seats, err := q.ListMatchPlayers(ctx, matchID)
+	if err != nil {
+		t.Fatalf("ListMatchPlayers: %v", err)
+	}
 	rows, err := q.ListOrdersForMatch(ctx, matchID)
 	if err != nil {
 		t.Fatalf("ListOrdersForMatch: %v", err)
 	}
-	want := Bundle{Seed: m.Seed, Config: json.RawMessage(m.Config), OrderLog: make([]BundleOrder, len(rows))}
+	want := Bundle{Seed: m.Seed, Config: json.RawMessage(m.Config), Players: len(seats), OrderLog: make([]BundleOrder, len(rows))}
 	for i, r := range rows {
 		want.OrderLog[i] = BundleOrder{Round: r.Round, Seat: r.Seat, Payload: json.RawMessage(r.Payload)}
 	}
