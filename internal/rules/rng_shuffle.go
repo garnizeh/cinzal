@@ -22,7 +22,7 @@ import (
 // the result past the resolution step that produced it.
 func PartialFisherYates[T any](rng *RNG, purpose Purpose, candidates []T, k int) []T {
 	n := min(k, len(candidates))
-	for i := 0; i < n; i++ {
+	for i := range n {
 		j := i + rng.Next(purpose, len(candidates)-i)
 		candidates[i], candidates[j] = candidates[j], candidates[i]
 	}

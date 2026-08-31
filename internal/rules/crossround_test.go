@@ -278,11 +278,9 @@ func TestCrossRoundContactCooldownOpensOnExactlyLastOfferRoundPlusCooldown(t *te
 
 	for tier, cooldown := range cfg.CooldownByTier {
 		s := MatchState{
-			Round:   10,
+			Round:   game.RoundNumber(5 + cooldown - 1),
 			Players: []Player{{Seat: 0, Infamy: tierFloorInfamy(tier), LastOfferRound: 5}},
 		}
-
-		s.Round = game.RoundNumber(5 + cooldown - 1)
 		if offerDue(s, 0, cfg) {
 			t.Errorf("tier %d: offerDue at round %d = true, want false (cooldown %d has not elapsed)", tier, s.Round, cooldown)
 		}

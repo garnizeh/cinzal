@@ -123,7 +123,7 @@ func TestGeneratedPackageDepsExcludeRules(t *testing.T) {
 		t.Fatalf("go list -deps github.com/garnizeh/cinzal/internal/store: %v\n%s", err, out)
 	}
 
-	for _, line := range strings.Split(strings.TrimSpace(string(out)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(out)), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || !strings.HasPrefix(line, "github.com/garnizeh/cinzal/internal/") {
 			continue

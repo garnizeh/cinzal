@@ -113,7 +113,7 @@ func TestOrderRoundTripArbitrary(t *testing.T) {
 	var sawNonEmptyRoute, sawNonZeroAction, sawNonEmptyItems bool
 
 	const n = 5000
-	for i := 0; i < n; i++ {
+	for i := range n {
 		want := randomOrder(gen)
 
 		b, err := json.Marshal(want)

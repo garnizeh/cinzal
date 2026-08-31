@@ -18,11 +18,11 @@ func TestBuildRoundAnchorsMapsEachGlobalEventKind(t *testing.T) {
 		wantActor *game.SeatID
 		wantTier  int
 	}{
-		{"EventDelivered", game.Event{Kind: game.EventDelivered, Node: 3, Seat: 1, Tier: 2}, seatPtr(1), 2},
-		{"EventPostStaked", game.Event{Kind: game.EventPostStaked, Node: 2, Seat: 0}, seatPtr(0), 0},
-		{"EventLeaseExpired", game.Event{Kind: game.EventLeaseExpired, Node: 2, Seat: 0}, seatPtr(0), 0},
-		{"EventInformants", game.Event{Kind: game.EventInformants, Node: 1, Seat: 1}, seatPtr(1), 0},
-		{"EventInformantRing", game.Event{Kind: game.EventInformantRing, Node: 4, Seat: 0}, seatPtr(0), 0},
+		{"EventDelivered", game.Event{Kind: game.EventDelivered, Node: 3, Seat: 1, Tier: 2}, new(game.SeatID(1)), 2},
+		{"EventPostStaked", game.Event{Kind: game.EventPostStaked, Node: 2, Seat: 0}, new(game.SeatID(0)), 0},
+		{"EventLeaseExpired", game.Event{Kind: game.EventLeaseExpired, Node: 2, Seat: 0}, new(game.SeatID(0)), 0},
+		{"EventInformants", game.Event{Kind: game.EventInformants, Node: 1, Seat: 1}, new(game.SeatID(1)), 0},
+		{"EventInformantRing", game.Event{Kind: game.EventInformantRing, Node: 4, Seat: 0}, new(game.SeatID(0)), 0},
 		{"EventDeadRunnerCrate", game.Event{Kind: game.EventDeadRunnerCrate, Node: 3}, nil, 0},
 		{"EventFenceWindfallAnnounced", game.Event{Kind: game.EventFenceWindfallAnnounced, Node: 2}, nil, 0},
 		{"EventSpilledLoadCrate", game.Event{Kind: game.EventSpilledLoadCrate, Node: 1}, nil, 0},
@@ -73,5 +73,3 @@ func TestBuildRoundAnchorsIgnoresUnlistedKinds(t *testing.T) {
 		t.Errorf("buildRoundAnchors = %+v, want none of these kinds to produce an anchor", anchors)
 	}
 }
-
-func seatPtr(s game.SeatID) *game.SeatID { return &s }

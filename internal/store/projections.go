@@ -4,7 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sort"
+	"slices"
 	"strconv"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -186,7 +186,7 @@ func sortedRounds[V any](m map[game.RoundNumber]V) []game.RoundNumber {
 	for round := range m {
 		rounds = append(rounds, round)
 	}
-	sort.Slice(rounds, func(i, j int) bool { return rounds[i] < rounds[j] })
+	slices.Sort(rounds)
 	return rounds
 }
 

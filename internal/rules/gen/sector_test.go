@@ -76,7 +76,7 @@ func TestNewSectorPairNormalizesOrder(t *testing.T) {
 // tree), sorted ascending, every pair a genuine two-sector pair (never a
 // sector paired with itself), and exactly 5 draws consumed.
 func TestSectorAdjacencyShape(t *testing.T) {
-	for seed := 0; seed < 50; seed++ {
+	for seed := range 50 {
 		rand, count := countingRand(seed)
 		pairs := sectorAdjacency(rand)
 
