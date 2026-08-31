@@ -110,6 +110,8 @@ func rebuildMatch(ctx context.Context, s *store.Store, matchID game.MatchID, inc
 		return 0, fmt.Errorf("match is active; rebuilding it races the round tick — pass --include-active to override")
 	}
 
+	players := len(meta.Seats)
+
 	rows, err := store.New(s.Pool()).ListOrdersForMatch(ctx, matchID)
 	if err != nil {
 		return 0, fmt.Errorf("list orders: %w", err)
@@ -146,7 +148,6 @@ func rebuildMatch(ctx context.Context, s *store.Store, matchID game.MatchID, inc
 			}
 		}
 
-		players := len(meta.Seats)
 		_, events, err = fold.FoldThrough(seed, cfg, players, log, throughRound)
 		if err != nil {
 			return 0, fmt.Errorf("fold: %w", err)
@@ -190,5 +191,51 @@ func rebuildMatch(ctx context.Context, s *store.Store, matchID game.MatchID, inc
 		return 0, fmt.Errorf("rebuild projections: %w", err)
 	}
 
+	if err := s.RebuildLastSeenRounds(ctx, matchID, lastSeenRoundsFromOrders(players, rows)); err != nil {
+		return 0, fmt.Errorf("rebuild last-seen rounds: %w", err)
+	}
+
 	return len(events), nil
+}
+
+// lastSeenRoundsFromOrders computes every seat's match_players.last_seen_round
+// from rows — the third of RFC-001 §7.2's derived projections, rebuilt
+// alongside events/match_summary above (issue #409). RFC §7.2, corrected by
+// D52: "an ordered per-seat fold, ascending over the seat's distinct
+// human-submitted rounds, applying cursor = LEAST(cursor + 1, round − 1)
+// starting from cursor = 0" — the exact per-request expression the live
+// submit transaction (D52, M5) will apply, replayed here once per row
+// instead of once per POST.
+//
+// seats is initialised for every seat 0..players-1 up front, at 0 — not
+// only for seats that appear in rows — so a seat with no human order at all
+// still gets an explicit entry: RebuildLastSeenRounds' own doc comment
+// explains why that has to be written rather than skipped (a stale non-zero
+// value already on the row would otherwise survive untouched).
+//
+// rows must already be ordered by (round, seat) ascending — ListOrdersForMatch's
+// own ORDER BY, the same precondition submittedByRound's construction above
+// relies on — so that a single left-to-right pass visits each seat's own
+// rows in ascending round order without a separate per-seat sort. orders'
+// primary key is (match_id, round, seat), so no round can appear twice for
+// the same seat; "distinct rounds" is automatic, not something this
+// function has to enforce.
+func lastSeenRoundsFromOrders(players int, rows []store.Order) map[game.SeatID]game.RoundNumber {
+	cursors := make(map[game.SeatID]game.RoundNumber, players)
+	for seat := range players {
+		cursors[game.SeatID(seat)] = 0
+	}
+
+	for _, r := range rows {
+		if r.Source != string(store.SourceHuman) {
+			continue
+		}
+		next := cursors[r.Seat] + 1
+		if bound := r.Round - 1; next > bound {
+			next = bound
+		}
+		cursors[r.Seat] = next
+	}
+
+	return cursors
 }

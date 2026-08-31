@@ -259,6 +259,104 @@ func TestRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow(t *testing.T) {
 	}
 }
 
+// queryLastSeenRound reads back one seat's match_players.last_seen_round —
+// TestRunRebuildRecomputesLastSeenRoundAcrossAGap's own oracle read.
+func queryLastSeenRound(t *testing.T, s *store.Store, matchID game.MatchID, seat game.SeatID) int32 {
+	t.Helper()
+	var got int32
+	if err := s.Pool().QueryRow(context.Background(),
+		`SELECT last_seen_round FROM match_players WHERE match_id = $1 AND seat = $2`, matchID, seat,
+	).Scan(&got); err != nil {
+		t.Fatalf("query last_seen_round for seat %d: %v", seat, err)
+	}
+	return got
+}
+
+// TestRunRebuildRecomputesLastSeenRoundAcrossAGap is issue #409's own
+// acceptance criterion end to end: "cmd/replay --rebuild also recomputes
+// match_players.last_seen_round ... over a fixture whose human-submission
+// pattern is not just 'every round' ... so the LEAST clamp and a
+// multi-round backlog are both actually exercised."
+//
+// seedFullReplayMatch's own fixture (testFixture) submits every round as a
+// human order for every seat, which only exercises D52's steady-state
+// formula — cursor = round-1 with no clamp ever engaged. This test starts
+// from that fixture, then overwrites seat 0's rounds 2-4 to source =
+// 'default' (the same technique
+// TestRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow already uses
+// to build a non-uniform source pattern), leaving seat 0 with a genuine
+// 3-round gap in its human submissions while seat 1 stays at steady state —
+// the two expected values below are computed by hand against RFC §7.2's own
+// formula (corrected by D52), independently of lastSeenRoundsFromOrders,
+// the production code under test.
+func TestRunRebuildRecomputesLastSeenRoundAcrossAGap(t *testing.T) {
+	dsn, s := openReplayStore(t)
+	matchID := seedFullReplayMatch(t, s)
+	cfg, _, _, _ := testFixture()
+
+	if _, err := s.Pool().Exec(context.Background(),
+		`UPDATE orders SET source = 'default' WHERE match_id = $1 AND seat = 0 AND round BETWEEN 2 AND 4`,
+		matchID,
+	); err != nil {
+		t.Fatalf("open a 3-round gap in seat 0's human submissions: %v", err)
+	}
+	setMatchStatus(t, s, matchID, "finished")
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--db", dsn, "--match", string(matchID), "--rebuild"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("run(--rebuild) = %d, stderr = %s", code, stderr.String())
+	}
+
+	// Seat 0: human rounds 1, 5, 6, ..., cfg.Rounds (2-4 skipped). Folding
+	// D52's cursor = LEAST(cursor+1, round-1) from 0: round 1 -> 0; round 5
+	// -> min(0+1, 4) = 1; every round after that advances the cursor by
+	// exactly one more, landing cfg.Rounds-5 rounds later. For
+	// cfg.Rounds = 15 that is 1 + (15-5) = 11 — three short of the 14 a
+	// gap-blind rebuild (a bare MAX(round)-1, D16's rejected shortcut) would
+	// produce, matching the gap's own width per D52's own invariant
+	// (round-1-cursor stays constant at 3 once no further round is skipped).
+	wantSeat0 := int32(1 + (cfg.Rounds - 5))
+	if got := queryLastSeenRound(t, s, matchID, 0); got != wantSeat0 {
+		t.Fatalf("seat 0 last_seen_round after --rebuild = %d, want %d", got, wantSeat0)
+	}
+
+	// Seat 1 never had its source touched: human every round, steady state,
+	// cursor = cfg.Rounds - 1.
+	wantSeat1 := int32(cfg.Rounds - 1)
+	if got := queryLastSeenRound(t, s, matchID, 1); got != wantSeat1 {
+		t.Fatalf("seat 1 last_seen_round after --rebuild = %d, want %d", got, wantSeat1)
+	}
+}
+
+// TestRunRebuildOverwritesStaleLastSeenRound is RebuildLastSeenRounds' own
+// doc comment made concrete: unlike events/match_summary, this table is
+// never cleared before being rewritten, so a stale value already on the row
+// (here simulating drift from whatever corrupted it) has to be overwritten
+// explicitly rather than surviving a rebuild that happens to compute the
+// same 0 a fresh row would already have.
+func TestRunRebuildOverwritesStaleLastSeenRound(t *testing.T) {
+	dsn, s := openReplayStore(t)
+	matchID := seedFullReplayMatch(t, s)
+	setMatchStatus(t, s, matchID, "finished")
+
+	const stale = 12345
+	if _, err := s.Pool().Exec(context.Background(),
+		`UPDATE match_players SET last_seen_round = $1 WHERE match_id = $2 AND seat = 0`, stale, matchID,
+	); err != nil {
+		t.Fatalf("corrupt last_seen_round: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	if code := run([]string{"--db", dsn, "--match", string(matchID), "--rebuild"}, &stdout, &stderr); code != 0 {
+		t.Fatalf("run(--rebuild) = %d, stderr = %s", code, stderr.String())
+	}
+
+	cfg, _, _, _ := testFixture()
+	if got, want := queryLastSeenRound(t, s, matchID, 0), int32(cfg.Rounds-1); got != want {
+		t.Fatalf("seat 0 last_seen_round after --rebuild = %d, want %d (the stale %d value must not survive)", got, want, stale)
+	}
+}
+
 // TestRunRebuildMatchWithEmptyOrderLogSucceeds is a regression test for a
 // CodeRabbit review finding on this PR: rebuildMatch called
 // fold.FoldThrough unconditionally, with throughRound left at its zero
