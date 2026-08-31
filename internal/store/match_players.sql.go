@@ -54,6 +54,14 @@ type CreateMatchPlayerParams struct {
 // must take it as a parameter or the INSERT fails the NOT NULL constraint —
 // the hash itself is computed by the M5 caller (sha256 of 32 crypto/rand
 // bytes, per D19), never by this query.
+//
+// UpdateLastSeenRound is cmd/replay --rebuild's own write (issue #409, RFC
+// §7.2's third derived projection alongside events/match_summary), not the
+// M5 live-submission path D16/D52 describe: that path advances the cursor
+// by exactly one round, gated on a submission being a seat's first for that
+// round; this one overwrites it outright with a value already fully
+// computed by an ordered per-seat fold over the match's whole order log
+// (internal/store.RebuildLastSeenRounds' own caller, cmd/replay/rebuild.go).
 func (q *Queries) CreateMatchPlayer(ctx context.Context, arg CreateMatchPlayerParams) (MatchPlayer, error) {
 	row := q.db.QueryRow(ctx, createMatchPlayer,
 		arg.MatchID,
@@ -123,4 +131,21 @@ func (q *Queries) ListMatchPlayers(ctx context.Context, matchID game.MatchID) ([
 		return nil, err
 	}
 	return items, nil
+}
+
+const updateLastSeenRound = `-- name: UpdateLastSeenRound :exec
+UPDATE match_players
+SET last_seen_round = $3
+WHERE match_id = $1 AND seat = $2
+`
+
+type UpdateLastSeenRoundParams struct {
+	MatchID       game.MatchID
+	Seat          game.SeatID
+	LastSeenRound int32
+}
+
+func (q *Queries) UpdateLastSeenRound(ctx context.Context, arg UpdateLastSeenRoundParams) error {
+	_, err := q.db.Exec(ctx, updateLastSeenRound, arg.MatchID, arg.Seat, arg.LastSeenRound)
+	return err
 }

@@ -51,23 +51,28 @@
 // than always cfg.Rounds — an active match rebuilt with --include-active
 // has orders only for the rounds it has actually played, and fold.Fold's
 // own cfg.Rounds bound would reject that log as missing every later round.
-// RFC-001 §7.2: "there is a cmd/replay --rebuild that regenerates them,"
-// and, per the issue's own title, both of these two projections, not a
-// third: match_players.
-// last_seen_round is a derived projection too (RFC §7.2), but its own
-// rebuild is out of this issue's scope: the roadmap's own M3 deliverable
-// line names it, but neither #323 nor its exit demonstration (#330) does,
-// and no other M3 issue claims it either — a gap between the roadmap's
-// prose and the issue breakdown, filed separately as #409 rather than
-// invented here.
+// RFC-001 §7.2: "there is a cmd/replay --rebuild that regenerates them" —
+// and, since issue #409, all three of RFC §7.2's named derived projections,
+// including match_players.last_seen_round: #323 and its exit demonstration
+// (#330) only ever built the first two, a gap between the roadmap's own M3
+// deliverable line and the issue breakdown that #409 closes.
+// last_seen_round's own rebuild is the ordered per-seat fold RFC §7.2
+// states, corrected by D52 — ascending over each seat's distinct
+// human-submitted rounds, cursor = LEAST(cursor+1, round-1) from cursor = 0
+// — computed fresh from the same order log this mode already reads, not a
+// bare MAX(round) aggregate (D16's rejected shortcut).
 //
-// The rebuild is one transaction per match (store.RebuildProjections):
-// delete both tables, write the fresh content, commit — a failure at any
-// point leaves the match's original rows untouched, never a half-cleared
-// projection. It writes nothing else: no outbox row, no orders row, no
-// matches row — the fold it runs is the same null-sink fold as every other
-// mode here (RFC §7.4), so a --rebuild over every finished match, ever, can
-// never re-send a single historical notification.
+// The events/match_summary rebuild is one transaction per match
+// (store.RebuildProjections): delete both tables, write the fresh content,
+// commit — a failure at any point leaves the match's original rows
+// untouched, never a half-cleared projection. last_seen_round's rebuild
+// (store.RebuildLastSeenRounds) is a second, separate transaction per
+// match: it overwrites match_players row by row rather than deleting first,
+// so it carries no delete-then-rewrite race to guard against in the same
+// way. Neither rebuild writes anything else: no outbox row, no orders row,
+// no matches row — the fold they run is the same null-sink fold as every
+// other mode here (RFC §7.4), so a --rebuild over every finished match,
+// ever, can never re-send a single historical notification.
 //
 // --all is restricted to matches whose status is "finished" unless
 // --include-active is also given, which additionally allows "active"

@@ -10,14 +10,18 @@ import (
 	"github.com/garnizeh/cinzal/internal/game"
 )
 
-// This file is issue #321: the writers for the two derived projections
+// This file is issue #321: the writers for the derived projections
 // (RFC-001 §7.1-7.3) and the discipline that keeps them derived — "these are
 // caches with no invalidation problem, because they are never read as
 // truth." WriteEvents and UpsertSummary are the round tick's own write path
 // (M4, immediately after Resolve() returns); ClearProjections and
-// RebuildProjections (issue #323) are cmd/replay --rebuild's own two steps —
-// clearing both tables for one match, and atomically replacing them with a
-// fresh fold's own output.
+// RebuildProjections (issue #323) are cmd/replay --rebuild's own steps for
+// the events/match_summary pair — clearing both tables for one match, and
+// atomically replacing them with a fresh fold's own output.
+// RebuildLastSeenRounds (issue #409) is --rebuild's third projection write,
+// for match_players.last_seen_round — RFC §7.2 names it as a derived
+// projection alongside the other two, but #323 and its exit demonstration
+// (#330) never actually built its rebuild, a gap #409 closes.
 //
 // Nothing in this file reads events or match_summary — see
 // projections_test.go's TestProjectionReadsAreAllowlisted for the source-
@@ -244,6 +248,68 @@ func (s *Store) RebuildProjections(ctx context.Context, matchID game.MatchID, ev
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("store: rebuild projections (match %s): commit: %w", matchID, err)
+	}
+	return nil
+}
+
+// sortedSeats returns m's keys in ascending order — sortedRounds' own
+// twin for a map keyed by game.SeatID instead of game.RoundNumber, kept
+// separate rather than generalised over both key types for the same reason
+// sortedRounds itself isn't shared with any other key type: RFC-001 §6.3's
+// no-map-range-order discipline applies here just as much as it does to
+// RebuildProjections' two write loops, and a bare generic constraint over
+// "any ordered key" would obscure which concrete key type each caller
+// actually has in hand.
+func sortedSeats[V any](m map[game.SeatID]V) []game.SeatID {
+	seats := make([]game.SeatID, 0, len(m))
+	for seat := range m {
+		seats = append(seats, seat)
+	}
+	slices.Sort(seats)
+	return seats
+}
+
+// RebuildLastSeenRounds overwrites match_players.last_seen_round for every
+// seat named in bySeat — cmd/replay --rebuild's third derived-projection
+// write (issue #409, RFC §7.2: "last_seen_round is reconstructible as an
+// ordered per-seat fold ... corrected by D52"), alongside RebuildProjections'
+// events/match_summary pair above.
+//
+// bySeat is the caller's already-computed cursor for every seat in the
+// match (cmd/replay/rebuild.go's own ordered fold over the order log's
+// distinct human-submitted rounds per seat, replaying D52's live-update
+// expression — cursor = LEAST(cursor+1, round-1) from cursor = 0 — once per
+// row instead of once per request). A seat with no human orders at all
+// still belongs in bySeat with a value of 0: that has to be written
+// explicitly, since a stale non-zero value already on the row (from before
+// whatever corrupted or truncated the log) would otherwise survive a
+// rebuild untouched — unlike events/match_summary, this table is never
+// cleared first, only overwritten row by row.
+//
+// One transaction covers every seat in bySeat, so a match with several
+// seats never ends up with some seats' cursors rebuilt and others left at a
+// stale value after a partial failure partway through the match.
+func (s *Store) RebuildLastSeenRounds(ctx context.Context, matchID game.MatchID, bySeat map[game.SeatID]game.RoundNumber) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: rebuild last-seen rounds (match %s): begin transaction: %w", matchID, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := New(tx)
+
+	for _, seat := range sortedSeats(bySeat) {
+		if err := q.UpdateLastSeenRound(ctx, UpdateLastSeenRoundParams{
+			MatchID:       matchID,
+			Seat:          seat,
+			LastSeenRound: int32(bySeat[seat]),
+		}); err != nil {
+			return fmt.Errorf("store: rebuild last-seen rounds (match %s, seat %d): %w", matchID, seat, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("store: rebuild last-seen rounds (match %s): commit: %w", matchID, err)
 	}
 	return nil
 }
