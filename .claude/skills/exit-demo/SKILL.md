@@ -17,9 +17,7 @@ never tested against what they exist to stop.
 
 ## 1. Quote the criterion, exactly
 
-From the roadmap's milestone section, verbatim — locate it with the **Memex
-MCP** rather than manually paging through the roadmap document; fall back to
-`grep`/`Read` only if Memex is unavailable. Then classify it:
+From the roadmap's milestone section, verbatim. Then classify it:
 
 | Kind | Means | Passing looks like |
 |---|---|---|
