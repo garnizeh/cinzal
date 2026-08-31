@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strconv"
 
 	"github.com/garnizeh/cinzal/internal/game"
@@ -13,9 +14,10 @@ import (
 // (RFC-001 §7.1-7.3) and the discipline that keeps them derived — "these are
 // caches with no invalidation problem, because they are never read as
 // truth." WriteEvents and UpsertSummary are the round tick's own write path
-// (M4, immediately after Resolve() returns); ClearProjections is
-// cmd/replay --rebuild's first step (M4), clearing both tables for one
-// match before a fresh fold regenerates them identically.
+// (M4, immediately after Resolve() returns); ClearProjections and
+// RebuildProjections (issue #323) are cmd/replay --rebuild's own two steps —
+// clearing both tables for one match, and atomically replacing them with a
+// fresh fold's own output.
 //
 // Nothing in this file reads events or match_summary — see
 // projections_test.go's TestProjectionReadsAreAllowlisted for the source-
@@ -51,6 +53,15 @@ import (
 // frozen string table specifically because orders.payload has no such
 // rebuild to fall back on.
 func (s *Store) WriteEvents(ctx context.Context, matchID game.MatchID, round game.RoundNumber, events []game.Event) error {
+	return writeEventsTx(ctx, New(s.pool), matchID, round, events)
+}
+
+// writeEventsTx is WriteEvents' own body, parameterised over the Querier it
+// writes through — a *Queries built from s.pool for the standalone call
+// above (the tick's own write path), or one built from a shared *pgx.Tx for
+// RebuildProjections below, so a rebuild's delete-then-rewrite is one
+// transaction rather than one per helper call.
+func writeEventsTx(ctx context.Context, q *Queries, matchID game.MatchID, round game.RoundNumber, events []game.Event) error {
 	if len(events) == 0 {
 		return nil
 	}
@@ -74,7 +85,7 @@ func (s *Store) WriteEvents(ctx context.Context, matchID game.MatchID, round gam
 	// pgx.BatchResults itself once the callback loop finishes; nothing here
 	// closes it again.
 	var firstErr error
-	New(s.pool).InsertEventsBatch(ctx, params).Exec(func(i int, err error) {
+	q.InsertEventsBatch(ctx, params).Exec(func(i int, err error) {
 		if err != nil && firstErr == nil {
 			firstErr = fmt.Errorf("store: write events (match %s, round %d, seq %d): %w", matchID, round, i, err)
 		}
@@ -92,7 +103,13 @@ func (s *Store) WriteEvents(ctx context.Context, matchID game.MatchID, round gam
 // inserted, not the row already on disk, so every call — insert or
 // conflict — gets a fresh timestamp.
 func (s *Store) UpsertSummary(ctx context.Context, matchID game.MatchID, round game.RoundNumber, submitted []game.SeatID) error {
-	_, err := New(s.pool).UpsertMatchSummary(ctx, UpsertMatchSummaryParams{
+	return upsertSummaryTx(ctx, New(s.pool), matchID, round, submitted)
+}
+
+// upsertSummaryTx is UpsertSummary's own body, parameterised over the
+// Querier it writes through — see writeEventsTx's own comment for why.
+func upsertSummaryTx(ctx context.Context, q *Queries, matchID game.MatchID, round game.RoundNumber, submitted []game.SeatID) error {
+	_, err := q.UpsertMatchSummary(ctx, UpsertMatchSummaryParams{
 		MatchID:        matchID,
 		Round:          round,
 		SubmittedSeats: submitted,
@@ -121,16 +138,112 @@ func (s *Store) ClearProjections(ctx context.Context, matchID game.MatchID) erro
 	// the transaction is already resolved either way.
 	defer func() { _ = tx.Rollback(ctx) }()
 
-	q := New(tx)
-	if err := q.DeleteEventsByMatch(ctx, matchID); err != nil {
-		return fmt.Errorf("store: clear projections (match %s): delete events: %w", matchID, err)
-	}
-	if err := q.DeleteMatchSummaryByMatch(ctx, matchID); err != nil {
-		return fmt.Errorf("store: clear projections (match %s): delete match_summary: %w", matchID, err)
+	if err := deleteProjectionsTx(ctx, New(tx), matchID); err != nil {
+		return fmt.Errorf("store: clear projections (match %s): %w", matchID, err)
 	}
 
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("store: clear projections (match %s): commit: %w", matchID, err)
+	}
+	return nil
+}
+
+// deleteProjectionsTx is ClearProjections' own two deletes, parameterised
+// over the Querier they run through — see writeEventsTx's own comment for
+// why. RebuildProjections below is the second caller: its own delete phase,
+// sharing q with the writes that follow inside the same transaction, rather
+// than ClearProjections' own separately-committed one.
+func deleteProjectionsTx(ctx context.Context, q *Queries, matchID game.MatchID) error {
+	if err := q.DeleteEventsByMatch(ctx, matchID); err != nil {
+		return fmt.Errorf("delete events: %w", err)
+	}
+	if err := q.DeleteMatchSummaryByMatch(ctx, matchID); err != nil {
+		return fmt.Errorf("delete match_summary: %w", err)
+	}
+	return nil
+}
+
+// afterRebuildProjectionsDelete is a seam issue #323's own atomicity
+// acceptance criterion needs: "an injected failure after the delete leaves
+// the original rows in place." Neither events nor match_summary carries any
+// constraint a caller-supplied value could naturally violate at insert time
+// (unlike, say, CreateMatch's seat-FK violation, matches.go's own
+// TestCreateMatchFailurePartWayLeavesNoMatch) — matchID is already known
+// to exist by the time RebuildProjections runs, and neither table has a
+// CHECK narrower than "not null." A test overrides this var to cancel the
+// transaction's context at exactly this point, which pgx surfaces as a real
+// error on the very next statement; production code never sets it, so it is
+// a no-op call on every real run.
+var afterRebuildProjectionsDelete = func() {}
+
+// sortedRounds returns m's keys in ascending order — collected then sorted
+// rather than ranged directly (RFC-001 §6.3: no map-range order). Shared by
+// RebuildProjections' own two write loops below, which need the identical
+// collect-then-sort shape for two differently-typed maps keyed by the same
+// game.RoundNumber.
+func sortedRounds[V any](m map[game.RoundNumber]V) []game.RoundNumber {
+	rounds := make([]game.RoundNumber, 0, len(m))
+	for round := range m {
+		rounds = append(rounds, round)
+	}
+	sort.Slice(rounds, func(i, j int) bool { return rounds[i] < rounds[j] })
+	return rounds
+}
+
+// RebuildProjections atomically replaces matchID's events and match_summary
+// content with eventsByRound/submittedByRound — cmd/replay --rebuild's own
+// write (issue #323), and the only place besides the round tick (M4) that
+// ever writes either table. One transaction: DELETE both tables, then
+// INSERT/UPSERT the fresh content, then COMMIT. A failure at any point —
+// including between the deletes and the first write — rolls back the whole
+// thing via the deferred Rollback, leaving matchID's original projection
+// rows exactly as they were (never a half-cleared, half-rewritten state).
+//
+// eventsByRound and submittedByRound are already grouped by round by the
+// caller (cmd/replay, from a fresh fold.Fold and the order log's own
+// `source` column) — this function only decides the order rounds are
+// written in, ascending, collected from both maps' keys rather than ranged
+// directly (RFC-001 §6.3: no map-range order) — not because the two
+// tables' final content depends on write order (a byte-identical dump reads
+// them back with an explicit ORDER BY, so it would not), but because this
+// codebase treats map-range order as forbidden as a matter of discipline,
+// not only where a specific bug would follow from it.
+//
+// A round present in one map and absent from the other is not an error
+// here: a round with no events (nothing happened worth recording) still
+// gets its match_summary row, and — though fold.Fold's own "no events"
+// check already rules this out in practice — a round with events but no
+// human/bot submissions (rare: it would mean autopilot filled every seat)
+// still gets its events written with an empty submitted_seats row.
+func (s *Store) RebuildProjections(ctx context.Context, matchID game.MatchID, eventsByRound map[game.RoundNumber][]game.Event, submittedByRound map[game.RoundNumber][]game.SeatID) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("store: rebuild projections (match %s): begin transaction: %w", matchID, err)
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+
+	q := New(tx)
+
+	if err := deleteProjectionsTx(ctx, q, matchID); err != nil {
+		return fmt.Errorf("store: rebuild projections (match %s): %w", matchID, err)
+	}
+
+	afterRebuildProjectionsDelete()
+
+	for _, round := range sortedRounds(eventsByRound) {
+		if err := writeEventsTx(ctx, q, matchID, round, eventsByRound[round]); err != nil {
+			return fmt.Errorf("store: rebuild projections (match %s): %w", matchID, err)
+		}
+	}
+
+	for _, round := range sortedRounds(submittedByRound) {
+		if err := upsertSummaryTx(ctx, q, matchID, round, submittedByRound[round]); err != nil {
+			return fmt.Errorf("store: rebuild projections (match %s): %w", matchID, err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("store: rebuild projections (match %s): commit: %w", matchID, err)
 	}
 	return nil
 }

@@ -3,6 +3,8 @@
 //	replay --db $DATABASE_URL --match <id> [--round N] [--seat N]
 //	replay --bundle match.json [--round N] [--seat N]
 //	replay --db $DATABASE_URL --match <id> --export-bundle match.json
+//	replay --db $DATABASE_URL --match <id> --rebuild [--include-active]
+//	replay --db $DATABASE_URL --all --rebuild [--include-active]
 //
 // It runs the same fold as the server — internal/match/fold.FoldThrough,
 // the exact per-round Resolve loop internal/match's own tick (M4) will use,
@@ -43,7 +45,33 @@
 // early, silently disagreeing with what the live match actually did at
 // round N.
 //
-// --rebuild (issue #323, not yet implemented here) will regenerate the
-// derived events, match_summary and match_players.last_seen_round
-// projections (RFC-001 §7.2, D16).
+// --rebuild (issue #323) deletes and regenerates events and match_summary
+// for --match (or every eligible match, with --all) from a fresh fold of
+// the match's own order log, through the log's own highest round rather
+// than always cfg.Rounds — an active match rebuilt with --include-active
+// has orders only for the rounds it has actually played, and fold.Fold's
+// own cfg.Rounds bound would reject that log as missing every later round.
+// RFC-001 §7.2: "there is a cmd/replay --rebuild that regenerates them,"
+// and, per the issue's own title, both of these two projections, not a
+// third: match_players.
+// last_seen_round is a derived projection too (RFC §7.2), but its own
+// rebuild is out of this issue's scope: the roadmap's own M3 deliverable
+// line names it, but neither #323 nor its exit demonstration (#330) does,
+// and no other M3 issue claims it either — a gap between the roadmap's
+// prose and the issue breakdown, filed separately as #409 rather than
+// invented here.
+//
+// The rebuild is one transaction per match (store.RebuildProjections):
+// delete both tables, write the fresh content, commit — a failure at any
+// point leaves the match's original rows untouched, never a half-cleared
+// projection. It writes nothing else: no outbox row, no orders row, no
+// matches row — the fold it runs is the same null-sink fold as every other
+// mode here (RFC §7.4), so a --rebuild over every finished match, ever, can
+// never re-send a single historical notification.
+//
+// --all is restricted to matches whose status is "finished" unless
+// --include-active is also given, which additionally allows "active"
+// matches — named or listed by --all, the guard is the same either way,
+// since rebuilding an active match races the round tick regardless of how
+// it was reached (issue #323).
 package main

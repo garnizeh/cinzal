@@ -26,3 +26,19 @@ RETURNING *;
 -- name: GetMatch :one
 SELECT * FROM matches
 WHERE id = $1;
+
+-- ListMatchIDsByStatus is cmd/replay --all's own scope query (issue #323):
+-- "'--all' needs a scope rule... restrict to status='finished' by default
+-- and require an explicit flag to touch an active one." statuses is the
+-- caller's own scope decision — {"finished"} by default, {"finished",
+-- "active"} only with the explicit --include-active flag — passed as one
+-- slice rather than called once per status, so the result is one query and
+-- one globally consistent id order rather than several separately-ordered
+-- result sets concatenated by the caller. Ordered by id — uuidv7 (D56), so
+-- this is also creation order — purely so a --all run's own output is
+-- deterministic across runs, not because any caller depends on it for
+-- correctness.
+-- name: ListMatchIDsByStatus :many
+SELECT id FROM matches
+WHERE status = ANY(@statuses::text[])
+ORDER BY id;

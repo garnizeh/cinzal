@@ -94,3 +94,40 @@ func (q *Queries) GetMatch(ctx context.Context, id game.MatchID) (Match, error) 
 	)
 	return i, err
 }
+
+const listMatchIDsByStatus = `-- name: ListMatchIDsByStatus :many
+SELECT id FROM matches
+WHERE status = ANY($1::text[])
+ORDER BY id
+`
+
+// ListMatchIDsByStatus is cmd/replay --all's own scope query (issue #323):
+// "'--all' needs a scope rule... restrict to status='finished' by default
+// and require an explicit flag to touch an active one." statuses is the
+// caller's own scope decision — {"finished"} by default, {"finished",
+// "active"} only with the explicit --include-active flag — passed as one
+// slice rather than called once per status, so the result is one query and
+// one globally consistent id order rather than several separately-ordered
+// result sets concatenated by the caller. Ordered by id — uuidv7 (D56), so
+// this is also creation order — purely so a --all run's own output is
+// deterministic across runs, not because any caller depends on it for
+// correctness.
+func (q *Queries) ListMatchIDsByStatus(ctx context.Context, statuses []string) ([]game.MatchID, error) {
+	rows, err := q.db.Query(ctx, listMatchIDsByStatus, statuses)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []game.MatchID
+	for rows.Next() {
+		var id game.MatchID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}

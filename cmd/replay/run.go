@@ -28,6 +28,9 @@ func run(args []string, stdout, stderr io.Writer) int {
 	roundFlag := fs.Int("round", 0, "dump state as it stood after this round resolved; defaults to the match's last round")
 	seatFlag := fs.Int("seat", -1, "print this seat's fog-filtered PlayerView instead of the full match state")
 	exportBundleFlag := fs.String("export-bundle", "", "write a replay bundle for --match to this path and exit, instead of dumping state")
+	rebuildFlag := fs.Bool("rebuild", false, "delete and regenerate events/match_summary for --match (or every finished match with --all) from a fresh fold, instead of dumping state; requires --db")
+	allFlag := fs.Bool("all", false, "with --rebuild, rebuild every eligible match instead of one named by --match")
+	includeActiveFlag := fs.Bool("include-active", false, "with --rebuild, also allow rebuilding a match whose status is active (default: refuse — rebuilding an active match races the round tick)")
 
 	if err := fs.Parse(args); err != nil {
 		if errors.Is(err, flag.ErrHelp) {
@@ -37,7 +40,8 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	usingBundle := *bundleFlag != ""
-	usingDB := *dbFlag != "" || *matchFlag != ""
+	usingAll := *allFlag
+	usingDB := *dbFlag != "" || *matchFlag != "" || usingAll
 
 	if usingBundle && usingDB {
 		logLine(stderr, "cmd/replay: --bundle cannot be combined with --db/--match")
@@ -47,8 +51,40 @@ func run(args []string, stdout, stderr io.Writer) int {
 		logLine(stderr, "cmd/replay: either --bundle, or both --db and --match, are required")
 		return 1
 	}
-	if usingDB && (*dbFlag == "" || *matchFlag == "") {
-		logLine(stderr, "cmd/replay: --db and --match must both be given")
+	if usingDB && *dbFlag == "" {
+		logLine(stderr, "cmd/replay: --db is required")
+		return 1
+	}
+	if usingDB && !usingAll && *matchFlag == "" {
+		logLine(stderr, "cmd/replay: --match is required unless --all is given")
+		return 1
+	}
+	if usingAll && *matchFlag != "" {
+		logLine(stderr, "cmd/replay: --all cannot be combined with --match")
+		return 1
+	}
+	if usingAll && !*rebuildFlag {
+		logLine(stderr, "cmd/replay: --all requires --rebuild")
+		return 1
+	}
+	if *includeActiveFlag && !*rebuildFlag {
+		logLine(stderr, "cmd/replay: --include-active only applies with --rebuild")
+		return 1
+	}
+	if *rebuildFlag && usingBundle {
+		logLine(stderr, "cmd/replay: --rebuild cannot be used with --bundle (rebuild writes to the database named by --db)")
+		return 1
+	}
+	if *rebuildFlag && *exportBundleFlag != "" {
+		logLine(stderr, "cmd/replay: --rebuild cannot be combined with --export-bundle")
+		return 1
+	}
+	if *rebuildFlag && *seatFlag != -1 {
+		logLine(stderr, "cmd/replay: --seat has no effect with --rebuild")
+		return 1
+	}
+	if *rebuildFlag && *roundFlag != 0 {
+		logLine(stderr, "cmd/replay: --round has no effect with --rebuild — a rebuild always regenerates the whole match")
 		return 1
 	}
 	if *exportBundleFlag != "" && !usingDB {
@@ -61,6 +97,20 @@ func run(args []string, stdout, stderr io.Writer) int {
 	}
 
 	ctx := context.Background()
+
+	if *rebuildFlag {
+		s, err := store.Open(ctx, store.Config{DSN: *dbFlag})
+		if err != nil {
+			logLine(stderr, "cmd/replay: connect: %v", err)
+			return 1
+		}
+		defer s.Close()
+
+		if usingAll {
+			return rebuildAll(ctx, s, *includeActiveFlag, stdout, stderr)
+		}
+		return rebuildOne(ctx, s, game.MatchID(*matchFlag), *includeActiveFlag, stdout, stderr)
+	}
 
 	if usingBundle {
 		seed, cfg, log, players, err := readBundle(*bundleFlag)
