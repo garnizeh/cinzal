@@ -258,3 +258,41 @@ func TestRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow(t *testing.T) {
 		t.Fatalf("submitted_seats for the all-default round = %v, want empty", submitted)
 	}
 }
+
+// TestRunRebuildMatchWithEmptyOrderLogSucceeds is a regression test for a
+// CodeRabbit review finding on this PR: rebuildMatch called
+// fold.FoldThrough unconditionally, with throughRound left at its zero
+// value for an empty order log. FoldThrough's own throughRound < 1 check
+// runs before its empty-log short-circuit (fold.go), so 0 hit "round 0 is
+// invalid" instead of the lobby-match short-circuit its doc comment
+// describes — rebuilding a match with no orders yet always failed. The fix
+// skips the fold entirely for an empty log, since there is nothing to fold.
+func TestRunRebuildMatchWithEmptyOrderLogSucceeds(t *testing.T) {
+	dsn, s := openReplayStore(t)
+	matchID := seedFullReplayMatch(t, s)
+
+	if _, err := s.Pool().Exec(context.Background(),
+		`DELETE FROM orders WHERE match_id = $1`, matchID,
+	); err != nil {
+		t.Fatalf("clear order log: %v", err)
+	}
+
+	var stdout, stderr bytes.Buffer
+	code := run([]string{"--db", dsn, "--match", string(matchID), "--rebuild"}, &stdout, &stderr)
+	if code != 0 {
+		t.Fatalf("run(--rebuild) on a match with an empty order log = %d, stderr = %s", code, stderr.String())
+	}
+
+	if n := countEventRows(t, s, matchID); n != 0 {
+		t.Fatalf("events row count after rebuilding an empty order log = %d, want 0", n)
+	}
+	var summaryRounds int
+	if err := s.Pool().QueryRow(context.Background(),
+		`SELECT count(*) FROM match_summary WHERE match_id = $1`, matchID,
+	).Scan(&summaryRounds); err != nil {
+		t.Fatalf("count match_summary rows: %v", err)
+	}
+	if summaryRounds != 0 {
+		t.Fatalf("match_summary row count after rebuilding an empty order log = %d, want 0", summaryRounds)
+	}
+}

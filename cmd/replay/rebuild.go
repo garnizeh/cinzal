@@ -120,26 +120,37 @@ func rebuildMatch(ctx context.Context, s *store.Store, matchID game.MatchID, inc
 		return 0, fmt.Errorf("decode order log: %w", err)
 	}
 
-	// throughRound is the highest round actually present in the order log,
-	// not cfg.Rounds: a finished match's log covers every round up to
-	// cfg.Rounds and the two coincide, but an active match rebuilt with
-	// --include-active may have orders for only its first few rounds, and
-	// fold.Fold (== FoldThrough at cfg.Rounds) would reject that log as
-	// "missing round N" for every round the match has not played yet.
-	// FoldThrough itself handles an empty log (throughRound left at its
-	// zero value) as the lobby case, before ever checking this bound — see
-	// its own doc comment (internal/match/fold/fold.go).
-	var throughRound game.RoundNumber
-	for round := range log {
-		if round > throughRound {
-			throughRound = round
+	// A match with no orders yet (a lobby match, or one whose orders were
+	// all removed) has nothing to fold: an empty log's []game.Event and
+	// map[RoundNumber][]SeatID are both simply empty, and RebuildProjections
+	// on two empty maps is exactly the delete-only rebuild that case needs.
+	// This is handled here rather than by passing throughRound=0 into
+	// FoldThrough: FoldThrough's own throughRound < 1 check (fold.go) runs
+	// before its empty-log short-circuit, so 0 hits "round 0 is invalid"
+	// rather than that short-circuit, despite the function's own doc
+	// comment describing 0 as the empty-log case "handled separately,
+	// above the loop" — a CodeRabbit review finding on this PR.
+	var events []game.Event
+	if len(log) > 0 {
+		// throughRound is the highest round actually present in the order
+		// log, not cfg.Rounds: a finished match's log covers every round up
+		// to cfg.Rounds and the two coincide, but an active match rebuilt
+		// with --include-active may have orders for only its first few
+		// rounds, and fold.Fold (== FoldThrough at cfg.Rounds) would reject
+		// that log as "missing round N" for every round the match has not
+		// played yet.
+		var throughRound game.RoundNumber
+		for round := range log {
+			if round > throughRound {
+				throughRound = round
+			}
 		}
-	}
 
-	players := len(meta.Seats)
-	_, events, err := fold.FoldThrough(seed, cfg, players, log, throughRound)
-	if err != nil {
-		return 0, fmt.Errorf("fold: %w", err)
+		players := len(meta.Seats)
+		_, events, err = fold.FoldThrough(seed, cfg, players, log, throughRound)
+		if err != nil {
+			return 0, fmt.Errorf("fold: %w", err)
+		}
 	}
 
 	// eventsByRound groups Fold's own flat, round-major []Event by round —
