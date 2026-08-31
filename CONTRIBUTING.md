@@ -217,7 +217,7 @@ Two tools, not one, because neither alone is sufficient. `govulncheck ./...`'s c
 
 ### The benchmark regression gate
 
-**`bench-compare` is also required**, but shaped differently from the seven above: it only runs on a pull request that touches `internal/rules/gen`, this workflow, its own path-gate action (`.github/actions/changed-paths`), `check-bench-regression.sh`, or the `Makefile` — most pull requests skip it rather than pass it. When it runs, it benchmarks the base commit and this pull request's merge commit back to back on the same runner and fails for real past a 20%-per-case or 10%-geomean threshold (`scripts/check-bench-regression.sh`).
+**`bench-compare` is also required**, but shaped differently from the eight above: it only runs on a pull request that touches `internal/rules/gen`, this workflow, its own path-gate action (`.github/actions/changed-paths`), `check-bench-regression.sh`, or the `Makefile` — most pull requests skip it rather than pass it. When it runs, it benchmarks the base commit and this pull request's merge commit back to back on the same runner and fails for real past a 20%-per-case or 10%-geomean threshold (`scripts/check-bench-regression.sh`).
 
 It started advisory (issue #113) because two data points could not characterise real CI-runner noise against those thresholds, and was promoted to required in [#127](https://github.com/garnizeh/cinzal/issues/127) once seven real same-runner comparisons had landed with zero false positives — worst single-case drift +6.27%, worst geomean 0.93%, both comfortably inside the thresholds.
 
