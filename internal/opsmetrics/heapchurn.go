@@ -52,7 +52,7 @@ func (s *FoldStats) StartHeapChurnSampler(interval time.Duration) (stop func()) 
 	ticker := time.NewTicker(interval)
 	stopCh := make(chan struct{})
 	doneCh := make(chan struct{})
-	var stopped int32
+	var stopped atomic.Int32
 
 	go func() {
 		defer close(doneCh)
@@ -69,7 +69,7 @@ func (s *FoldStats) StartHeapChurnSampler(interval time.Duration) (stop func()) 
 	}()
 
 	return func() {
-		if atomic.CompareAndSwapInt32(&stopped, 0, 1) {
+		if stopped.CompareAndSwap(0, 1) {
 			close(stopCh)
 			<-doneCh // block until the final sample above has been added
 		}

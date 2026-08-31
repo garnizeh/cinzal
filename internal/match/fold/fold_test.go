@@ -29,44 +29,44 @@ func TestFoldSignatureHasNoEffects(t *testing.T) {
 	}
 
 	// Validate exact parameter types, not just Kind
-	expectedSeed := reflect.TypeOf([32]byte{})
+	expectedSeed := reflect.TypeFor[[32]byte]()
 	param0 := foldFunc.In(0)
 	if param0 != expectedSeed {
 		t.Errorf("parameter 0 type = %v, want [32]byte (%v)", param0, expectedSeed)
 	}
 
-	expectedConfig := reflect.TypeOf(game.Config{})
+	expectedConfig := reflect.TypeFor[game.Config]()
 	param1 := foldFunc.In(1)
 	if param1 != expectedConfig {
 		t.Errorf("parameter 1 type = %v, want game.Config (%v)", param1, expectedConfig)
 	}
 
-	expectedPlayers := reflect.TypeOf(int(0))
+	expectedPlayers := reflect.TypeFor[int]()
 	param2 := foldFunc.In(2)
 	if param2 != expectedPlayers {
 		t.Errorf("parameter 2 type = %v, want int (%v)", param2, expectedPlayers)
 	}
 
-	expectedLog := reflect.TypeOf(rules.OrderLog{})
+	expectedLog := reflect.TypeFor[rules.OrderLog]()
 	param3 := foldFunc.In(3)
 	if param3 != expectedLog {
 		t.Errorf("parameter 3 type = %v, want rules.OrderLog (%v)", param3, expectedLog)
 	}
 
 	// Validate exact return types
-	expectedState := reflect.TypeOf(rules.MatchState{})
+	expectedState := reflect.TypeFor[rules.MatchState]()
 	retState := foldFunc.Out(0)
 	if retState != expectedState {
 		t.Errorf("return 0 type = %v, want rules.MatchState (%v)", retState, expectedState)
 	}
 
-	expectedEvents := reflect.TypeOf([]game.Event{})
+	expectedEvents := reflect.TypeFor[[]game.Event]()
 	retEvents := foldFunc.Out(1)
 	if retEvents != expectedEvents {
 		t.Errorf("return 1 type = %v, want []game.Event (%v)", retEvents, expectedEvents)
 	}
 
-	expectedError := reflect.TypeOf((*error)(nil)).Elem()
+	expectedError := reflect.TypeFor[error]()
 	retError := foldFunc.Out(2)
 	if retError != expectedError {
 		t.Errorf("return 2 type = %v, want error (%v)", retError, expectedError)
@@ -143,7 +143,7 @@ func TestFoldErrorOnMissingRound(t *testing.T) {
 
 	// Populate with minimal orders
 	for i := 1; i <= 3; i++ {
-		for seat := game.SeatID(0); seat < 2; seat++ {
+		for seat := range game.SeatID(2) {
 			fakeLog[game.RoundNumber(i)][seat] = game.Order{
 				Action: game.ActionOrder{Kind: game.ActionNothing},
 				Stance: game.StanceOrder{Stance: game.StanceNeutral},
@@ -252,7 +252,7 @@ func TestFoldErrorOnMissingSeat(t *testing.T) {
 	validLog := rules.OrderLog{}
 	for round := 1; round <= cfg.Rounds; round++ {
 		validLog[game.RoundNumber(round)] = make(map[game.SeatID]game.Order)
-		for seat := game.SeatID(0); seat < 4; seat++ {
+		for seat := range game.SeatID(4) {
 			validLog[game.RoundNumber(round)][seat] = idleOrder
 		}
 	}

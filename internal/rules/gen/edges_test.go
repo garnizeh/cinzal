@@ -130,7 +130,7 @@ func TestNodeSpanningTreeSingleNodeIsNoOp(t *testing.T) {
 }
 
 func TestNodeSpanningTreeConnectsWithinDegreeCap(t *testing.T) {
-	for seed := 0; seed < 30; seed++ {
+	for seed := range 30 {
 		rand, _ := countingRand(seed)
 		sectors := make([]game.Sector, 8)
 		for i := range sectors {
@@ -178,7 +178,7 @@ func TestLowestDegreeAmongTieBreaksUniformly(t *testing.T) {
 	added := []game.NodeID{0, 1, 2}
 
 	seen := map[game.NodeID]bool{}
-	for seed := 0; seed < 20; seed++ {
+	for seed := range 20 {
 		rand, count := countingRand(seed)
 		got := lowestDegreeAmong(rand, "test", b, added)
 		seen[got] = true
@@ -193,7 +193,7 @@ func TestLowestDegreeAmongTieBreaksUniformly(t *testing.T) {
 	// Once node 0 is bumped above the others, it must never be returned.
 	b.connect(0, 1)
 	b.connect(0, 2)
-	for seed := 0; seed < 20; seed++ {
+	for seed := range 20 {
 		rand, _ := countingRand(seed)
 		if got := lowestDegreeAmong(rand, "test", b, added); got == 0 {
 			t.Fatalf("seed=%d: lowestDegreeAmong returned node 0 (degree %d) over nodes at lower degree", seed, b.degree[0])

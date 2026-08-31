@@ -66,7 +66,7 @@ func hasTrailEntry(trail []game.TrailEntry, kind game.EventKind, node game.NodeI
 
 func TestProjectRow2DeliveryPresentWhenAnchored(t *testing.T) {
 	s := trailTestState(5, 0, 3)
-	s.RoundAnchors = []game.Anchor{{Kind: game.EventDelivered, Round: 5, Node: 3, Actor: seatPtr(0), Tier: 1}}
+	s.RoundAnchors = []game.Anchor{{Kind: game.EventDelivered, Round: 5, Node: 3, Actor: new(game.SeatID(0)), Tier: 1}}
 
 	v := Project(s, 1)
 	a := findAnchor(t, v.Anchors, game.EventDelivered, 3)
@@ -86,7 +86,7 @@ func TestProjectRow2DeliveryAbsentWithoutAnchor(t *testing.T) {
 
 func TestProjectRow3PostStakedPresentWhenAnchored(t *testing.T) {
 	s := trailTestState(5, 0, 3)
-	s.RoundAnchors = []game.Anchor{{Kind: game.EventPostStaked, Round: 5, Node: 2, Actor: seatPtr(1)}}
+	s.RoundAnchors = []game.Anchor{{Kind: game.EventPostStaked, Round: 5, Node: 2, Actor: new(game.SeatID(1))}}
 
 	v := Project(s, 0)
 	if !hasAnchor(v.Anchors, game.EventPostStaked, 2) {
@@ -105,7 +105,7 @@ func TestProjectRow3PostStakedAbsentWithoutAnchor(t *testing.T) {
 
 func TestProjectRow4LeaseExpiredPresentWhenAnchored(t *testing.T) {
 	s := trailTestState(5, 0, 3)
-	s.RoundAnchors = []game.Anchor{{Kind: game.EventLeaseExpired, Round: 5, Node: 2, Actor: seatPtr(1)}}
+	s.RoundAnchors = []game.Anchor{{Kind: game.EventLeaseExpired, Round: 5, Node: 2, Actor: new(game.SeatID(1))}}
 
 	v := Project(s, 0)
 	a := findAnchor(t, v.Anchors, game.EventLeaseExpired, 2)
@@ -125,7 +125,7 @@ func TestProjectRow4LeaseExpiredAbsentWithoutAnchor(t *testing.T) {
 
 func TestProjectRow11InformantsPresentWhenAnchored(t *testing.T) {
 	s := trailTestState(5, 0, 3)
-	s.RoundAnchors = []game.Anchor{{Kind: game.EventInformants, Round: 5, Node: 0, Actor: seatPtr(0)}}
+	s.RoundAnchors = []game.Anchor{{Kind: game.EventInformants, Round: 5, Node: 0, Actor: new(game.SeatID(0))}}
 
 	v := Project(s, 1)
 	if !hasAnchor(v.Anchors, game.EventInformants, 0) {
@@ -188,7 +188,7 @@ func TestProjectRow14FenceWindfallAbsentWithoutAnchor(t *testing.T) {
 // itself producing this Anchor.
 func TestProjectRow15InformantRingPresentWhenAnchored(t *testing.T) {
 	s := trailTestState(5, 0, 3)
-	s.RoundAnchors = []game.Anchor{{Kind: game.EventInformantRing, Round: 5, Node: 4, Actor: seatPtr(0)}}
+	s.RoundAnchors = []game.Anchor{{Kind: game.EventInformantRing, Round: 5, Node: 4, Actor: new(game.SeatID(0))}}
 
 	v := Project(s, 1)
 	a := findAnchor(t, v.Anchors, game.EventInformantRing, 4)
@@ -344,7 +344,7 @@ func TestProjectHeadlineSilentUnderSuppressEvents(t *testing.T) {
 
 func TestProjectRoundAnchorsIdenticalAcrossEverySeat(t *testing.T) {
 	s := trailTestState(5, 0, 3)
-	s.RoundAnchors = []game.Anchor{{Kind: game.EventDelivered, Round: 5, Node: 3, Actor: seatPtr(0), Tier: 1}}
+	s.RoundAnchors = []game.Anchor{{Kind: game.EventDelivered, Round: 5, Node: 3, Actor: new(game.SeatID(0)), Tier: 1}}
 
 	v0 := Project(s, 0)
 	v1 := Project(s, 1)
@@ -467,12 +467,12 @@ func TestProjectRow10LegendAbsentAtInfamyEight(t *testing.T) {
 // --- Rows 1, 7, 8, 12: sight-gated, sourced from the seat's own Archive.Trail ---
 
 func stampedTrail(round game.RoundNumber, kind game.EventKind, node game.NodeID, actor *game.SeatID) game.StampedTrailEntry {
-	return game.StampedTrailEntry{TrailEntry: game.TrailEntry{Kind: kind, Node: node, Actor: actor}, Round: round}
+	return game.StampedTrailEntry{Kind: kind, Node: node, Actor: actor, Round: round}
 }
 
 func TestProjectRow1CargoTakenPresentThisRound(t *testing.T) {
 	s := trailTestState(5, 0, 3)
-	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, seatPtr(1))}
+	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, new(game.SeatID(1)))}
 
 	v := Project(s, 0)
 	if !hasTrailEntry(v.Trail, game.EventCargoTaken, 0) {
@@ -482,7 +482,7 @@ func TestProjectRow1CargoTakenPresentThisRound(t *testing.T) {
 
 func TestProjectRow1CargoTakenAbsentFromPriorRound(t *testing.T) {
 	s := trailTestState(5, 0, 3)
-	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(4, game.EventCargoTaken, 0, seatPtr(1))}
+	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(4, game.EventCargoTaken, 0, new(game.SeatID(1)))}
 
 	v := Project(s, 0)
 	if hasTrailEntry(v.Trail, game.EventCargoTaken, 0) {
@@ -497,8 +497,8 @@ func TestProjectRow7ConfrontationNamesBothParties(t *testing.T) {
 	s := trailTestState(5, 0, 3)
 	target := game.SeatID(1)
 	entry := game.StampedTrailEntry{
-		TrailEntry: game.TrailEntry{Kind: game.EventConfrontation, Node: 0, Actor: seatPtr(0), Target: &target},
-		Round:      5,
+		Kind: game.EventConfrontation, Node: 0, Actor: new(game.SeatID(0)), Target: &target,
+		Round: 5,
 	}
 	s.Players[0].Archive.Trail = []game.StampedTrailEntry{entry}
 
@@ -519,8 +519,8 @@ func TestProjectRow7ConfrontationAbsentFromPriorRound(t *testing.T) {
 	s := trailTestState(5, 0, 3)
 	target := game.SeatID(1)
 	s.Players[0].Archive.Trail = []game.StampedTrailEntry{{
-		TrailEntry: game.TrailEntry{Kind: game.EventConfrontation, Node: 0, Actor: seatPtr(0), Target: &target},
-		Round:      4,
+		Kind: game.EventConfrontation, Node: 0, Actor: new(game.SeatID(0)), Target: &target,
+		Round: 4,
 	}}
 
 	v := Project(s, 0)
@@ -533,8 +533,8 @@ func TestProjectRow8ItemPurchasedPresentThisRound(t *testing.T) {
 	s := trailTestState(5, 0, 3)
 	item := game.ItemID(1)
 	s.Players[0].Archive.Trail = []game.StampedTrailEntry{{
-		TrailEntry: game.TrailEntry{Kind: game.EventItemPurchased, Node: 0, Actor: seatPtr(0), Item: &item},
-		Round:      5,
+		Kind: game.EventItemPurchased, Node: 0, Actor: new(game.SeatID(0)), Item: &item,
+		Round: 5,
 	}}
 
 	v := Project(s, 0)
@@ -547,8 +547,8 @@ func TestProjectRow8ItemPurchasedAbsentFromPriorRound(t *testing.T) {
 	s := trailTestState(5, 0, 3)
 	item := game.ItemID(1)
 	s.Players[0].Archive.Trail = []game.StampedTrailEntry{{
-		TrailEntry: game.TrailEntry{Kind: game.EventItemPurchased, Node: 0, Actor: seatPtr(0), Item: &item},
-		Round:      4,
+		Kind: game.EventItemPurchased, Node: 0, Actor: new(game.SeatID(0)), Item: &item,
+		Round: 4,
 	}}
 
 	v := Project(s, 0)
@@ -634,7 +634,7 @@ func TestProjectKnownTierPickupNamesWithoutRevealingPosition(t *testing.T) {
 	s := trailTestState(5, 0, 3)
 	s.Players[0].Infamy = 4
 	fogTestSight(&s, 1, game.FogInSight, 0)
-	s.Players[1].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, seatPtr(0))}
+	s.Players[1].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, new(game.SeatID(0)))}
 
 	v := Project(s, 1)
 
@@ -722,7 +722,7 @@ func TestProjectPendingOfferNilWhenNoOfferPending(t *testing.T) {
 
 func TestProjectArchiveIsolatedPerSeat(t *testing.T) {
 	s := trailTestState(5, 0, 3)
-	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, seatPtr(0))}
+	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, new(game.SeatID(0)))}
 	s.Players[0].Archive.Sight = map[game.NodeID]game.RoundSet{0: game.RoundSet(0).With(5)}
 	s.Players[1].Archive.Trail = nil
 	s.Players[1].Archive.Sight = nil
@@ -979,7 +979,7 @@ func TestProjectArchiveByteLevelIsolation(t *testing.T) {
 	s := trailTestState(6, 0, 3)
 	marker := game.ItemID(231) // distinctive; unlikely to collide with any other field's value in this fixture
 	s.Players[0].Archive.Trail = []game.StampedTrailEntry{
-		{TrailEntry: game.TrailEntry{Kind: game.EventItemPurchased, Node: 0, Actor: seatPtr(0), Item: &marker}, Round: 6},
+		{Kind: game.EventItemPurchased, Node: 0, Actor: new(game.SeatID(0)), Item: &marker, Round: 6},
 	}
 	s.Players[0].Archive.Sight = map[game.NodeID]game.RoundSet{0: game.RoundSet(0).With(6)}
 	s.Players[1].Archive.Trail = nil
@@ -1002,7 +1002,7 @@ func TestProjectDoesNotAliasMatchState(t *testing.T) {
 	fogTestSight(&s, 0, game.FogKnown, 1)
 	s.Players[0].Items = []game.ItemID{1, 2}
 	s.Players[0].PendingOffer = []ContractOffer{{Origin: 0, Destination: 2, Tier: 1}}
-	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, seatPtr(0))}
+	s.Players[0].Archive.Trail = []game.StampedTrailEntry{stampedTrail(5, game.EventCargoTaken, 0, new(game.SeatID(0)))}
 	before, err := json.Marshal(s)
 	if err != nil {
 		t.Fatalf("Marshal(s) failed: %v", err)

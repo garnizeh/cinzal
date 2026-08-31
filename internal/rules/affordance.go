@@ -56,13 +56,12 @@ func Affordances(v game.PlayerView, cfg game.Config, draft game.Order) Affordanc
 	a := Affordance{
 		ActionForced: pushingOnDeclared(draft),
 		RouteBlocked: routeEndsHidden(v, draft),
-	}
 
-	a.StepsRemaining = max(0, Steps(v, cfg)-len(draft.Route))
+		StepsRemaining: max(0, Steps(v, cfg)-len(draft.Route)),
 
-	a.EvasiveShakedownWarning = draft.Stance.Stance == game.StanceEvasive &&
-		v.You.Cargo != nil &&
-		v.You.Balance < cfg.ShakedownCost
+		EvasiveShakedownWarning: draft.Stance.Stance == game.StanceEvasive &&
+			v.You.Cargo != nil &&
+			v.You.Balance < cfg.ShakedownCost}
 
 	players := len(v.Others) + 1
 	if postCap, ok := cfg.PostCapByPlayers[players]; ok && len(v.You.Posts) >= postCap {

@@ -66,7 +66,7 @@ func parseProjectionQueryBlocks(dir string) ([]projectionQueryBlock, error) {
 				blocks = append(blocks, *cur)
 			}
 		}
-		for _, line := range strings.Split(string(data), "\n") {
+		for line := range strings.SplitSeq(string(data), "\n") {
 			if m := queryNameRe.FindStringSubmatch(strings.TrimSpace(line)); m != nil {
 				flush()
 				cur = &projectionQueryBlock{name: m[1]}
@@ -129,7 +129,7 @@ var (
 // -> events) stripped.
 func fromListTables(clause string) []string {
 	var tables []string
-	for _, item := range strings.Split(clause, ",") {
+	for item := range strings.SplitSeq(clause, ",") {
 		name := fromListItemTableRe.FindString(strings.TrimSpace(item))
 		if name == "" {
 			continue
@@ -221,7 +221,7 @@ func checkProjectionReadAllowlist(queriesDir, allowlistPath string) ([]string, e
 	}
 	allowed := make(map[string]bool)
 	var malformed []string
-	for _, line := range strings.Split(string(allowlistData), "\n") {
+	for line := range strings.SplitSeq(string(allowlistData), "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue

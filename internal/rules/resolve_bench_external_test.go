@@ -167,7 +167,7 @@ func measureResolveAllocationBudget(tb testing.TB) (initBytes, resolveBytes uint
 		Stance: game.StanceOrder{Stance: game.StanceNeutral},
 	}
 	orders := make(map[game.SeatID]game.Order, players)
-	for seat := game.SeatID(0); seat < players; seat++ {
+	for seat := range game.SeatID(players) {
 		orders[seat] = idleOrder
 	}
 

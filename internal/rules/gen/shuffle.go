@@ -29,7 +29,7 @@ func fullShuffle[T any](rand Rand, purpose string, items []T) {
 // checked anywhere; a 9-node sector reached k == len(items) and a 10-node
 // one panicked here on rand(purpose, 0) (#239).
 func partialShuffle[T any](rand Rand, purpose string, items []T, k int) {
-	for i := 0; i < k; i++ {
+	for i := range k {
 		j := i + rand(purpose, len(items)-i)
 		items[i], items[j] = items[j], items[i]
 	}

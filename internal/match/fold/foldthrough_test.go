@@ -24,7 +24,7 @@ func fullIdleLogThrough(cfg game.Config, players int) rules.OrderLog {
 	log := rules.OrderLog{}
 	for round := 1; round <= cfg.Rounds; round++ {
 		orders := make(map[game.SeatID]game.Order, players)
-		for seat := 0; seat < players; seat++ {
+		for seat := range players {
 			orders[game.SeatID(seat)] = idleOrderThrough(game.RoundNumber(round))
 		}
 		log[game.RoundNumber(round)] = orders

@@ -88,7 +88,7 @@ func assignNodeTypes(rand Rand, b *builder) ([]game.NodeType, bool) {
 	// typeAssignMaxTries walks.
 	neighbors := b.neighborLists()
 
-	for try := 0; try < typeAssignMaxTries; try++ {
+	for range typeAssignMaxTries {
 		if types, ok := attemptAssignNodeTypes(rand, b.n, neighbors); ok {
 			return types, true
 		}
@@ -111,7 +111,7 @@ func attemptAssignNodeTypes(rand Rand, n int, neighbors [][]game.NodeID) ([]game
 	types := make([]game.NodeType, n)
 
 	var candidates []game.NodeType
-	for i := 0; i < n; i++ {
+	for i := range n {
 		node := game.NodeID(i)
 
 		candidates = candidates[:0]

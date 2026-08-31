@@ -132,7 +132,7 @@ func FoldThrough(seed [32]byte, cfg game.Config, players int, log rules.OrderLog
 
 	// Get the list of expected seats (0..players-1)
 	expectedSeats := make([]game.SeatID, players)
-	for i := 0; i < players; i++ {
+	for i := range players {
 		expectedSeats[i] = game.SeatID(i)
 	}
 
