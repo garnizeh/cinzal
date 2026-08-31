@@ -150,7 +150,7 @@ No Node, no frontend build step, and no Docker for the rules engine — `interna
 
 ## The CI gates
 
-Seven checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
+Eight checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
 
 | Gate | Asserts |
 |---|---|
@@ -161,6 +161,7 @@ Seven checks make the architecture real rather than conventional. They are not s
 | **Dependency scan** | No `go.mod`/`go.sum` dependency carries a known OSV/GHSA vulnerability |
 | **Bots isolation** | `internal/bots`'s production code cannot name `MatchState`, the graph, or the match seed |
 | **Simulate dependencies** | `cmd/simulate` depends on nothing but `internal/rules`, `internal/bots`, `internal/game` and `internal/telemetry` |
+| **Replay dependencies** | `cmd/replay` depends on nothing outside a committed allow-list, so its fold path can never reach an effect provider |
 
 If one of these blocks you, the answer is almost never to weaken the gate.
 
@@ -199,6 +200,12 @@ Test files are out of scope: `internal/bots`'s own tests legitimately build real
 RFC-001 §16.4 states `cmd/simulate` "needs only `rules` and `bots`" — a dependency claim, not just a description, and issue #199 is the one that makes it an enforced one. `scripts/check-simulate-deps.sh` runs `go list -deps ./cmd/simulate` and fails unless the internal packages it names are exactly `internal/rules` (its own `internal/rules/gen` dependency included), `internal/bots`, `internal/game` and `internal/telemetry` — the last two are what the RFC's own sentence leaves implicit: `rules` and `bots` both hand the driver `game` values it has to name to call them, and `internal/telemetry` is D34's GDD §22 metric set, the thing this whole command exists to produce. Anything else — `internal/match` chief among them, once it exists — fails the gate. Unlike bots isolation, this stays a plain `go list`/`grep` pipeline rather than an AST walk, so it needs no fixture selftest of its own.
 
 `make bots-isolation-selftest` drives the gate against fixtures for each failure mode — a named `rules.MatchState`, a `:=`-inferred local that never spells the type name, a bare `[32]byte` with no `rules` import at all, a dot-import, a `doc.go`-only package (VACUOUS, not a pass), a parse error, and a missing allow-list — the same standard `check-bench-regression_test.sh` is held to below.
+
+### The replay dependency gate
+
+RFC-001 §7.4 makes a dependency claim about `cmd/replay`, not just about `internal/rules`: the fold's own execution must never dispatch an effect, or a rebuild re-sends every historical notification the match ever generated. `internal/match/fold.FoldThrough` already runs `cmd/replay`'s fold with a null effect sink, but that is a runtime property — [D49](docs/decisions/D49-fold-package-boundary.md), decided while scoping this gate, names `scripts/check-replay-deps.sh` as the compile-time proof standing next to it: `go list -deps ./cmd/replay`'s `internal/` subset must be a subset of a committed allow-list, `scripts/replay-deps-allowlist.txt` ([#324](https://github.com/garnizeh/cinzal/issues/324)). The allow-list is `internal/game`, `internal/rules` (its own `internal/rules/gen` dependency included), `internal/match/fold`, `internal/opsmetrics` (D45's fold-duration/allocation metrics, pulled in transitively by `FoldMeasured` — the same allowance `cmd/simulate` already has), `internal/store` and `internal/store/orderlog`. `internal/mail`, `internal/web` and anything else fail the gate; widening the list is a deliberate, reviewed change, same discipline as `scripts/bots-isolation-allowlist.txt`.
+
+Same shape as the simulate dependency gate — a plain `go list`/`grep` pipeline — but unlike it, this one carries a fixture selftest (`make replay-deps-selftest`, `scripts/check-replay-deps_test.sh`): #324's own acceptance criteria required proof of every failure mode, including the positive case a plain dependency check exists to catch — a mail-shaped provider package introduced into the graph — a bar the simulate gate was never held to. Because `go list -deps` needs a real, buildable `go.mod` to run against, the selftest points the gate at a synthetic fixture module via environment-variable overrides (`REPLAY_DEPS_TEST_ROOT`/`_PKG`/`_ALLOWLIST`), the same idiom `check-rules-purity_test.sh` uses for the same reason, rather than the target-directory argument `check-bots-isolation.go`'s AST walk takes.
 
 ### The dependency-vulnerability gate
 
