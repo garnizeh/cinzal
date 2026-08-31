@@ -38,11 +38,10 @@ tighter than the template suggests.
 
 ## 2. Establish the question is real
 
-**Search the specs and decision log with the Memex MCP**, not manual `grep`
-— finding every place a conflicting claim is made, including a paraphrased
-one, is the whole point of this step, and semantic search catches what a
-keyword search misses. Fall back to `grep`/`Read` only if Memex is
-unavailable.
+**Search the specs and decision log.** Finding every place a conflicting
+claim is made, including a paraphrased one, is the whole point of this
+step — a single keyword `grep` is not enough on its own; check nearby
+sections and cross-references by hand too.
 
 Quote the exact sentences that conflict, with their sections. "The RFC is
 silent" is not enough on its own; show the place a reader would look and what
