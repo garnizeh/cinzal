@@ -41,8 +41,9 @@
 //	                                           Δ(/gc/heap/allocs:bytes) over the same window
 //
 // BytesPerInitialCall/BytesPerResolveCall are offline-measured constants
-// (internal/rules/resolve_bench_test.go), cross-checked by a test that fails
-// the build on drift rather than silently accepting a stale figure. The
+// (internal/rules/resolve_alloc_budget_amd64_test.go — amd64-only, issue
+// #352), cross-checked by a test that fails the build on drift rather than
+// silently accepting a stale figure. The
 // numerator's call count is exact — the caller already knows how many rounds
 // it asked Fold to replay. The denominator, /gc/heap/allocs:bytes, is a
 // cumulative process-wide counter, cheap to read repeatedly per the standard

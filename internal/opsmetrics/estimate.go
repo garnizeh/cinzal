@@ -6,12 +6,14 @@ package opsmetrics
 // concurrently running ones (see this package's doc comment for why the
 // latter is structurally the wrong measurement).
 //
-// Sourced from internal/rules/resolve_bench_test.go: a deterministic,
-// GC-disabled measurement (debug.SetGCPercent(-1), runtime.MemStats.
-// TotalAlloc before/after) of one fixed match — players=4, seed=[32]byte{1},
-// game.DefaultConfig() — rather than a timing benchmark. Allocation byte
-// count is exact given deterministic code, unlike wall-clock time, so this
-// needs no bench-compare-style noise tolerance.
+// Sourced from internal/rules/resolve_alloc_budget_amd64_test.go (amd64-only,
+// issue #352 — these bytes are a fact about one build, not portable across
+// GOARCH): a deterministic, GC-disabled measurement (debug.SetGCPercent(-1),
+// runtime.MemStats.TotalAlloc before/after) of one fixed match — players=4,
+// seed=[32]byte{1}, game.DefaultConfig() — rather than a timing benchmark.
+// Allocation byte count is exact given deterministic code on that one build,
+// unlike wall-clock time, so this needs no bench-compare-style noise
+// tolerance.
 //
 // BytesPerInitialCall is dominated by map generation (Generate's own retry
 // loop for node-type assignment can run 1-66 tries per topology, per

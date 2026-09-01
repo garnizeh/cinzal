@@ -1,22 +1,26 @@
-// Package rules_test (external): debug.SetGCPercent(-1) in
-// measureResolveAllocationBudget is a process-wide side effect, and the
-// deferred restore only undoes it after the call returns — it does not make
-// the mutation itself invisible to whatever else is running in the same test
-// binary meanwhile. internal/rules' own tests do no I/O and touch no ambient
-// state at all (test-authoring's own rule), so this measurement lives in the
-// external rules_test package instead, the same isolation
-// newmatch_external_test.go and its siblings already use, reaching only
-// rules.NewMatch/rules.Resolve/rules.NewRNG — everything this file needs is
-// already exported.
+// Package rules_test (external): the allocation-budget self-check this file
+// used to hold (debug.SetGCPercent(-1) in measureResolveAllocationBudget is a
+// process-wide side effect, and the deferred restore only undoes it after
+// the call returns — it does not make the mutation itself invisible to
+// whatever else is running in the same test binary meanwhile) lives in
+// resolve_alloc_budget_amd64_test.go now, gated to amd64 only — issue #352
+// found the hardcoded opsmetrics.BytesPerInitialCall/BytesPerResolveCall
+// constants are a fact about one build, not portable across GOARCH, so that
+// file's own build tag keeps the self-check off any other architecture
+// rather than asserting an equality nobody has measured. BenchmarkResolve
+// below carries no such assertion — it is unaffected and stays here,
+// runnable on any GOARCH.
+//
+// This file, like that one, uses the external rules_test package for the
+// same isolation newmatch_external_test.go and its siblings already use,
+// reaching only rules.NewMatch/rules.Resolve/rules.NewRNG — everything this
+// file needs is already exported.
 package rules_test
 
 import (
-	"runtime"
-	"runtime/debug"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
-	"github.com/garnizeh/cinzal/internal/opsmetrics"
 	"github.com/garnizeh/cinzal/internal/rules"
 )
 
@@ -123,106 +127,5 @@ func playersLabel(players int) string {
 		return "players=5"
 	default:
 		return "players=?"
-	}
-}
-
-// measureResolveAllocationBudget is the deterministic, GC-disabled
-// measurement D45 specifies: debug.SetGCPercent(-1) for the duration,
-// runtime.MemStats.TotalAlloc read before/after each call, restored on
-// return. Allocation count and bytes are deterministic given deterministic
-// code — unlike wall-clock time, this needs no bench-compare-style noise
-// tolerance (D45's own reasoning).
-//
-// Measures one fixed match: players=4, seed=[32]byte{1},
-// resolveBenchConfig() — the same (seed, cfg, players) tuple
-// opsmetrics.BytesPerInitialCall/BytesPerResolveCall's own doc comment
-// names as their source. initBytes is NewMatch's own allocation; resolveBytes
-// is the average per-Resolve-call allocation across all cfg.Rounds rounds of
-// a real, complete match (every seat idle every round) — not one isolated
-// call, so the average absorbs whatever round-to-round variance idling
-// through the whole match produces (event cards from round 4 on, deadline
-// checks, etc.).
-func measureResolveAllocationBudget(tb testing.TB) (initBytes, resolveBytes uint64) {
-	tb.Helper()
-
-	old := debug.SetGCPercent(-1)
-	defer debug.SetGCPercent(old)
-
-	cfg := resolveBenchConfig()
-	seed := [32]byte{1}
-	const players = 4
-
-	var before, after runtime.MemStats
-
-	runtime.ReadMemStats(&before)
-	s, err := rules.NewMatch(seed, cfg, players)
-	if err != nil {
-		tb.Fatalf("rules.NewMatch() = %v", err)
-	}
-	runtime.ReadMemStats(&after)
-	initBytes = after.TotalAlloc - before.TotalAlloc
-
-	idleOrder := game.Order{
-		Action: game.ActionOrder{Kind: game.ActionNothing},
-		Stance: game.StanceOrder{Stance: game.StanceNeutral},
-	}
-	orders := make(map[game.SeatID]game.Order, players)
-	for seat := range game.SeatID(players) {
-		orders[seat] = idleOrder
-	}
-
-	var totalResolveBytes uint64
-	for round := 1; round <= cfg.Rounds; round++ {
-		runtime.ReadMemStats(&before)
-		next, _, err := rules.Resolve(s, orders, cfg, rules.NewRNG(seed, round))
-		runtime.ReadMemStats(&after)
-		if err != nil {
-			tb.Fatalf("rules.Resolve() round %d: %v", round, err)
-		}
-		totalResolveBytes += after.TotalAlloc - before.TotalAlloc
-		s = next
-	}
-	resolveBytes = totalResolveBytes / uint64(cfg.Rounds)
-
-	return initBytes, resolveBytes
-}
-
-// TestResolveAllocationBudget is D45's own self-check: "asserts the freshly
-// measured bytes-per-call figure is within 10% of the hardcoded
-// BytesPerResolveCall/BytesPerInitialCall constants, and fails, not skips,
-// on drift — the PR that changed Resolve's allocation shape is the PR that
-// must update the constant, in the same diff, the same discipline
-// scripts/bots-isolation-allowlist.txt already enforces for a different
-// hazard."
-func TestResolveAllocationBudget(t *testing.T) {
-	initBytes, resolveBytes := measureResolveAllocationBudget(t)
-
-	assertWithinTenPercent(t, "BytesPerInitialCall", initBytes, opsmetrics.BytesPerInitialCall)
-	assertWithinTenPercent(t, "BytesPerResolveCall", resolveBytes, opsmetrics.BytesPerResolveCall)
-}
-
-// assertWithinTenPercent fails (never skips) when measured is more than 10%
-// away from constant in either direction.
-func assertWithinTenPercent(t *testing.T, name string, measured, constant uint64) {
-	t.Helper()
-
-	var diff uint64
-	if measured > constant {
-		diff = measured - constant
-	} else {
-		diff = constant - measured
-	}
-
-	// diff/constant > 0.10, computed without floats to keep this test's own
-	// arithmetic exact rather than introducing the float noise this
-	// measurement is specifically designed to avoid — cross-multiply
-	// instead of dividing: diff*10 > constant is equivalent to
-	// diff/constant > 0.10 for constant > 0.
-	if constant == 0 {
-		t.Fatalf("%s: hardcoded constant is 0 — cannot express a 10%% band around zero; opsmetrics.%s needs a real measured value", name, name)
-	}
-	if diff*10 > constant {
-		t.Errorf("%s: freshly measured %d bytes, hardcoded opsmetrics.%s = %d bytes — drift of %.1f%% exceeds the 10%% budget; the PR that changed this allocation shape must update the constant in the same diff (D45)",
-			name, measured, name, constant, 100*float64(diff)/float64(constant))
 	}
 }

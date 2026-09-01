@@ -15,8 +15,9 @@ import (
 // timed loop.
 //
 // These are ordinary wall-clock benchmarks (unlike
-// internal/rules/resolve_bench_test.go's TestResolveAllocationBudget, which
-// needs a GC-disabled, noise-free byte count) — run with `go test -bench`,
+// internal/rules/resolve_alloc_budget_amd64_test.go's
+// TestResolveAllocationBudget, which needs a GC-disabled, noise-free byte
+// count) — run with `go test -bench`,
 // not part of `go test`'s default run, and not gated by bench-compare
 // (§7.3's arithmetic doesn't require internal/rules/gen-style regression
 // tracking here; this benchmark exists for a human to read the overhead
