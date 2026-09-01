@@ -14,16 +14,11 @@ import (
 	"testing"
 	"time"
 
+	"github.com/garnizeh/cinzal/internal/store/pgimage"
 	"github.com/testcontainers/testcontainers-go"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
-// postgresImage pins the exact digest D46 (#309) already decided for the
-// whole persistence layer's test suite — the postgres:18.6 manifest-list
-// digest, verified directly against the registry, never a floating tag,
-// since §8.1's deadline-boundary test needs an identical database byte for
-// byte on every run.
-//
 // This file is a deliberate, permanent exception to "every integration
 // test acquires its database through storetest" (#325): every test below
 // white-box tests migrate()/releaseMigrationLock()/openSingleConnection —
@@ -36,8 +31,10 @@ import (
 // defeat the whole point of these tests injecting a slow/failing fixture
 // instead. rebuild_atomicity_integration_test.go is the same exception for
 // a different unexported seam (afterRebuildProjectionsDelete, projections.go).
-const postgresImage = "postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280"
-
+// The pinned Postgres image itself has no such restriction — pgimage is a
+// leaf package, so this file imports pgimage.Ref directly rather than
+// carrying its own copy of the digest (#326 closed that duplication).
+//
 // okFixtureFS, failingFixtureFS and slowFixtureFS are test-only migration
 // sets, embedded from this file rather than from internal/store/migrations
 // — the production migrations directory is deliberately empty until #312,
@@ -70,7 +67,7 @@ func startPostgres(t *testing.T) string {
 	t.Helper()
 	ctx := context.Background()
 
-	ctr, err := postgres.Run(ctx, postgresImage,
+	ctr, err := postgres.Run(ctx, pgimage.Ref,
 		postgres.WithDatabase("cinzal_test"),
 		postgres.WithUsername("cinzal"),
 		postgres.WithPassword("cinzal"),

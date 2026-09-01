@@ -1,0 +1,59 @@
+# Local dev database (issue #326) — a persistent Postgres a contributor
+# points cmd/migrate/cmd/replay's --db (and eventually cmd/server) at, for
+# manual work outside the automated test suite. Not the same thing as the
+# Postgres-backed test harness (#325, D46): that suite starts and tears
+# down its own container per test binary via testcontainers-go specifically
+# because a database this file's own `db-up`/`db-down` targets leave running
+# across invocations is exactly what a test must NOT depend on. D46 rejected
+# a compose file *as the test mechanism* for that reason; this file answers
+# a different question — "what does a developer run to get a database that
+# outlives one `go test` process" — which testcontainers-go was never meant
+# to serve. Never referenced by CI: no `services:` block in ci.yml, no job
+# runs `docker compose` (compare .github/workflows/ci.yml's `integration`
+# job, which never touches this file).
+#
+# The image digest below must equal internal/store/pgimage.Ref exactly —
+# `make postgres-digest` (scripts/check-postgres-digest.sh) fails the build
+# if the two disagree, so this is the one place besides that Go constant
+# the digest may legitimately appear (D46's "one place" rule, extended to
+# this second consumer rather than merged into a single physical file,
+# since YAML can't import Go source).
+services:
+  postgres:
+    image: postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+    environment:
+      POSTGRES_USER: cinzal
+      # Literally "placeholder", not a stand-in for a real password edited
+      # out before commit — .gitleaks.toml's connection-string rule
+      # allowlists that exact word, and the Makefile's own DATABASE_URL
+      # default (both change together) uses it for the same reason: a
+      # throwaway single-instance local container has no password worth
+      # being cleverer about.
+      POSTGRES_PASSWORD: placeholder
+      POSTGRES_DB: cinzal
+    # 5433, not Postgres' own default 5432 — avoids clobbering a locally
+    # installed Postgres a contributor's machine may already be running.
+    # Matches the Makefile's own DATABASE_URL default; both change together.
+    ports:
+      - "5433:5432"
+    # Named, not bind-mounted: survives `make db-down` (a plain `docker
+    # compose down`, no -v) so stopping and restarting the container keeps
+    # data. `make db-reset` passes -v specifically to drop this volume and
+    # start over.
+    #
+    # Mounted at /var/lib/postgresql, not .../data: the postgres:18 image's
+    # own entrypoint refuses to start against a volume mounted directly at
+    # /var/lib/postgresql/data (found by actually running `make db-up` —
+    # the image now manages a pg_ctlcluster-style versioned subdirectory
+    # under the parent path itself, and errors out rather than silently
+    # reinterpreting the old mount point).
+    volumes:
+      - cinzal_postgres_data:/var/lib/postgresql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cinzal -d cinzal"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  cinzal_postgres_data:

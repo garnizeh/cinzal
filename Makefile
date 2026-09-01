@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check generate-check-selftest packages purity purity-selftest fog debug-isolation secrets vuln bots-isolation bots-isolation-selftest simulate-deps replay-deps replay-deps-selftest integration integration-list integration-coverage-selftest check check-nosecrets replay clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check generate-check-selftest packages postgres-digest purity purity-selftest fog debug-isolation secrets vuln bots-isolation bots-isolation-selftest simulate-deps replay-deps replay-deps-selftest integration integration-list integration-coverage-selftest db-up db-down db-reset db-migrate check check-nosecrets replay clean
 
 ## help      list these targets
 help:
@@ -132,6 +132,17 @@ generate: require-sqlc
 ## packages  assert the package graph matches scripts/packages.txt
 packages:
 	./scripts/check-packages.sh
+
+## postgres-digest  assert compose.yaml and internal/store/pgimage.Ref agree (issue #326)
+#
+# Docker-free, deterministic, a plain text comparison of two files — the
+# same cost bar packages/fog/simulate-deps already clear, so it joins
+# check-nosecrets's line below rather than staying a standalone target the
+# way integration/integration-list do. See scripts/check-postgres-digest.sh
+# and compose.yaml's own header for why compose.yaml carries a second copy
+# of the digest D46 pinned for the test harness at all.
+postgres-digest:
+	./scripts/check-postgres-digest.sh
 
 ## purity    assert internal/rules, internal/telemetry, internal/bots do no I/O, read no clock, draw no randomness
 #
@@ -294,6 +305,68 @@ integration-list:
 integration-coverage-selftest:
 	./scripts/check-integration-coverage_test.sh
 
+# DATABASE_URL matches compose.yaml's own credentials and host port (5433,
+# not Postgres' default 5432, to avoid clobbering a locally-installed
+# server) — both change together. This is a Makefile default for local dev
+# tooling, not a fallback DSN inside internal/store's own Go source, so it
+# is outside TestNoFallbackDSN's scope (that test only inspects
+# internal/store's non-test .go files) and outside RFC-001 §18's
+# no-fallback-DSN rule, which binds store.Open/store.Migrate's own callers,
+# not this file. `?=` lets a contributor override it with an already-set
+# DATABASE_URL without editing this file. Password is literally
+# "placeholder", not a stand-in for a real one edited out before commit:
+# .gitleaks.toml's connection-string rule already allowlists that exact
+# word for precisely this shape of line, and a throwaway single-instance
+# local container has no password worth being more clever about.
+DATABASE_URL ?= postgres://cinzal:placeholder@localhost:5433/cinzal?sslmode=disable
+
+## db-up      bring up the local dev Postgres (issue #326) — never used by CI
+#
+# This is a persistent database for manual work (cmd/replay --db, and
+# eventually cmd/server), not the Postgres-backed test harness above:
+# `integration` starts and tears down its own container per test binary via
+# testcontainers-go specifically so a database these targets leave running
+# across invocations is never something a test depends on. See compose.yaml's
+# own header for why a compose file is legitimate here even though D46
+# rejected one as the TEST mechanism.
+#
+# require-docker gives the same clear failure message integration already
+# does on an unreachable daemon, rather than a raw "docker: command not
+# found" from `docker compose` itself.
+#
+# --wait blocks until the healthcheck (compose.yaml: pg_isready) reports
+# healthy, so a `make db-up && make db-migrate` run in sequence never races
+# a cold container.
+db-up: require-docker
+	docker compose up -d --wait
+
+## db-down    stop the local dev Postgres, keeping its data
+#
+# No -v: the named volume (compose.yaml) survives, so a later db-up resumes
+# with whatever was there before. db-reset is the target that wipes it.
+db-down: require-docker
+	docker compose down
+
+## db-reset   wipe and rebuild the local dev Postgres, freshly migrated
+#
+# down -v (drop the named volume) then db-up then db-migrate, so this is
+# safe to run repeatedly and always leaves a fresh, migrated database behind
+# — issue #326's own acceptance criterion.
+db-reset: require-docker
+	docker compose down -v
+	$(MAKE) db-up
+	$(MAKE) db-migrate
+
+## db-migrate  apply internal/store's embedded migrations to $DATABASE_URL
+#
+# cmd/migrate wraps store.Migrate() — the same advisory-lock/goose.Provider
+# path production boot and storetest's own setup already run, not a second
+# implementation shelling out to the bare goose CLI. It fails closed and
+# reports how many migrations it applied — see cmd/migrate/doc.go and
+# run.go's evaluateMigration for the exact rule.
+db-migrate:
+	$(GO) run ./cmd/migrate --db "$(DATABASE_URL)"
+
 # Paths holding generated output, named explicitly rather than as a
 # directory wildcard: sqlc's output (issue #315) lands directly in
 # internal/store, package store, alongside hand-written repository code
@@ -423,6 +496,17 @@ generate-check-selftest:
 # allow-list and check-bench-regression.sh's threshold play for their own
 # gates.
 #
+# postgres-digest joined this line in issue #326, alongside packages: unlike
+# integration/integration-list above, it needs no Docker and no
+# testcontainers-go compile — just two files and a grep, the same cost as
+# check-simulate-deps.sh's own plain-list-and-grep shape, so it carries none
+# of the reasons integration/integration-list stay out. It exists because
+# #326 gave compose.yaml (a local-dev-only file, never read by CI) its own
+# copy of the digest internal/store/pgimage.Ref already pins for the test
+# harness — see compose.yaml's own header for why a second copy is
+# legitimate here even though D46 rejected a compose file for the test
+# mechanism itself.
+#
 # If check-nosecrets and the CI workflow ever disagree, the workflow is
 # wrong: it calls these targets rather than restating them, so there is one
 # definition.
@@ -454,7 +538,7 @@ generate-check-selftest:
 # this file: `make help` should keep pointing a contributor at `make check`,
 # not offer a target that quietly skips the secret scan as an equally
 # visible option. CI calls it by its full name instead of through `help`.
-check-nosecrets: packages purity purity-selftest fog debug-isolation bots-isolation bots-isolation-selftest simulate-deps replay-deps replay-deps-selftest generate-check generate-check-selftest lint test bench-regression-selftest prod dev
+check-nosecrets: packages postgres-digest purity purity-selftest fog debug-isolation bots-isolation bots-isolation-selftest simulate-deps replay-deps replay-deps-selftest generate-check generate-check-selftest lint test bench-regression-selftest prod dev
 
 check: check-nosecrets secrets vuln
 

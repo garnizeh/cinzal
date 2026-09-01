@@ -10,18 +10,11 @@ import (
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/store"
+	"github.com/garnizeh/cinzal/internal/store/pgimage"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
-
-// postgresImage pins the exact Postgres 18.6 manifest-list digest D46
-// (#309) decided for the whole persistence layer's test suite — verified
-// directly against the registry, never a floating tag, because §8.1's
-// deadline-boundary test asserts behaviour at deadline_at ± 1ms against the
-// database's own clock, and a test against a database that can change out
-// from under it without a commit is a test whose subject changes silently.
-const postgresImage = "postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280"
 
 // adminDatabase is the container's own bootstrap database — always present
 // on any Postgres server, and deliberately never migrated or cloned from,
@@ -70,7 +63,7 @@ var (
 func setup() {
 	ctx := context.Background()
 
-	ctr, err := postgres.Run(ctx, postgresImage,
+	ctr, err := postgres.Run(ctx, pgimage.Ref,
 		postgres.WithDatabase(adminDatabase),
 		postgres.WithUsername("cinzal"),
 		postgres.WithPassword("cinzal"),

@@ -130,17 +130,23 @@ make dev       # build with the debug tag; the debug panel exists in this binary
 make prod      # build without it; debug routes do not exist in this binary
 make generate  # sqlc (templ joins at M5)
 make packages  # assert the package graph matches scripts/packages.txt
+make db-up      # bring up a local Postgres 18.6 (issue #326) — needs Docker
+make db-migrate # apply internal/store's embedded migrations to it
+make db-reset   # wipe and rebuild it, freshly migrated — safe to repeat
+make db-down    # stop it, keeping its data
 ```
 
-**`make check` runs exactly what CI runs**, because the workflow calls these targets rather than restating the commands. A CI failure reproduces locally with one command, and there is one definition to keep correct rather than two that drift.
+**`make check` runs exactly what CI runs**, because the workflow calls these targets rather than restating the commands. A CI failure reproduces locally with one command, and there is one definition to keep correct rather than two that drift. **`db-up`/`db-down`/`db-reset` are the one exception that needs Docker** — see Requirements below — but nothing in `check` itself does; they exist for manual work against a persistent local database (`cmd/replay --db`, and eventually `cmd/server`), not for anything CI runs.
 
 ### Requirements
 
 **Go 1.27.0.** RFC §4 names it and §6.3 explains why the project cares: the design is staked on `seed + order log` reproducing a match exactly, and *"which Go built it"* should never be a candidate explanation for a determinism mismatch. Note that `go.mod` can only express a **floor** — no directive pins a version from inside it — so the exact version is enforced in CI.
 
-`golangci-lint` for `make lint`. `gitleaks` for `make secrets`. `templ` for `make generate` — a no-op until M5, so you can skip installing it until then. `sqlc` (issue #315, M3) is no longer skippable: `make generate` uses it for real, and `make test`/`make check` need it too, since `internal/store/sqlc_generate_test.go` shells out to it to prove `sqlc generate` fails closed on a query naming a nonexistent column. Postgres 18.6 arrives with M3.
+`golangci-lint` for `make lint`. `gitleaks` for `make secrets`. `templ` for `make generate` — a no-op until M5, so you can skip installing it until then. `sqlc` is no longer skippable as of M3 (issue #315): `make generate` uses it for real, and `make test`/`make check` need it too, since `internal/store/sqlc_generate_test.go` shells out to it to prove `sqlc generate` fails closed on a query naming a nonexistent column. **Postgres 18.6 is here now (M3)** — you need Docker to run it locally (`make db-up`, issue #326), but not the Go toolchain alone: `make check` and the whole `internal/rules` fast loop stay Docker-free, see the paragraph below.
 
-No Node, no frontend build step, and no Docker for the rules engine — `internal/rules` is pure and its tests do no I/O at all. **This holds for `make check` as a whole, not only for `internal/rules`, even after M3** ([D46](docs/decisions/D46-postgres-backed-test-layer.md), [D54](docs/decisions/D54-integration-tag-fog-gate-and-check-scope.md)): `internal/store`'s Postgres-backed Integration and Concurrency tests live behind `//go:build integration` and a separate `make integration` target, which needs a reachable Docker daemon and hard-fails without one — but is never compiled by `make check`, only by that target itself. `make integration-list` is a Docker-free companion that confirms the tagged suite hasn't silently shrunk; it still needs network access the first time it runs, to fetch the testcontainers-go dependency tree its compile pulls in, so it also stays out of `make check` and runs instead as its own required CI job. Neither target exists before M3.
+No Node, no frontend build step, and no Docker for the rules engine — `internal/rules` is pure and its tests do no I/O at all. **This holds for `make check` as a whole, not only for `internal/rules`, even after M3** ([D46](docs/decisions/D46-postgres-backed-test-layer.md), [D54](docs/decisions/D54-integration-tag-fog-gate-and-check-scope.md)): `internal/store`'s Postgres-backed Integration and Concurrency tests live behind `//go:build integration` and a separate `make integration` target, which needs a reachable Docker daemon and hard-fails without one — but is never compiled by `make check`, only by that target itself. `make integration-list` is a Docker-free companion that confirms the tagged suite hasn't silently shrunk; it still needs network access the first time it runs, to fetch the testcontainers-go dependency tree its compile pulls in, so it also stays out of `make check` and runs instead as its own required CI job.
+
+**`make db-up`/`db-down`/`db-reset` (issue #326) also need Docker, and are also outside `make check`.** They are unrelated to the Integration/Concurrency suite above — `make integration` starts and tears down its own testcontainers-go container per test binary, never touching a database these targets leave running. `db-up`/`db-down`/`db-reset` instead bring up a persistent local Postgres via `compose.yaml`, pinned to the identical digest (`make postgres-digest` asserts the two never drift apart), for manual work against a real database — `cmd/replay --db`, and eventually `cmd/server` — outside of any test run. `make db-migrate` applies `internal/store`'s embedded migrations to it (`cmd/migrate`, wrapping the same `store.Migrate()` production boot uses) and needs no Docker itself, only a reachable Postgres, so it fails with a normal connection error rather than `require-docker`'s message if you run it without `db-up` first.
 
 **A missing tool fails the target rather than skipping it.** That is deliberate, and it is the same principle as the CI gates below: a check that did not run looks exactly like one that passed.
 
@@ -150,7 +156,7 @@ No Node, no frontend build step, and no Docker for the rules engine — `interna
 
 ## The CI gates
 
-Ten checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
+Eleven checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
 
 | Gate | Asserts |
 |---|---|
@@ -164,6 +170,7 @@ Ten checks make the architecture real rather than conventional. They are not sty
 | **Replay dependencies** | `cmd/replay` depends on nothing outside a committed allow-list, so its fold path can never reach an effect provider |
 | **Postgres integration suite** | `internal/store`'s Integration/Concurrency tests (RFC-001 §16.1) pass against a real, pinned-digest Postgres, and fail — never skip — when Docker is unreachable |
 | **Integration coverage floor** | The tagged suite has not silently shrunk to fewer tests, or to zero, since the last reviewed floor bump |
+| **Postgres digest match** | `compose.yaml`'s local dev database and `internal/store/pgimage.Ref`, the digest the integration suite above pins, name the exact same image |
 
 If one of these blocks you, the answer is almost never to weaken the gate.
 
@@ -220,6 +227,10 @@ RFC-001 §16.1 adds two test layers no `internal/store` file had before #325: In
 **The coverage floor is the gate that actually catches the suite shrinking.** `go test -tags integration -list '^Test(Integration|Concurrency)' <packages>` compiles every tagged file without running a single test body — Docker-free, since nothing beyond `-list` ever executes — and `scripts/check-integration-coverage.sh` counts the names it returns against a floor recorded in the script, bumped upward only, the same discipline `check-bench-regression.sh`'s threshold and `scripts/bots-isolation-allowlist.txt` already hold contributors to. Every Integration/Concurrency test function is named `TestIntegrationXxx`/`TestConcurrencyXxx` for exactly this reason: the count is scoped by package *and* filtered by name, so a floor over `./...` could not lose one test inside a total dominated by every ordinary test in the repository. `make integration-list` runs the raw `-list` command; `scripts/check-integration-coverage_test.sh` is its own fixture selftest, the same shape `check-replay-deps_test.sh` uses for the same reason (`go test -list` needs a real, buildable `go.mod`, so the selftest points the gate at a synthetic fixture module via environment-variable overrides rather than a fixture directory inside this module).
 
 **Neither joins `check`/`check-nosecrets`'s aggregate, for two different reasons.** `make integration` needs a reachable Docker daemon, which this document's Requirements section already promises `make check` will never require, for `internal/rules`'s sake — the package edited most, and the one D01 keeps dependency-free including this one. `make integration-list` needs no Docker, but D54 found that compiling `storetest`'s own `testcontainers-go` import is still a first-time module fetch and a heavier build than anything else on that aggregate's line pays — a cost this repository has already decided twice (`generate-check`, `bench-compare`) is worth paying to keep the default developer loop cheap, applied a third time here. Both get their own required CI job instead (`.github/workflows/ci.yml`), path-gated with the identical broad list `check`/`replay` already share.
+
+### The Postgres digest gate
+
+**Not the same thing as the integration suite above, and easy to conflate with it.** `make integration` needs Docker and is deliberately outside `check`'s aggregate; `make postgres-digest` (issue #326) needs neither Docker nor a network call — it is a two-file text comparison, `scripts/check-postgres-digest.sh`, so it joins `check-nosecrets`'s line the same way `packages`/`fog`/`simulate-deps` do. What it asserts is narrower too: not that the integration suite passes, only that `compose.yaml` (`make db-up`'s local dev database, issue #326, never read by CI) and `internal/store/pgimage.Ref` (the digest D46 pinned for the test harness above) name the identical Postgres image. D46 rejected a compose file *as the mechanism for the test suite itself*, specifically because two descriptions of the same pinned image can drift apart — `compose.yaml` exists for a different reason (a database that outlives one `go test` process, which testcontainers-go was never meant to provide), but the same drift risk applies to it, so this gate closes it the same way: one canonical value (`pgimage.Ref`), everything else asserted equal to it rather than free to disagree silently.
 
 ### The dependency-vulnerability gate
 
