@@ -61,12 +61,12 @@ func hasEventKind(t *testing.T, s *store.Store, matchID game.MatchID, kind game.
 	return n > 0
 }
 
-// TestRunRebuildMatchPopulatesEventsAndMatchSummary is #323's own happy
+// TestIntegrationRunRebuildMatchPopulatesEventsAndMatchSummary is #323's own happy
 // path through the CLI: a finished match whose events/match_summary are
 // still empty (nothing but this issue writes either table yet) gets them
 // populated by --rebuild, from the same fold every other cmd/replay mode
 // runs.
-func TestRunRebuildMatchPopulatesEventsAndMatchSummary(t *testing.T) {
+func TestIntegrationRunRebuildMatchPopulatesEventsAndMatchSummary(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 	setMatchStatus(t, s, matchID, "finished")
@@ -107,10 +107,10 @@ func TestRunRebuildMatchPopulatesEventsAndMatchSummary(t *testing.T) {
 	}
 }
 
-// TestRunRebuildAllOnlyTouchesFinishedMatchesByDefault is #323's own scope
+// TestIntegrationRunRebuildAllOnlyTouchesFinishedMatchesByDefault is #323's own scope
 // rule: "--all touches only status='finished' matches unless an explicit
 // flag says otherwise" — asserted with one active match present.
-func TestRunRebuildAllOnlyTouchesFinishedMatchesByDefault(t *testing.T) {
+func TestIntegrationRunRebuildAllOnlyTouchesFinishedMatchesByDefault(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	finished := seedFullReplayMatch(t, s)
 	active := seedFullReplayMatch(t, s)
@@ -141,11 +141,11 @@ func TestRunRebuildAllOnlyTouchesFinishedMatchesByDefault(t *testing.T) {
 	}
 }
 
-// TestRunRebuildSingleActiveMatchRequiresIncludeActive asserts the same
+// TestIntegrationRunRebuildSingleActiveMatchRequiresIncludeActive asserts the same
 // scope rule applies to a --match named explicitly, not only to --all —
 // rebuilding an active match races the round tick regardless of how the
 // match was selected (issue #323, cmd/replay/doc.go's own reasoning).
-func TestRunRebuildSingleActiveMatchRequiresIncludeActive(t *testing.T) {
+func TestIntegrationRunRebuildSingleActiveMatchRequiresIncludeActive(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 	setMatchStatus(t, s, matchID, "active")
@@ -173,7 +173,7 @@ func TestRunRebuildSingleActiveMatchRequiresIncludeActive(t *testing.T) {
 	}
 }
 
-// TestRunRebuildActiveMatchWithPartialOrderLogSucceeds is a regression test
+// TestIntegrationRunRebuildActiveMatchWithPartialOrderLogSucceeds is a regression test
 // for a code-review finding on this PR: rebuildMatch used to fold.Fold
 // unconditionally, which folds through cfg.Rounds and errors on any round
 // missing from the log — always, for a genuinely in-progress match, which
@@ -182,7 +182,7 @@ func TestRunRebuildSingleActiveMatchRequiresIncludeActive(t *testing.T) {
 // always covers every round, so the earlier active-match test above cannot
 // catch this — this test deletes the later rounds' orders to build a
 // genuinely partial log before rebuilding it.
-func TestRunRebuildActiveMatchWithPartialOrderLogSucceeds(t *testing.T) {
+func TestIntegrationRunRebuildActiveMatchWithPartialOrderLogSucceeds(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 
@@ -211,7 +211,7 @@ func TestRunRebuildActiveMatchWithPartialOrderLogSucceeds(t *testing.T) {
 	}
 }
 
-// TestRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow is a
+// TestIntegrationRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow is a
 // regression test for a second code-review finding: submittedByRound used
 // to gain a map key only for a round with at least one non-default order,
 // so a round where every seat fell back to the round's default order (a
@@ -220,7 +220,7 @@ func TestRunRebuildActiveMatchWithPartialOrderLogSucceeds(t *testing.T) {
 // per-round UpsertSummary call. testFixture's own log sources every order
 // as human, so this test overwrites one round's orders to "default"
 // directly.
-func TestRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow(t *testing.T) {
+func TestIntegrationRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 	cfg, _, _, _ := testFixture()
@@ -260,7 +260,7 @@ func TestRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow(t *testing.T) {
 }
 
 // queryLastSeenRound reads back one seat's match_players.last_seen_round —
-// TestRunRebuildRecomputesLastSeenRoundAcrossAGap's own oracle read.
+// TestIntegrationRunRebuildRecomputesLastSeenRoundAcrossAGap's own oracle read.
 func queryLastSeenRound(t *testing.T, s *store.Store, matchID game.MatchID, seat game.SeatID) int32 {
 	t.Helper()
 	var got int32
@@ -272,7 +272,7 @@ func queryLastSeenRound(t *testing.T, s *store.Store, matchID game.MatchID, seat
 	return got
 }
 
-// TestRunRebuildRecomputesLastSeenRoundAcrossAGap is issue #409's own
+// TestIntegrationRunRebuildRecomputesLastSeenRoundAcrossAGap is issue #409's own
 // acceptance criterion end to end: "cmd/replay --rebuild also recomputes
 // match_players.last_seen_round ... over a fixture whose human-submission
 // pattern is not just 'every round' ... so the LEAST clamp and a
@@ -283,13 +283,13 @@ func queryLastSeenRound(t *testing.T, s *store.Store, matchID game.MatchID, seat
 // formula — cursor = round-1 with no clamp ever engaged. This test starts
 // from that fixture, then overwrites seat 0's rounds 2-4 to source =
 // 'default' (the same technique
-// TestRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow already uses
+// TestIntegrationRunRebuildRoundWithAllDefaultOrdersStillGetsSummaryRow already uses
 // to build a non-uniform source pattern), leaving seat 0 with a genuine
 // 3-round gap in its human submissions while seat 1 stays at steady state —
 // the two expected values below are computed by hand against RFC §7.2's own
 // formula (corrected by D52), independently of lastSeenRoundsFromOrders,
 // the production code under test.
-func TestRunRebuildRecomputesLastSeenRoundAcrossAGap(t *testing.T) {
+func TestIntegrationRunRebuildRecomputesLastSeenRoundAcrossAGap(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 	cfg, _, _, _ := testFixture()
@@ -328,13 +328,13 @@ func TestRunRebuildRecomputesLastSeenRoundAcrossAGap(t *testing.T) {
 	}
 }
 
-// TestRunRebuildOverwritesStaleLastSeenRound is RebuildLastSeenRounds' own
+// TestIntegrationRunRebuildOverwritesStaleLastSeenRound is RebuildLastSeenRounds' own
 // doc comment made concrete: unlike events/match_summary, this table is
 // never cleared before being rewritten, so a stale value already on the row
 // (here simulating drift from whatever corrupted it) has to be overwritten
 // explicitly rather than surviving a rebuild that happens to compute the
 // same 0 a fresh row would already have.
-func TestRunRebuildOverwritesStaleLastSeenRound(t *testing.T) {
+func TestIntegrationRunRebuildOverwritesStaleLastSeenRound(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 	setMatchStatus(t, s, matchID, "finished")
@@ -357,7 +357,7 @@ func TestRunRebuildOverwritesStaleLastSeenRound(t *testing.T) {
 	}
 }
 
-// TestRunRebuildMatchWithEmptyOrderLogSucceeds is a regression test for a
+// TestIntegrationRunRebuildMatchWithEmptyOrderLogSucceeds is a regression test for a
 // CodeRabbit review finding on this PR: rebuildMatch called
 // fold.FoldThrough unconditionally, with throughRound left at its zero
 // value for an empty order log. FoldThrough's own throughRound < 1 check
@@ -365,7 +365,7 @@ func TestRunRebuildOverwritesStaleLastSeenRound(t *testing.T) {
 // invalid" instead of the lobby-match short-circuit its doc comment
 // describes — rebuilding a match with no orders yet always failed. The fix
 // skips the fold entirely for an empty log, since there is nothing to fold.
-func TestRunRebuildMatchWithEmptyOrderLogSucceeds(t *testing.T) {
+func TestIntegrationRunRebuildMatchWithEmptyOrderLogSucceeds(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 

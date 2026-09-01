@@ -1,6 +1,6 @@
 //go:build integration
 
-package store
+package store_test
 
 import (
 	"context"
@@ -9,31 +9,41 @@ import (
 	"testing"
 	"time"
 
+	"github.com/garnizeh/cinzal/internal/store/storetest"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/stdlib"
 )
 
-// applyBaseSchema runs the real production migration set (not a testdata
-// fixture) against a fresh database, via migrate()'s tested core rather
-// than the exported Migrate wrapper — this file exercises 00001's DDL
-// itself, not the lock/connection machinery migrate_integration_test.go
-// already covers.
+// applyBaseSchema opens a raw *sql.DB against a freshly cloned, already-
+// migrated database (storetest.FreshDatabase, D46 tier 2) — this file
+// exercises 00001's DDL itself via direct SQL, not Store's own API, so it
+// needs database/sql rather than the *store.Store storetest.Container
+// hands back. Each test gets its own real, independent database (cheap:
+// Postgres's template-copy is a file-level clone, not a migration rerun)
+// rather than sharing storetest's ordinary per-test transaction, since nine
+// of these assertions are themselves schema/constraint introspection
+// queries (information_schema, obj_description) that read more naturally
+// against a real committed database than a transaction they'd also be
+// running inside.
 func applyBaseSchema(t *testing.T) *sql.DB {
 	t.Helper()
-	dsn := startPostgres(t)
-	fsys := sub(t, migrationsFS, "migrations")
-	db := openDedicated(t, dsn)
-	if err := migrate(context.Background(), db, fsys); err != nil {
-		t.Fatalf("migrate() against the production migration set: %v", err)
+	dsn := storetest.FreshDatabase(t)
+	cfg, err := pgx.ParseConfig(dsn)
+	if err != nil {
+		t.Fatalf("parse dsn: %v", err)
 	}
+	db := stdlib.OpenDB(*cfg)
+	t.Cleanup(func() { _ = db.Close() })
 	return db
 }
 
-// TestSchemaBaseTablesExactlyPresent is #312's own fail-closed acceptance
+// TestIntegrationSchemaBaseTablesExactlyPresent is #312's own fail-closed acceptance
 // criterion: the expected table set is exactly present after migration, so
 // both an extra table (something added but not intended) and a missing one
 // (something intended but not migrated) fail it. #313/#314 extend this
 // list, per plan, rather than replacing it.
-func TestSchemaBaseTablesExactlyPresent(t *testing.T) {
+func TestIntegrationSchemaBaseTablesExactlyPresent(t *testing.T) {
 	db := applyBaseSchema(t)
 
 	rows, err := db.QueryContext(context.Background(),
@@ -77,11 +87,11 @@ func TestSchemaBaseTablesExactlyPresent(t *testing.T) {
 	}
 }
 
-// TestSchemaOutboxDedup is RFC-001 §16.1's "Outbox scoping" row, asserted
+// TestIntegrationSchemaOutboxDedup is RFC-001 §16.1's "Outbox scoping" row, asserted
 // against real Postgres per §13.1: two otp rows (match_id NULL) for the
 // same email both insert; two round_resolved rows for the same
 // (match_id, round, seat) collide on outbox_match_dedup.
-func TestSchemaOutboxDedup(t *testing.T) {
+func TestIntegrationSchemaOutboxDedup(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -106,11 +116,11 @@ func TestSchemaOutboxDedup(t *testing.T) {
 	}
 }
 
-// TestSchemaOrdersResubmissionUpsert exercises GDD §18's "the last
+// TestIntegrationSchemaOrdersResubmissionUpsert exercises GDD §18's "the last
 // submission stands" against real Postgres: a second submission for the
 // same (match_id, round, seat) via ON CONFLICT DO UPDATE replaces the row
 // rather than adding one.
-func TestSchemaOrdersResubmissionUpsert(t *testing.T) {
+func TestIntegrationSchemaOrdersResubmissionUpsert(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -141,10 +151,10 @@ func TestSchemaOrdersResubmissionUpsert(t *testing.T) {
 	}
 }
 
-// TestSchemaOrdersSourceCheck asserts orders.source's CHECK (RFC-001 §8.2):
+// TestIntegrationSchemaOrdersSourceCheck asserts orders.source's CHECK (RFC-001 §8.2):
 // only human/bot/default are accepted, since Autopilot is derived from
 // this column and a typo here would silently change that derivation.
-func TestSchemaOrdersSourceCheck(t *testing.T) {
+func TestIntegrationSchemaOrdersSourceCheck(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -169,14 +179,14 @@ func TestSchemaOrdersSourceCheck(t *testing.T) {
 	}
 }
 
-// TestSchemaOrdersRoundPositiveCheck asserts orders_round_positive
+// TestIntegrationSchemaOrdersRoundPositiveCheck asserts orders_round_positive
 // (migration 00004): game.RoundNumber is 1-indexed (GDD §4), so round 0 and
 // below must never reach the table, even by a path that bypasses
 // AppendOrder's own Go-level check (internal/store/orders.go) — a
 // CodeRabbit finding on PR #393 (issue #317) that checkNoRoundGap's
 // [1, maxRound] gap scan alone would let a round-0 row ride along
 // undetected whenever the rest of the log is otherwise gapless.
-func TestSchemaOrdersRoundPositiveCheck(t *testing.T) {
+func TestIntegrationSchemaOrdersRoundPositiveCheck(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -198,10 +208,10 @@ func TestSchemaOrdersRoundPositiveCheck(t *testing.T) {
 	}
 }
 
-// TestSchemaMatchesStatusCheck asserts matches.status's CHECK, including
+// TestIntegrationSchemaMatchesStatusCheck asserts matches.status's CHECK, including
 // 'abandoned' — unreachable today (D22 is open) but present in the
 // vocabulary so a later migration doesn't need to reopen this constraint.
-func TestSchemaMatchesStatusCheck(t *testing.T) {
+func TestIntegrationSchemaMatchesStatusCheck(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	_, userID := seedMatch(t, db)
@@ -222,10 +232,10 @@ func TestSchemaMatchesStatusCheck(t *testing.T) {
 	}
 }
 
-// TestSchemaOrdersCannotCascadeDelete is the direct assertion behind
+// TestIntegrationSchemaOrdersCannotCascadeDelete is the direct assertion behind
 // RFC-001 §18's "lose it and matches cannot be reconstructed": deleting a
 // matches row with a dependent orders row must fail, not cascade.
-func TestSchemaOrdersCannotCascadeDelete(t *testing.T) {
+func TestIntegrationSchemaOrdersCannotCascadeDelete(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -280,11 +290,11 @@ func seedMatch(t *testing.T, db *sql.DB) (matchID, userID string) {
 	return matchID, userID
 }
 
-// TestSchemaOrdersRequireValidMatchPlayer asserts the composite FK
+// TestIntegrationSchemaOrdersRequireValidMatchPlayer asserts the composite FK
 // (match_id, seat) -> match_players(match_id, seat): an order for a seat
 // with no corresponding participant must be rejected, not stored as an
 // order fold/replay can never map back to anyone.
-func TestSchemaOrdersRequireValidMatchPlayer(t *testing.T) {
+func TestIntegrationSchemaOrdersRequireValidMatchPlayer(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -304,13 +314,13 @@ func TestSchemaOrdersRequireValidMatchPlayer(t *testing.T) {
 	}
 }
 
-// TestSchemaRecapCursorDefaultsToZero asserts D16's seat-creation value: 0,
+// TestIntegrationSchemaRecapCursorDefaultsToZero asserts D16's seat-creation value: 0,
 // for both a lobby-formation seat and one that joins mid-lobby — D16's own
 // reasoning is that POST /m/{id}/join only ever runs before round 1
 // resolves, so no reachable seat needs a different default. seedMatch's
 // seat 0 stands in for the lobby-formation case; seat 1, inserted here with
 // last_seen_round omitted, stands in for a mid-lobby join.
-func TestSchemaRecapCursorDefaultsToZero(t *testing.T) {
+func TestIntegrationSchemaRecapCursorDefaultsToZero(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, userID := seedMatch(t, db)
@@ -348,10 +358,10 @@ func TestSchemaRecapCursorDefaultsToZero(t *testing.T) {
 	}
 }
 
-// TestSchemaEmailPrefDefault asserts D19's stated default — RFC-001 §13's
+// TestIntegrationSchemaEmailPrefDefault asserts D19's stated default — RFC-001 §13's
 // "only when it's my turn and I haven't moved" — takes effect when the
 // column is omitted from the insert, not just documented in DDL prose.
-func TestSchemaEmailPrefDefault(t *testing.T) {
+func TestIntegrationSchemaEmailPrefDefault(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -367,10 +377,10 @@ func TestSchemaEmailPrefDefault(t *testing.T) {
 	}
 }
 
-// TestSchemaEmailPrefCheck asserts D19's CHECK: the three levels it actually
+// TestIntegrationSchemaEmailPrefCheck asserts D19's CHECK: the three levels it actually
 // built are accepted, and daily_digest — deferred by D19, never one of
 // these three — is rejected the same way a typo would be.
-func TestSchemaEmailPrefCheck(t *testing.T) {
+func TestIntegrationSchemaEmailPrefCheck(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, userID := seedMatch(t, db)
@@ -395,11 +405,11 @@ func TestSchemaEmailPrefCheck(t *testing.T) {
 	}
 }
 
-// TestSchemaUnsubscribeTokenHashRequired asserts D19's NOT NULL with no DDL
+// TestIntegrationSchemaUnsubscribeTokenHashRequired asserts D19's NOT NULL with no DDL
 // default: unlike last_seen_round/email_pref, the token has to be supplied
 // by the inserting caller (application code mints it at seat creation) —
 // an insert that omits it must fail, not silently store an empty token.
-func TestSchemaUnsubscribeTokenHashRequired(t *testing.T) {
+func TestIntegrationSchemaUnsubscribeTokenHashRequired(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, userID := seedMatch(t, db)
@@ -412,10 +422,10 @@ func TestSchemaUnsubscribeTokenHashRequired(t *testing.T) {
 	}
 }
 
-// TestSchemaInviteLinksTokenHashLookup asserts D17's stated lookup path: an
+// TestIntegrationSchemaInviteLinksTokenHashLookup asserts D17's stated lookup path: an
 // invite link is found by an indexed equality scan on token_hash, the same
 // shape a real join handler's `WHERE token_hash = $1` would use.
-func TestSchemaInviteLinksTokenHashLookup(t *testing.T) {
+func TestIntegrationSchemaInviteLinksTokenHashLookup(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -448,12 +458,12 @@ func TestSchemaInviteLinksTokenHashLookup(t *testing.T) {
 	}
 }
 
-// TestSchemaInviteLinksNoPlaintextTokenColumn is the schema-level half of
+// TestIntegrationSchemaInviteLinksNoPlaintextTokenColumn is the schema-level half of
 // D17's "the raw token is never stored" — asserted as a shape check, since
 // a store test has no application code that could mint one to check for
 // leakage in a row. If a future column ever reintroduces the plaintext
 // token, this test's exact column set breaks and calls it out by name.
-func TestSchemaInviteLinksNoPlaintextTokenColumn(t *testing.T) {
+func TestIntegrationSchemaInviteLinksNoPlaintextTokenColumn(t *testing.T) {
 	db := applyBaseSchema(t)
 
 	rows, err := db.QueryContext(context.Background(),
@@ -487,12 +497,12 @@ func TestSchemaInviteLinksNoPlaintextTokenColumn(t *testing.T) {
 	}
 }
 
-// TestSchemaInviteLinkCrossMatchRejected asserts the composite FK
+// TestIntegrationSchemaInviteLinkCrossMatchRejected asserts the composite FK
 // (invite_link_id, match_id) -> invite_links(id, match_id): a link minted
 // for one match cannot be attributed to a seat in a different match. D17's
 // own reasoning is that a plain FK to invite_links(id) alone only proves the
 // link exists somewhere, not that it belongs to this match.
-func TestSchemaInviteLinkCrossMatchRejected(t *testing.T) {
+func TestIntegrationSchemaInviteLinkCrossMatchRejected(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchA, userID := seedMatch(t, db)
@@ -526,10 +536,10 @@ func TestSchemaInviteLinkCrossMatchRejected(t *testing.T) {
 	}
 }
 
-// TestSchemaBoardNotesSlotCheck asserts D18's per-seat cap: a bounded slot
+// TestIntegrationSchemaBoardNotesSlotCheck asserts D18's per-seat cap: a bounded slot
 // number under the table's own primary key, 1..20, not a counted CHECK or a
 // trigger.
-func TestSchemaBoardNotesSlotCheck(t *testing.T) {
+func TestIntegrationSchemaBoardNotesSlotCheck(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -553,12 +563,12 @@ func TestSchemaBoardNotesSlotCheck(t *testing.T) {
 	}
 }
 
-// TestSchemaBoardNotesUpsert exercises D18's stated resubmission shape —
+// TestIntegrationSchemaBoardNotesUpsert exercises D18's stated resubmission shape —
 // the same ON CONFLICT (match_id, seat, slot) DO UPDATE pattern as orders'
 // own resubmission — and asserts updated_at is restated explicitly in the
 // SET clause: D18 warns a plain DEFAULT now() only fires on INSERT, so a
 // conflict reaching DO UPDATE without it would leave a stale timestamp.
-func TestSchemaBoardNotesUpsert(t *testing.T) {
+func TestIntegrationSchemaBoardNotesUpsert(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, _ := seedMatch(t, db)
@@ -604,12 +614,12 @@ func TestSchemaBoardNotesUpsert(t *testing.T) {
 	}
 }
 
-// TestSchemaBoardNotesSeatScoping asserts D18's isolation guarantee: a query
+// TestIntegrationSchemaBoardNotesSeatScoping asserts D18's isolation guarantee: a query
 // scoped to (match_id, seat) never surfaces another seat's rows. This is the
 // query shape every real store method must use — the store package has no
 // query that omits the seat predicate, per D18's "never rendered to any
 // seat but its own author."
-func TestSchemaBoardNotesSeatScoping(t *testing.T) {
+func TestIntegrationSchemaBoardNotesSeatScoping(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 	matchID, userID := seedMatch(t, db)
@@ -657,9 +667,9 @@ func TestSchemaBoardNotesSeatScoping(t *testing.T) {
 	}
 }
 
-// TestSchemaUsersEmailSuppressedAtDefaultsNull asserts D53's all-matches
+// TestIntegrationSchemaUsersEmailSuppressedAtDefaultsNull asserts D53's all-matches
 // unsubscribe flag starts unset for every new user.
-func TestSchemaUsersEmailSuppressedAtDefaultsNull(t *testing.T) {
+func TestIntegrationSchemaUsersEmailSuppressedAtDefaultsNull(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 
@@ -674,12 +684,12 @@ func TestSchemaUsersEmailSuppressedAtDefaultsNull(t *testing.T) {
 	}
 }
 
-// TestSchemaRateLimitsColumnsAndPrimaryKey is #314's DDL-shape assertion:
+// TestIntegrationSchemaRateLimitsColumnsAndPrimaryKey is #314's DDL-shape assertion:
 // rate_limits has exactly the columns D20 specifies, and (scope, key) is the
 // real primary key constraint — not merely two columns that happen to exist
 // — which is what makes ON CONFLICT (scope, key) in the check-and-consume
 // statement (ratelimit.go) a valid conflict target at all.
-func TestSchemaRateLimitsColumnsAndPrimaryKey(t *testing.T) {
+func TestIntegrationSchemaRateLimitsColumnsAndPrimaryKey(t *testing.T) {
 	db := applyBaseSchema(t)
 	ctx := context.Background()
 
@@ -751,19 +761,19 @@ func TestSchemaRateLimitsColumnsAndPrimaryKey(t *testing.T) {
 	}
 }
 
-// TestSchemaEventsTableCommentPresent and
-// TestSchemaMatchSummaryTableCommentPresent are #321's own acceptance
+// TestIntegrationSchemaEventsTableCommentPresent and
+// TestIntegrationSchemaMatchSummaryTableCommentPresent are #321's own acceptance
 // criterion: "Both tables' COMMENT ON TABLE (from the schema task) is
 // asserted present by a test, so deleting it is a test failure rather than
 // a silent loss of the one warning a psql reader gets" — migration
 // 00001_base_schema.sql's own COMMENT ON TABLE events/match_summary,
 // stating "never authority."
-func TestSchemaEventsTableCommentPresent(t *testing.T) {
+func TestIntegrationSchemaEventsTableCommentPresent(t *testing.T) {
 	db := applyBaseSchema(t)
 	assertTableCommentPresent(t, db, "events")
 }
 
-func TestSchemaMatchSummaryTableCommentPresent(t *testing.T) {
+func TestIntegrationSchemaMatchSummaryTableCommentPresent(t *testing.T) {
 	db := applyBaseSchema(t)
 	assertTableCommentPresent(t, db, "match_summary")
 }

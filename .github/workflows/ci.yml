@@ -410,6 +410,132 @@ jobs:
         if: steps.changed.outputs.touched == 'true'
         run: make replay
 
+  # Issue #325, D46/D54: the Postgres-backed Integration/Concurrency suite.
+  # ubuntu-latest only, unlike replay's matrix above — D46 chose
+  # testcontainers-go specifically because its own CI matrix runs unmodified
+  # against exactly this runner image's already-present Docker daemon; a
+  # GitHub-hosted macOS runner has no equivalent guarantee, and this suite
+  # has no OS-specific behavior a second leg would be catching.
+  #
+  # Required (branch protection), but never folded into `check`'s own
+  # aggregate line — see the Makefile's own comment above check-nosecrets
+  # for the full reasoning: Docker must never become a prerequisite for the
+  # internal/rules fast loop.
+  integration:
+    name: integration
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # Same broad path list and fail-open posture as check/replay's own
+      # gates — this suite's real dependency graph already spans
+      # internal/rules, internal/game, internal/match and internal/store,
+      # and will grow into internal/web once M5 builds the HTTP layer
+      # RFC-001 §16.1's Integration row describes (D46's own stated
+      # expectation), so reusing this list means that growth needs no
+      # matching edit here.
+      - name: Determine whether this change can affect the integration suite
+        id: changed
+        uses: ./.github/actions/changed-paths
+        with:
+          paths: |
+            internal
+            cmd
+            scripts
+            go.mod
+            go.sum
+            Makefile
+            .golangci.yml
+            .github/workflows/ci.yml
+            .github/actions/changed-paths/action.yml
+
+      - uses: actions/setup-go@v7
+        if: steps.changed.outputs.touched == 'true'
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      - name: Assert the pinned Go version is the one in use
+        if: steps.changed.outputs.touched == 'true'
+        run: |
+          set -euo pipefail
+          expected="go$(awk '/^go /{print $2; exit}' go.mod)"
+          actual="$(go env GOVERSION)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Go version pin did not apply: expected $expected, got $actual"
+            exit 1
+          fi
+
+      # `go test ./internal/store/...` compiles and runs every test in that
+      # package, tagged or not — including sqlc_generate_test.go
+      # (TestSqlcGenerateFailsOnUnknownColumn, issue #315), which shells out
+      # to the real sqlc binary. `make integration`'s own command has no
+      # narrower a scope than that, so this job needs sqlc even though
+      # nothing about the Integration/Concurrency suite itself touches it —
+      # the same tool `check`'s own "Install pinned tools" step installs,
+      # just this one, not the other three that step also installs.
+      - name: Install sqlc
+        if: steps.changed.outputs.touched == 'true'
+        run: go install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
+
+      - name: make integration
+        if: steps.changed.outputs.touched == 'true'
+        run: make integration
+
+  # D54's own correction to D46: integration-list needs no Docker, but
+  # compiling storetest's testcontainers-go import is still a first-time
+  # module fetch and a heavier build than check-nosecrets's own line pays
+  # for anywhere else — so, like integration above, this is its own
+  # required job rather than a `make check` build input, even though (unlike
+  # integration) it never touches Docker at all.
+  integration-list:
+    name: integration-list
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Determine whether this change can affect the integration suite
+        id: changed
+        uses: ./.github/actions/changed-paths
+        with:
+          paths: |
+            internal
+            cmd
+            scripts
+            go.mod
+            go.sum
+            Makefile
+            .golangci.yml
+            .github/workflows/ci.yml
+            .github/actions/changed-paths/action.yml
+
+      - uses: actions/setup-go@v7
+        if: steps.changed.outputs.touched == 'true'
+        with:
+          go-version-file: go.mod
+          check-latest: false
+
+      - name: Assert the pinned Go version is the one in use
+        if: steps.changed.outputs.touched == 'true'
+        run: |
+          set -euo pipefail
+          expected="go$(awk '/^go /{print $2; exit}' go.mod)"
+          actual="$(go env GOVERSION)"
+          if [ "$actual" != "$expected" ]; then
+            echo "::error::Go version pin did not apply: expected $expected, got $actual"
+            exit 1
+          fi
+
+      - name: make integration-list
+        if: steps.changed.outputs.touched == 'true'
+        run: make integration-list
+
   bench:
     name: bench
     runs-on: ubuntu-latest

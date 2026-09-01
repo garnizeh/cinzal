@@ -1,6 +1,6 @@
 //go:build integration
 
-package store
+package store_test
 
 import (
 	"context"
@@ -8,6 +8,8 @@ import (
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/store"
+	"github.com/garnizeh/cinzal/internal/store/storetest"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -19,45 +21,29 @@ import (
 // test — orderlog cannot be imported from a package-store test file
 // without an import cycle (orderlog itself imports internal/store), so
 // anything needing orderlog.Load runs there instead.
-
-// openOrderStore migrates the real production migration set against a
-// fresh database and opens a *Store against the same DSN — the same shape
-// as ratelimit_integration_test.go's openRateLimitStore.
-func openOrderStore(t *testing.T) *Store {
-	t.Helper()
-	dsn := startPostgres(t)
-	fsys := sub(t, migrationsFS, "migrations")
-
-	migrateDB := openDedicated(t, dsn)
-	if err := migrate(context.Background(), migrateDB, fsys); err != nil {
-		t.Fatalf("migrate() against the production migration set: %v", err)
-	}
-
-	s, err := Open(context.Background(), Config{DSN: dsn})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(s.Close)
-	return s
-}
+//
+// Every test below gets its *store.Store from storetest.Container (#325,
+// D46) — one documented entry point, a transaction against the shared work
+// database rolled back in t.Cleanup, rather than this file starting its own
+// container.
 
 // seedOrderMatchWithSeats inserts one user (as the match's creator), one
 // matches row, and one match_players row per seat in [0, numSeats) —
 // orders' composite FK (match_id, seat) -> match_players(match_id, seat)
 // requires every seat an order names to actually exist as a participant.
-func seedOrderMatchWithSeats(t *testing.T, s *Store, numSeats int) game.MatchID {
+func seedOrderMatchWithSeats(t *testing.T, s *store.Store, numSeats int) game.MatchID {
 	t.Helper()
 	ctx := context.Background()
 
 	var userID pgtype.UUID
-	if err := s.pool.QueryRow(ctx,
+	if err := s.Pool().QueryRow(ctx,
 		`INSERT INTO users (display_name) VALUES ('seed') RETURNING id`,
 	).Scan(&userID); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
 
-	q := New(s.pool)
-	match, err := q.CreateMatch(ctx, CreateMatchParams{
+	q := store.New(s.Pool())
+	match, err := q.CreateMatch(ctx, store.CreateMatchParams{
 		Config:    []byte(`{}`),
 		Seed:      make([]byte, 32),
 		CreatedBy: userID,
@@ -67,7 +53,7 @@ func seedOrderMatchWithSeats(t *testing.T, s *Store, numSeats int) game.MatchID 
 	}
 
 	for seat := 0; seat < numSeats; seat++ {
-		if _, err := q.CreateMatchPlayer(ctx, CreateMatchPlayerParams{
+		if _, err := q.CreateMatchPlayer(ctx, store.CreateMatchPlayerParams{
 			MatchID:              match.ID,
 			Seat:                 game.SeatID(seat),
 			Faction:              "test",
@@ -80,26 +66,26 @@ func seedOrderMatchWithSeats(t *testing.T, s *Store, numSeats int) game.MatchID 
 	return match.ID
 }
 
-// TestAppendOrderResubmissionReplacesRow is GDD §18's own rule, asserted
-// against real Postgres: resubmission within an open round replaces the
-// row and leaves exactly one row for (match_id, round, seat).
-func TestAppendOrderResubmissionReplacesRow(t *testing.T) {
-	s := openOrderStore(t)
+// TestIntegrationAppendOrderResubmissionReplacesRow is GDD §18's own rule,
+// asserted against real Postgres: resubmission within an open round
+// replaces the row and leaves exactly one row for (match_id, round, seat).
+func TestIntegrationAppendOrderResubmissionReplacesRow(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	matchID := seedOrderMatchWithSeats(t, s, 1)
 
 	first := game.Order{Round: 1, Route: []game.NodeID{1, 2}}
-	if err := s.AppendOrder(ctx, matchID, 1, 0, first, SourceHuman); err != nil {
+	if err := s.AppendOrder(ctx, matchID, 1, 0, first, store.SourceHuman); err != nil {
 		t.Fatalf("AppendOrder (first submission): %v", err)
 	}
 
 	second := game.Order{Round: 1, Route: []game.NodeID{9}}
-	if err := s.AppendOrder(ctx, matchID, 1, 0, second, SourceHuman); err != nil {
+	if err := s.AppendOrder(ctx, matchID, 1, 0, second, store.SourceHuman); err != nil {
 		t.Fatalf("AppendOrder (resubmission): %v", err)
 	}
 
 	var count int
-	if err := s.pool.QueryRow(ctx,
+	if err := s.Pool().QueryRow(ctx,
 		`SELECT count(*) FROM orders WHERE match_id = $1 AND round = 1 AND seat = 0`, matchID,
 	).Scan(&count); err != nil {
 		t.Fatalf("count orders: %v", err)
@@ -109,7 +95,7 @@ func TestAppendOrderResubmissionReplacesRow(t *testing.T) {
 	}
 
 	var payload []byte
-	if err := s.pool.QueryRow(ctx,
+	if err := s.Pool().QueryRow(ctx,
 		`SELECT payload FROM orders WHERE match_id = $1 AND round = 1 AND seat = 0`, matchID,
 	).Scan(&payload); err != nil {
 		t.Fatalf("query payload: %v", err)
@@ -124,29 +110,29 @@ func TestAppendOrderResubmissionReplacesRow(t *testing.T) {
 	}
 }
 
-// TestAppendOrderHumanResubmissionFlipsSourceFromDefault is RFC-001 §8.2's
-// Autopilot-undo mechanism: a human resubmission over a default row flips
-// source to 'human', which is what makes autopilot(seat) false again on
-// the very next round considered.
-func TestAppendOrderHumanResubmissionFlipsSourceFromDefault(t *testing.T) {
-	s := openOrderStore(t)
+// TestIntegrationAppendOrderHumanResubmissionFlipsSourceFromDefault is
+// RFC-001 §8.2's Autopilot-undo mechanism: a human resubmission over a
+// default row flips source to 'human', which is what makes autopilot(seat)
+// false again on the very next round considered.
+func TestIntegrationAppendOrderHumanResubmissionFlipsSourceFromDefault(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	matchID := seedOrderMatchWithSeats(t, s, 1)
 
-	if err := s.AppendOrder(ctx, matchID, 1, 0, game.Order{Round: 1}, SourceDefault); err != nil {
+	if err := s.AppendOrder(ctx, matchID, 1, 0, game.Order{Round: 1}, store.SourceDefault); err != nil {
 		t.Fatalf("AppendOrder (default): %v", err)
 	}
-	if err := s.AppendOrder(ctx, matchID, 1, 0, game.Order{Round: 1}, SourceHuman); err != nil {
+	if err := s.AppendOrder(ctx, matchID, 1, 0, game.Order{Round: 1}, store.SourceHuman); err != nil {
 		t.Fatalf("AppendOrder (human resubmission): %v", err)
 	}
 
 	var source string
-	if err := s.pool.QueryRow(ctx,
+	if err := s.Pool().QueryRow(ctx,
 		`SELECT source FROM orders WHERE match_id = $1 AND round = 1 AND seat = 0`, matchID,
 	).Scan(&source); err != nil {
 		t.Fatalf("query source: %v", err)
 	}
-	if source != string(SourceHuman) {
-		t.Fatalf("source after human resubmission = %q, want %q", source, SourceHuman)
+	if source != string(store.SourceHuman) {
+		t.Fatalf("source after human resubmission = %q, want %q", source, store.SourceHuman)
 	}
 }

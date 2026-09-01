@@ -24,5 +24,6 @@ github.com/garnizeh/cinzal/internal/rules
 github.com/garnizeh/cinzal/internal/rules/gen
 github.com/garnizeh/cinzal/internal/store
 github.com/garnizeh/cinzal/internal/store/orderlog
+github.com/garnizeh/cinzal/internal/store/storetest
 github.com/garnizeh/cinzal/internal/telemetry
 github.com/garnizeh/cinzal/internal/web

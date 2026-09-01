@@ -24,13 +24,18 @@ import (
 // since §8.1's deadline-boundary test needs an identical database byte for
 // byte on every run.
 //
-// This file is a deliberately ad hoc, package-local container helper, not
-// the general storetest package RFC-001 §16.1/D46 describes. #325 owns
-// that package and is itself blocked by this issue — it runs Migrate,
-// which does not exist until this PR — so this constant and the helpers
-// below exist only to make #311's own acceptance criteria checkable, and
-// are expected to be lifted into storetest largely unchanged once #325
-// lands.
+// This file is a deliberate, permanent exception to "every integration
+// test acquires its database through storetest" (#325): every test below
+// white-box tests migrate()/releaseMigrationLock()/openSingleConnection —
+// unexported functions storetest.Container is itself built on top of —
+// against test-only fixture migration sets (testdata/migrations*), not the
+// production migrations storetest.Container's own setup runs. It cannot
+// import storetest without an import cycle (store -> storetest -> store,
+// since storetest imports store for Migrate()), and even if it somehow
+// could, storetest always migrates the real production set, which would
+// defeat the whole point of these tests injecting a slow/failing fixture
+// instead. rebuild_atomicity_integration_test.go is the same exception for
+// a different unexported seam (afterRebuildProjectionsDelete, projections.go).
 const postgresImage = "postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280"
 
 // okFixtureFS, failingFixtureFS and slowFixtureFS are test-only migration

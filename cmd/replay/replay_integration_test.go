@@ -14,9 +14,8 @@ import (
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/rules"
 	"github.com/garnizeh/cinzal/internal/store"
+	"github.com/garnizeh/cinzal/internal/store/storetest"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
 // This file is issue #322's real-Postgres acceptance criteria for the
@@ -26,49 +25,18 @@ import (
 // bundle_test.go — D46's split, mirrored here the same way
 // internal/store/orderlog keeps its own pure decode tests separate from its
 // //go:build integration file.
-//
-// postgresImage is the same pinned digest D46 (#309) already decided for
-// the persistence layer's test suite, duplicated per that decision's own
-// documented convention (see internal/store/orderlog/orderlog_integration_
-// test.go's identical comment) rather than shared — ad hoc, package-local
-// scaffolding until #325's storetest package lands.
-const postgresImage = "postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280"
 
-func startReplayPostgres(t *testing.T) string {
-	t.Helper()
-	ctx := context.Background()
-
-	ctr, err := postgres.Run(ctx, postgresImage,
-		postgres.WithDatabase("cinzal_test"),
-		postgres.WithUsername("cinzal"),
-		postgres.WithPassword("cinzal"),
-		postgres.BasicWaitStrategies(),
-	)
-	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
-	}
-	testcontainers.CleanupContainer(t, ctr)
-
-	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("postgres connection string: %v", err)
-	}
-	return dsn
-}
-
-// openReplayStore starts a fresh container, applies the real production
-// migration set via the exported store.Migrate, and opens a *store.Store
-// against the same DSN — the production path, mirroring
-// orderlog_integration_test.go's openOrderLogStore.
+// openReplayStore returns a DSN and a *store.Store both pointed at a
+// freshly cloned, already-migrated database (storetest.FreshDatabase, D46
+// tier 2) rather than storetest.Container's shared per-test transaction —
+// every test below passes the DSN to run() as --db, which opens its own
+// separate connection to the same database, so the seeding *Store and the
+// CLI under test must share a real, independently connectable database
+// rather than one ambient transaction only this file's own *Store could see.
 func openReplayStore(t *testing.T) (dsn string, s *store.Store) {
 	t.Helper()
-	ctx := context.Background()
-	dsn = startReplayPostgres(t)
-
-	if err := store.Migrate(ctx, dsn); err != nil {
-		t.Fatalf("store.Migrate: %v", err)
-	}
-	s, err := store.Open(ctx, store.Config{DSN: dsn})
+	dsn = storetest.FreshDatabase(t)
+	s, err := store.Open(context.Background(), store.Config{DSN: dsn})
 	if err != nil {
 		t.Fatalf("store.Open: %v", err)
 	}
@@ -114,11 +82,11 @@ func seedFullReplayMatch(t *testing.T, s *store.Store) game.MatchID {
 	return matchID
 }
 
-// TestReplayMatchAndBundleProduceByteIdenticalOutput is #322's own
+// TestIntegrationReplayMatchAndBundleProduceByteIdenticalOutput is #322's own
 // acceptance criterion: "replay --bundle f.json produces byte-identical
 // output to --match for the same match, which is the property that makes a
 // bug report reproducible."
-func TestReplayMatchAndBundleProduceByteIdenticalOutput(t *testing.T) {
+func TestIntegrationReplayMatchAndBundleProduceByteIdenticalOutput(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 
@@ -148,13 +116,13 @@ func TestReplayMatchAndBundleProduceByteIdenticalOutput(t *testing.T) {
 	}
 }
 
-// TestExportBundleFromDBEqualsAssembledFromRows is #322's own acceptance
+// TestIntegrationExportBundleFromDBEqualsAssembledFromRows is #322's own acceptance
 // criterion: "a test asserts a bundle exported from a match and a bundle
 // assembled from that match's rows are equal." exportBundleFromDB is
 // exercised via the package's own function; the "assembled from rows" half
 // is a second, independent query built directly in this test rather than
 // reusing that function, so the two constructions are genuinely separate.
-func TestExportBundleFromDBEqualsAssembledFromRows(t *testing.T) {
+func TestIntegrationExportBundleFromDBEqualsAssembledFromRows(t *testing.T) {
 	_, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 	ctx := context.Background()
@@ -187,10 +155,10 @@ func TestExportBundleFromDBEqualsAssembledFromRows(t *testing.T) {
 	}
 }
 
-// TestReplayByteIdenticalAcrossRunsRealMatch is #322's own acceptance
+// TestIntegrationReplayByteIdenticalAcrossRunsRealMatch is #322's own acceptance
 // criterion applied to the --match path itself: "folds from the database
 // and prints a deterministic dump; two runs produce byte-identical output."
-func TestReplayByteIdenticalAcrossRunsRealMatch(t *testing.T) {
+func TestIntegrationReplayByteIdenticalAcrossRunsRealMatch(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 
@@ -222,10 +190,10 @@ func TestReplayByteIdenticalAcrossRunsRealMatch(t *testing.T) {
 	}
 }
 
-// TestReplayRoundBeyondLastRoundOnRealMatch is #322's own acceptance
+// TestIntegrationReplayRoundBeyondLastRoundOnRealMatch is #322's own acceptance
 // criterion against the --match path: "--round N beyond the match's last
 // round is an error naming the last round, not a silently clamped dump."
-func TestReplayRoundBeyondLastRoundOnRealMatch(t *testing.T) {
+func TestIntegrationReplayRoundBeyondLastRoundOnRealMatch(t *testing.T) {
 	dsn, s := openReplayStore(t)
 	matchID := seedFullReplayMatch(t, s)
 	cfg, _, _, _ := testFixture()

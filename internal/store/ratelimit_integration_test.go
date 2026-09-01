@@ -1,6 +1,6 @@
 //go:build integration
 
-package store
+package store_test
 
 import (
 	"context"
@@ -8,39 +8,41 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"github.com/garnizeh/cinzal/internal/store"
+	"github.com/garnizeh/cinzal/internal/store/storetest"
 )
 
-// openRateLimitStore migrates the real production migration set (including
-// 00003_rate_limits.sql) against a fresh database, then opens a *Store
-// against the same DSN — the actual production path (Open, pool.go) rather
-// than the database/sql handle applyBaseSchema (schema_integration_test.go)
-// returns, since ConsumeRateLimit/CleanupRateLimits need a pgx dbtx.
-func openRateLimitStore(t *testing.T) *Store {
+// openIndependentRateLimitStore returns a *store.Store backed by its own
+// real connection pool against a freshly cloned database
+// (storetest.FreshDatabase, D46 tier 2), rather than storetest.Container's
+// shared per-test transaction. Two tests below need this, not the FOR
+// UPDATE contention test D46 names as FreshDatabase's usual reason: a
+// single pgx.Tx is bound to one physical connection, which is not safe for
+// concurrent use by multiple goroutines (TestConcurrencyRateLimitAdmits
+// ExactlyCapacity races 200 of them), and store.Store.Close is a no-op on a
+// transaction-backed Store (NewFromTx's own doc comment), which would
+// silently defeat TestIntegrationRateLimitFailurePolicyIsFailClosed's whole
+// point of forcing a real closed-pool failure.
+func openIndependentRateLimitStore(t *testing.T) *store.Store {
 	t.Helper()
-	dsn := startPostgres(t)
-	fsys := sub(t, migrationsFS, "migrations")
-
-	migrateDB := openDedicated(t, dsn)
-	if err := migrate(context.Background(), migrateDB, fsys); err != nil {
-		t.Fatalf("migrate() against the production migration set: %v", err)
-	}
-
-	s, err := Open(context.Background(), Config{DSN: dsn})
+	dsn := storetest.FreshDatabase(t)
+	s, err := store.Open(context.Background(), store.Config{DSN: dsn})
 	if err != nil {
-		t.Fatalf("Open: %v", err)
+		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(s.Close)
 	return s
 }
 
-// TestRateLimitConcurrencyAdmitsExactlyCapacity is #314's own load-bearing
+// TestConcurrencyRateLimitAdmitsExactlyCapacity is #314's own load-bearing
 // acceptance criterion: "N goroutines racing against a limit of K admit
 // exactly K, asserted against real Postgres with N substantially greater
 // than K." refillPerSecond is 0 so no refill can happen mid-race — the
 // bound this test proves is about the check-and-consume statement's
 // atomicity, not about timing.
-func TestRateLimitConcurrencyAdmitsExactlyCapacity(t *testing.T) {
-	s := openRateLimitStore(t)
+func TestConcurrencyRateLimitAdmitsExactlyCapacity(t *testing.T) {
+	s := openIndependentRateLimitStore(t)
 	ctx := context.Background()
 
 	const capacity = 10
@@ -82,14 +84,14 @@ func TestRateLimitConcurrencyAdmitsExactlyCapacity(t *testing.T) {
 	}
 }
 
-// TestRateLimitFailurePolicyIsFailClosed forces ConsumeRateLimit's own query
-// to fail — a closed pool, a real connection failure rather than a
-// simulated one — and asserts the D20 fail-closed outcome: allowed is
+// TestIntegrationRateLimitFailurePolicyIsFailClosed forces ConsumeRateLimit's
+// own query to fail — a closed pool, a real connection failure rather than
+// a simulated one — and asserts the D20 fail-closed outcome: allowed is
 // false, and the caller can see it failed via err. This is the "the
 // fail-open/fail-closed decision actually taking effect" test #314 asks
 // for, not just documented in a comment.
-func TestRateLimitFailurePolicyIsFailClosed(t *testing.T) {
-	s := openRateLimitStore(t)
+func TestIntegrationRateLimitFailurePolicyIsFailClosed(t *testing.T) {
+	s := openIndependentRateLimitStore(t)
 	s.Close() // closes the pool: every subsequent query fails, deterministically
 
 	allowed, err := s.ConsumeRateLimit(context.Background(), "test_scope", "test_key_failclosed", 10, 1)
@@ -101,13 +103,14 @@ func TestRateLimitFailurePolicyIsFailClosed(t *testing.T) {
 	}
 }
 
-// TestRateLimitCleanupRemovesStaleRowsOnly is the cleanup acceptance
-// criterion: "rows past their window are removed by the named mechanism,
-// asserted by a test that advances time rather than by inspection." Time is
-// advanced on the data itself — one row's updated_at is backdated past
-// RateLimitCleanupRetention — rather than by sleeping real wall-clock time.
-func TestRateLimitCleanupRemovesStaleRowsOnly(t *testing.T) {
-	s := openRateLimitStore(t)
+// TestIntegrationRateLimitCleanupRemovesStaleRowsOnly is the cleanup
+// acceptance criterion: "rows past their window are removed by the named
+// mechanism, asserted by a test that advances time rather than by
+// inspection." Time is advanced on the data itself — one row's updated_at
+// is backdated past RateLimitCleanupRetention — rather than by sleeping
+// real wall-clock time.
+func TestIntegrationRateLimitCleanupRemovesStaleRowsOnly(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 
 	// Fresh: well within retention.
@@ -119,14 +122,14 @@ func TestRateLimitCleanupRemovesStaleRowsOnly(t *testing.T) {
 	if _, err := s.ConsumeRateLimit(ctx, "test_scope", "stale_key", 10, 1); err != nil {
 		t.Fatalf("seed stale row: %v", err)
 	}
-	if _, err := s.pool.Exec(ctx,
+	if _, err := s.Pool().Exec(ctx,
 		`UPDATE rate_limits SET updated_at = now() - make_interval(secs => $1) WHERE scope = $2 AND key = $3`,
-		(2 * RateLimitCleanupRetention).Seconds(), "test_scope", "stale_key",
+		(2 * store.RateLimitCleanupRetention).Seconds(), "test_scope", "stale_key",
 	); err != nil {
 		t.Fatalf("backdate stale row: %v", err)
 	}
 
-	deleted, err := s.CleanupRateLimits(ctx, RateLimitCleanupRetention)
+	deleted, err := s.CleanupRateLimits(ctx, store.RateLimitCleanupRetention)
 	if err != nil {
 		t.Fatalf("CleanupRateLimits: %v", err)
 	}
@@ -135,11 +138,11 @@ func TestRateLimitCleanupRemovesStaleRowsOnly(t *testing.T) {
 	}
 
 	var staleCount, freshCount int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM rate_limits WHERE scope = $1 AND key = $2`,
+	if err := s.Pool().QueryRow(ctx, `SELECT count(*) FROM rate_limits WHERE scope = $1 AND key = $2`,
 		"test_scope", "stale_key").Scan(&staleCount); err != nil {
 		t.Fatalf("query stale row: %v", err)
 	}
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM rate_limits WHERE scope = $1 AND key = $2`,
+	if err := s.Pool().QueryRow(ctx, `SELECT count(*) FROM rate_limits WHERE scope = $1 AND key = $2`,
 		"test_scope", "fresh_key").Scan(&freshCount); err != nil {
 		t.Fatalf("query fresh row: %v", err)
 	}
@@ -151,13 +154,13 @@ func TestRateLimitCleanupRemovesStaleRowsOnly(t *testing.T) {
 	}
 }
 
-// TestRateLimitWorstCaseBoundedToDoubleCapacity documents D20's stated seam
-// behavior rather than leaving it unasserted: a bucket drained, refilled to
-// capacity, then drained again admits at most capacity+capacity within one
-// rolling window — the same bound a fixed window has, accepted per D20's
-// Reasoning — not more.
-func TestRateLimitWorstCaseBoundedToDoubleCapacity(t *testing.T) {
-	s := openRateLimitStore(t)
+// TestIntegrationRateLimitWorstCaseBoundedToDoubleCapacity documents D20's
+// stated seam behavior rather than leaving it unasserted: a bucket
+// drained, refilled to capacity, then drained again admits at most
+// capacity+capacity within one rolling window — the same bound a fixed
+// window has, accepted per D20's Reasoning — not more.
+func TestIntegrationRateLimitWorstCaseBoundedToDoubleCapacity(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 
 	const capacity = 2

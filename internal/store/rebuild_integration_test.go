@@ -1,6 +1,6 @@
 //go:build integration
 
-package store
+package store_test
 
 import (
 	"bytes"
@@ -9,22 +9,35 @@ import (
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/store"
+	"github.com/garnizeh/cinzal/internal/store/storetest"
 )
 
 // This file is issue #323's real-Postgres acceptance criteria for
 // RebuildProjections: byte-identical regeneration (including from three
-// kinds of deliberate corruption), atomicity on an injected mid-transaction
-// failure, and the "touches nothing else" guarantee — outbox, orders and
-// matches. cmd/replay's own wiring (folding a real order log and calling
-// this function) is exercised separately, in cmd/replay's own integration
-// suite; this file tests the atomic primitive itself, the same split
+// kinds of deliberate corruption) and the "touches nothing else" guarantee
+// — outbox, orders and matches. The atomicity criterion (an injected
+// failure between RebuildProjections' delete and insert phases leaves the
+// original rows in place) lives in rebuild_atomicity_integration_test.go
+// instead: it overrides projections.go's unexported afterRebuildProjections
+// Delete seam, which only package store itself can reach, so that one test
+// cannot be a store_test file the way its siblings here are. cmd/replay's
+// own wiring (folding a real order log and calling this function) is
+// exercised separately, in cmd/replay's own integration suite; this file
+// tests the atomic primitive itself, the same split
 // projections_integration_test.go already draws for WriteEvents/
 // UpsertSummary/ClearProjections.
+//
+// Every test below gets its *store.Store from storetest.Container (#325,
+// D46) — one documented entry point, a transaction against the shared work
+// database rolled back in t.Cleanup, rather than this file starting its own
+// container.
 
 // fixtureProjection is a small, two-round fixture standing in for what a
-// real fold would produce: fixtureEvents(round) for events, and a
-// different submitted-seat set per round for match_summary — different
-// per round so a bug that swapped the two rounds' content would be caught.
+// real fold would produce: fixtureEvents(round) (projections_integration_
+// test.go) for events, and a different submitted-seat set per round for
+// match_summary — different per round so a bug that swapped the two
+// rounds' content would be caught.
 func fixtureProjection() (events map[game.RoundNumber][]game.Event, submitted map[game.RoundNumber][]game.SeatID) {
 	events = map[game.RoundNumber][]game.Event{
 		1: fixtureEvents(1),
@@ -60,11 +73,11 @@ type summarySnapshot struct {
 // back in a fixed order (round, then seq for events) and marshals them to
 // one deterministic byte slice — the "stable serialisation" the byte-
 // identical acceptance criteria compare.
-func snapshotProjections(t *testing.T, s *Store, matchID game.MatchID) []byte {
+func snapshotProjections(t *testing.T, s *store.Store, matchID game.MatchID) []byte {
 	t.Helper()
 	ctx := context.Background()
 
-	eventRows, err := s.pool.Query(ctx,
+	eventRows, err := s.Pool().Query(ctx,
 		`SELECT round, seq, kind, payload FROM events WHERE match_id = $1 ORDER BY round, seq`,
 		matchID)
 	if err != nil {
@@ -84,7 +97,7 @@ func snapshotProjections(t *testing.T, s *Store, matchID game.MatchID) []byte {
 		t.Fatalf("iterate events rows: %v", err)
 	}
 
-	summaryRows, err := s.pool.Query(ctx,
+	summaryRows, err := s.Pool().Query(ctx,
 		`SELECT round, submitted_seats FROM match_summary WHERE match_id = $1 ORDER BY round`,
 		matchID)
 	if err != nil {
@@ -119,7 +132,7 @@ func snapshotProjections(t *testing.T, s *Store, matchID game.MatchID) []byte {
 // for what the round tick (M4) would have written originally, so
 // RebuildProjections' own output can be compared against a write that did
 // not go through it.
-func writeFixtureProjection(t *testing.T, s *Store, matchID game.MatchID) {
+func writeFixtureProjection(t *testing.T, s *store.Store, matchID game.MatchID) {
 	t.Helper()
 	ctx := context.Background()
 	events, submitted := fixtureProjection()
@@ -133,14 +146,14 @@ func writeFixtureProjection(t *testing.T, s *Store, matchID game.MatchID) {
 	}
 }
 
-// TestRebuildProjectionsIsByteIdenticalToOriginalWrite is #323's central
-// acceptance criterion: "rebuilding a match whose projections are intact
-// produces byte-identical events and match_summary content." It also fails
-// closed (#323's own explicit requirement): the snapshot is asserted
-// non-empty and to contain a known event kind from the fixture, so two
-// empty tables agreeing vacuously cannot pass this test.
-func TestRebuildProjectionsIsByteIdenticalToOriginalWrite(t *testing.T) {
-	s := openProjectionsStore(t)
+// TestIntegrationRebuildProjectionsIsByteIdenticalToOriginalWrite is #323's
+// central acceptance criterion: "rebuilding a match whose projections are
+// intact produces byte-identical events and match_summary content." It
+// also fails closed (#323's own explicit requirement): the snapshot is
+// asserted non-empty and to contain a known event kind from the fixture,
+// so two empty tables agreeing vacuously cannot pass this test.
+func TestIntegrationRebuildProjectionsIsByteIdenticalToOriginalWrite(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	matchID := seedProjectionsMatch(t, s)
 
@@ -165,20 +178,20 @@ func TestRebuildProjectionsIsByteIdenticalToOriginalWrite(t *testing.T) {
 	}
 }
 
-// TestRebuildProjectionsRecoversFromCorruption is #323's own three
-// corruption cases: "a payload edited, a row deleted, a seq shuffled" —
-// each restored to the pristine content by a rebuild driven from the same
-// (uncorrupted) source data a real fold would have produced, since a
-// rebuild never reads the tables it is about to overwrite.
-func TestRebuildProjectionsRecoversFromCorruption(t *testing.T) {
+// TestIntegrationRebuildProjectionsRecoversFromCorruption is #323's own
+// three corruption cases: "a payload edited, a row deleted, a seq
+// shuffled" — each restored to the pristine content by a rebuild driven
+// from the same (uncorrupted) source data a real fold would have produced,
+// since a rebuild never reads the tables it is about to overwrite.
+func TestIntegrationRebuildProjectionsRecoversFromCorruption(t *testing.T) {
 	tests := []struct {
 		name    string
-		corrupt func(t *testing.T, s *Store, matchID game.MatchID)
+		corrupt func(t *testing.T, s *store.Store, matchID game.MatchID)
 	}{
 		{
 			name: "row deleted",
-			corrupt: func(t *testing.T, s *Store, matchID game.MatchID) {
-				if _, err := s.pool.Exec(context.Background(),
+			corrupt: func(t *testing.T, s *store.Store, matchID game.MatchID) {
+				if _, err := s.Pool().Exec(context.Background(),
 					`DELETE FROM events WHERE match_id = $1 AND round = 1 AND seq = 0`, matchID,
 				); err != nil {
 					t.Fatalf("corrupt (delete row): %v", err)
@@ -187,8 +200,8 @@ func TestRebuildProjectionsRecoversFromCorruption(t *testing.T) {
 		},
 		{
 			name: "payload edited",
-			corrupt: func(t *testing.T, s *Store, matchID game.MatchID) {
-				if _, err := s.pool.Exec(context.Background(),
+			corrupt: func(t *testing.T, s *store.Store, matchID game.MatchID) {
+				if _, err := s.Pool().Exec(context.Background(),
 					`UPDATE events SET payload = '{"garbage":true}' WHERE match_id = $1 AND round = 1 AND seq = 0`, matchID,
 				); err != nil {
 					t.Fatalf("corrupt (edit payload): %v", err)
@@ -197,18 +210,18 @@ func TestRebuildProjectionsRecoversFromCorruption(t *testing.T) {
 		},
 		{
 			name: "seq shuffled",
-			corrupt: func(t *testing.T, s *Store, matchID game.MatchID) {
+			corrupt: func(t *testing.T, s *store.Store, matchID game.MatchID) {
 				// Swap seq 0 and seq 1 within round 1 via a temporary
 				// out-of-range value, since (match_id, round, seq) is the
 				// primary key and a direct swap would collide mid-statement.
 				ctx := context.Background()
-				if _, err := s.pool.Exec(ctx, `UPDATE events SET seq = -1 WHERE match_id = $1 AND round = 1 AND seq = 0`, matchID); err != nil {
+				if _, err := s.Pool().Exec(ctx, `UPDATE events SET seq = -1 WHERE match_id = $1 AND round = 1 AND seq = 0`, matchID); err != nil {
 					t.Fatalf("corrupt (shuffle seq, step 1): %v", err)
 				}
-				if _, err := s.pool.Exec(ctx, `UPDATE events SET seq = 0 WHERE match_id = $1 AND round = 1 AND seq = 1`, matchID); err != nil {
+				if _, err := s.Pool().Exec(ctx, `UPDATE events SET seq = 0 WHERE match_id = $1 AND round = 1 AND seq = 1`, matchID); err != nil {
 					t.Fatalf("corrupt (shuffle seq, step 2): %v", err)
 				}
-				if _, err := s.pool.Exec(ctx, `UPDATE events SET seq = 1 WHERE match_id = $1 AND round = 1 AND seq = -1`, matchID); err != nil {
+				if _, err := s.Pool().Exec(ctx, `UPDATE events SET seq = 1 WHERE match_id = $1 AND round = 1 AND seq = -1`, matchID); err != nil {
 					t.Fatalf("corrupt (shuffle seq, step 3): %v", err)
 				}
 			},
@@ -217,7 +230,7 @@ func TestRebuildProjectionsRecoversFromCorruption(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			s := openProjectionsStore(t)
+			s := storetest.Container(t)
 			ctx := context.Background()
 			matchID := seedProjectionsMatch(t, s)
 
@@ -242,47 +255,15 @@ func TestRebuildProjectionsRecoversFromCorruption(t *testing.T) {
 	}
 }
 
-// TestRebuildProjectionsIsAtomicOnInjectedFailure is #323's own atomicity
-// acceptance criterion: "an injected failure after the delete leaves the
-// original rows in place." Neither table's schema gives a caller-supplied
-// value anything to violate at insert time (see afterRebuildProjectionsDelete's
-// own doc comment in projections.go), so the injection here is a context
-// cancelled at exactly that seam — the only failure this transaction can
-// actually suffer between its delete and insert phases in practice (a lost
-// connection, a statement timeout) behaves identically from pgx's side.
-func TestRebuildProjectionsIsAtomicOnInjectedFailure(t *testing.T) {
-	s := openProjectionsStore(t)
-	matchID := seedProjectionsMatch(t, s)
-
-	writeFixtureProjection(t, s, matchID)
-	before := snapshotProjections(t, s, matchID)
-
-	cancelCtx, cancel := context.WithCancel(context.Background())
-	afterRebuildProjectionsDelete = cancel
-	t.Cleanup(func() { afterRebuildProjectionsDelete = func() {} })
-
-	events, submitted := fixtureProjection()
-	err := s.RebuildProjections(cancelCtx, matchID, events, submitted)
-	if err == nil {
-		t.Fatal("RebuildProjections with a context cancelled between delete and insert returned nil error, want the cancellation to surface")
-	}
-	afterRebuildProjectionsDelete = func() {}
-
-	after := snapshotProjections(t, s, matchID)
-	if !bytes.Equal(before, after) {
-		t.Fatalf("projections changed despite the injected failure:\nbefore = %s\nafter  = %s", before, after)
-	}
-}
-
-// TestRebuildProjectionsTouchesOnlyEventsAndMatchSummary is #323's own
-// "nothing else is written" acceptance criteria: orders, matches and
-// outbox are all asserted unchanged across a rebuild — orders and matches
-// because the log is not rebuildable and must never be touched by the tool
-// that rebuilds things, and outbox because RFC §7.4's null-sink guarantee
-// applies to --rebuild specifically, not only to the round tick's own
-// fold.
-func TestRebuildProjectionsTouchesOnlyEventsAndMatchSummary(t *testing.T) {
-	s := openProjectionsStore(t)
+// TestIntegrationRebuildProjectionsTouchesOnlyEventsAndMatchSummary is
+// #323's own "nothing else is written" acceptance criteria: orders,
+// matches and outbox are all asserted unchanged across a rebuild — orders
+// and matches because the log is not rebuildable and must never be
+// touched by the tool that rebuilds things, and outbox because RFC §7.4's
+// null-sink guarantee applies to --rebuild specifically, not only to the
+// round tick's own fold.
+func TestIntegrationRebuildProjectionsTouchesOnlyEventsAndMatchSummary(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	matchID := seedProjectionsMatch(t, s)
 	writeFixtureProjection(t, s, matchID)
@@ -290,7 +271,7 @@ func TestRebuildProjectionsTouchesOnlyEventsAndMatchSummary(t *testing.T) {
 	// orders' own FK is (match_id, seat) -> match_players (migration 00001),
 	// which seedProjectionsMatch does not create — events/match_summary
 	// need no seat roster, but AppendOrder below does.
-	if _, err := s.pool.Exec(ctx,
+	if _, err := s.Pool().Exec(ctx,
 		`INSERT INTO match_players (match_id, seat, faction, unsubscribe_token_hash) VALUES ($1, 0, 'test', decode('00', 'hex'))`,
 		matchID,
 	); err != nil {
@@ -299,10 +280,10 @@ func TestRebuildProjectionsTouchesOnlyEventsAndMatchSummary(t *testing.T) {
 
 	if err := s.AppendOrder(ctx, matchID, 1, 0,
 		game.Order{Round: 1, Action: game.ActionOrder{Kind: game.ActionNothing}, Stance: game.StanceOrder{Stance: game.StanceNeutral}},
-		SourceHuman); err != nil {
+		store.SourceHuman); err != nil {
 		t.Fatalf("AppendOrder: %v", err)
 	}
-	if _, err := s.pool.Exec(ctx,
+	if _, err := s.Pool().Exec(ctx,
 		`INSERT INTO outbox (to_email, template, payload, match_id, round, seat) VALUES ($1, $2, $3, $4, $5, $6)`,
 		"player@example.com", "round_resolved", []byte(`{}`), matchID, 1, 0,
 	); err != nil {
@@ -312,7 +293,7 @@ func TestRebuildProjectionsTouchesOnlyEventsAndMatchSummary(t *testing.T) {
 	beforeOrders := snapshotOrders(t, s, matchID)
 	beforeMatch := snapshotMatch(t, s, matchID)
 	var beforeOutboxCount int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM outbox`).Scan(&beforeOutboxCount); err != nil {
+	if err := s.Pool().QueryRow(ctx, `SELECT count(*) FROM outbox`).Scan(&beforeOutboxCount); err != nil {
 		t.Fatalf("count outbox (before): %v", err)
 	}
 
@@ -324,7 +305,7 @@ func TestRebuildProjectionsTouchesOnlyEventsAndMatchSummary(t *testing.T) {
 	afterOrders := snapshotOrders(t, s, matchID)
 	afterMatch := snapshotMatch(t, s, matchID)
 	var afterOutboxCount int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM outbox`).Scan(&afterOutboxCount); err != nil {
+	if err := s.Pool().QueryRow(ctx, `SELECT count(*) FROM outbox`).Scan(&afterOutboxCount); err != nil {
 		t.Fatalf("count outbox (after): %v", err)
 	}
 
@@ -346,9 +327,9 @@ type orderSnapshot struct {
 	Source  string
 }
 
-func snapshotOrders(t *testing.T, s *Store, matchID game.MatchID) []byte {
+func snapshotOrders(t *testing.T, s *store.Store, matchID game.MatchID) []byte {
 	t.Helper()
-	rows, err := s.pool.Query(context.Background(),
+	rows, err := s.Pool().Query(context.Background(),
 		`SELECT round, seat, payload, source FROM orders WHERE match_id = $1 ORDER BY round, seat`, matchID)
 	if err != nil {
 		t.Fatalf("query orders: %v", err)
@@ -372,12 +353,12 @@ func snapshotOrders(t *testing.T, s *Store, matchID game.MatchID) []byte {
 	return b
 }
 
-func snapshotMatch(t *testing.T, s *Store, matchID game.MatchID) []byte {
+func snapshotMatch(t *testing.T, s *store.Store, matchID game.MatchID) []byte {
 	t.Helper()
 	var status string
 	var config, seed []byte
 	var round int32
-	if err := s.pool.QueryRow(context.Background(),
+	if err := s.Pool().QueryRow(context.Background(),
 		`SELECT status, config, seed, round FROM matches WHERE id = $1`, matchID,
 	).Scan(&status, &config, &seed, &round); err != nil {
 		t.Fatalf("query matches row: %v", err)
