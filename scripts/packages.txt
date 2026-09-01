@@ -8,6 +8,7 @@
 # Adding a package here is a deliberate act. If a gate starts passing right
 # after you edited this file, check that it is passing for the right reason.
 
+github.com/garnizeh/cinzal/cmd/migrate
 github.com/garnizeh/cinzal/cmd/replay
 github.com/garnizeh/cinzal/cmd/server
 github.com/garnizeh/cinzal/cmd/simulate
@@ -24,6 +25,7 @@ github.com/garnizeh/cinzal/internal/rules
 github.com/garnizeh/cinzal/internal/rules/gen
 github.com/garnizeh/cinzal/internal/store
 github.com/garnizeh/cinzal/internal/store/orderlog
+github.com/garnizeh/cinzal/internal/store/pgimage
 github.com/garnizeh/cinzal/internal/store/storetest
 github.com/garnizeh/cinzal/internal/telemetry
 github.com/garnizeh/cinzal/internal/web

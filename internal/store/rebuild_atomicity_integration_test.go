@@ -23,7 +23,8 @@ import (
 // cannot import storetest (D46's own cycle warning: store -> storetest ->
 // store), so this file keeps its own minimal ad hoc bootstrap, reusing
 // migrate_integration_test.go's already-shared startPostgres/sub/
-// openDedicated/migrationsFS/postgresImage rather than duplicating them —
+// openDedicated/migrationsFS, and pgimage.Ref (#326) via startPostgres,
+// rather than duplicating them —
 // the same structural exception migrate_integration_test.go's own header
 // documents for its own four tests. fixtureEvents/snapshotProjections'
 // equivalents are reimplemented locally, minimally, rather than shared
