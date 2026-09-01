@@ -150,7 +150,7 @@ No Node, no frontend build step, and no Docker for the rules engine — `interna
 
 ## The CI gates
 
-Eight checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
+Ten checks make the architecture real rather than conventional. They are not style checks, and a failure is not a nit:
 
 | Gate | Asserts |
 |---|---|
@@ -162,6 +162,8 @@ Eight checks make the architecture real rather than conventional. They are not s
 | **Bots isolation** | `internal/bots`'s production code cannot name `MatchState`, the graph, or the match seed |
 | **Simulate dependencies** | `cmd/simulate` depends on nothing but `internal/rules`, `internal/bots`, `internal/game` and `internal/telemetry` |
 | **Replay dependencies** | `cmd/replay` depends on nothing outside a committed allow-list, so its fold path can never reach an effect provider |
+| **Postgres integration suite** | `internal/store`'s Integration/Concurrency tests (RFC-001 §16.1) pass against a real, pinned-digest Postgres, and fail — never skip — when Docker is unreachable |
+| **Integration coverage floor** | The tagged suite has not silently shrunk to fewer tests, or to zero, since the last reviewed floor bump |
 
 If one of these blocks you, the answer is almost never to weaken the gate.
 
@@ -176,6 +178,8 @@ Three of those are recent. `vuln` and both `replay` legs ran on every pull reque
 **Requiring a path-gated job does not deadlock a prose-only pull request**, which is the objection that would otherwise block this. `check`, `vuln` and `replay` carry no job-level `if`: the job always runs and reports `success` even when its path gate skips every step inside. Verified on [#369](https://github.com/garnizeh/cinzal/pull/369), a documentation-only change, where `check` and both `replay` legs each reported `success` rather than `skipped`.
 
 **`bench` is deliberately excluded.** It is the only CI job with a job-level condition — `if: github.event_name == 'push'` — so it reports `skipped` on every pull request. It records `main`'s benchmark history; `bench-compare` is the gate.
+
+**`integration` and `integration-list` (issue #325) run on every pull request but are not yet in branch protection's required list** — the same gap `vuln` and both `replay` legs sat in before [#391](https://github.com/garnizeh/cinzal/issues/391) closed it. Promoting them is a repository-settings change, not a file in this repository, and is tracked as a follow-up to #325 rather than bundled into it.
 
 Read the list rather than trusting this paragraph when it matters:
 
@@ -206,6 +210,16 @@ RFC-001 §16.4 states `cmd/simulate` "needs only `rules` and `bots`" — a depen
 RFC-001 §7.4 makes a dependency claim about `cmd/replay`, not just about `internal/rules`: the fold's own execution must never dispatch an effect, or a rebuild re-sends every historical notification the match ever generated. `internal/match/fold.FoldThrough` already runs `cmd/replay`'s fold with a null effect sink, but that is a runtime property — [D49](docs/decisions/D49-fold-package-boundary.md), decided while scoping this gate, names `scripts/check-replay-deps.sh` as the compile-time proof standing next to it: `go list -deps ./cmd/replay`'s `internal/` subset must be a subset of a committed allow-list, `scripts/replay-deps-allowlist.txt` ([#324](https://github.com/garnizeh/cinzal/issues/324)). The allow-list is `internal/game`, `internal/rules` (its own `internal/rules/gen` dependency included), `internal/match/fold`, `internal/opsmetrics` (D45's fold-duration/allocation metrics, pulled in transitively by `FoldMeasured` — the same allowance `cmd/simulate` already has), `internal/store` and `internal/store/orderlog`. `internal/mail`, `internal/web` and anything else fail the gate; widening the list is a deliberate, reviewed change, same discipline as `scripts/bots-isolation-allowlist.txt`.
 
 Same shape as the simulate dependency gate — a plain `go list`/`grep` pipeline — but unlike it, this one carries a fixture selftest (`make replay-deps-selftest`, `scripts/check-replay-deps_test.sh`): #324's own acceptance criteria required proof of every failure mode, including the positive case a plain dependency check exists to catch — a mail-shaped provider package introduced into the graph — a bar the simulate gate was never held to. Because `go list -deps` needs a real, buildable `go.mod` to run against, the selftest points the gate at a synthetic fixture module via environment-variable overrides (`REPLAY_DEPS_TEST_ROOT`/`_PKG`/`_ALLOWLIST`), the same idiom `check-rules-purity_test.sh` uses for the same reason, rather than the target-directory argument `check-bots-isolation.go`'s AST walk takes.
+
+### The Postgres integration gate
+
+RFC-001 §16.1 adds two test layers no `internal/store` file had before #325: Integration (a real Postgres, §16.1's own "full match through the HTTP layer" row) and Concurrency (two goroutines racing a shared resource, e.g. §8.1's `deadline_at ± 1ms` boundary). [D46](docs/decisions/D46-postgres-backed-test-layer.md) decided the shape, corrected in one place by [D54](docs/decisions/D54-integration-tag-fog-gate-and-check-scope.md): every file in either layer carries `//go:build integration`, so `go test ./...` (and therefore `make test`/`make check`) never compiles them at all — not a skip, a file `go test ./...`'s own invocation never had in scope. `internal/store/storetest` is the one entry point every such test acquires a database through (`Container` — a transaction against a shared, already-migrated database, rolled back after the test; `FreshDatabase` — a real, independent clone for a test that needs two live connections or a real commit; `FreshUnmigratedDatabase` — for the migration-race exit demonstration alone), started lazily from inside a test body rather than `TestMain`, so that `go test -list` never touches Docker.
+
+`make integration` is the separate command that owns these files: `go test -tags integration -race ./internal/store/... ./internal/match/... ./cmd/replay/...`, gated by `require-docker`, and `storetest.Container`'s own setup hard-fails (`t.Fatal`, never `t.Skip`) every test in a package the instant Docker is unreachable — CLAUDE.md's "a gate that passes when it can't run is worse than no gate," aimed at a suite instead of a tool.
+
+**The coverage floor is the gate that actually catches the suite shrinking.** `go test -tags integration -list '^Test(Integration|Concurrency)' <packages>` compiles every tagged file without running a single test body — Docker-free, since nothing beyond `-list` ever executes — and `scripts/check-integration-coverage.sh` counts the names it returns against a floor recorded in the script, bumped upward only, the same discipline `check-bench-regression.sh`'s threshold and `scripts/bots-isolation-allowlist.txt` already hold contributors to. Every Integration/Concurrency test function is named `TestIntegrationXxx`/`TestConcurrencyXxx` for exactly this reason: the count is scoped by package *and* filtered by name, so a floor over `./...` could not lose one test inside a total dominated by every ordinary test in the repository. `make integration-list` runs the raw `-list` command; `scripts/check-integration-coverage_test.sh` is its own fixture selftest, the same shape `check-replay-deps_test.sh` uses for the same reason (`go test -list` needs a real, buildable `go.mod`, so the selftest points the gate at a synthetic fixture module via environment-variable overrides rather than a fixture directory inside this module).
+
+**Neither joins `check`/`check-nosecrets`'s aggregate, for two different reasons.** `make integration` needs a reachable Docker daemon, which this document's Requirements section already promises `make check` will never require, for `internal/rules`'s sake — the package edited most, and the one D01 keeps dependency-free including this one. `make integration-list` needs no Docker, but D54 found that compiling `storetest`'s own `testcontainers-go` import is still a first-time module fetch and a heavier build than anything else on that aggregate's line pays — a cost this repository has already decided twice (`generate-check`, `bench-compare`) is worth paying to keep the default developer loop cheap, applied a third time here. Both get their own required CI job instead (`.github/workflows/ci.yml`), path-gated with the identical broad list `check`/`replay` already share.
 
 ### The dependency-vulnerability gate
 

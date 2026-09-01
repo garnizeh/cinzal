@@ -1,6 +1,6 @@
 //go:build integration
 
-package store
+package store_test
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"time"
 
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/store"
+	"github.com/garnizeh/cinzal/internal/store/storetest"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 )
@@ -19,44 +21,28 @@ import (
 // WriteEvents, UpsertSummary and ClearProjections: the seq-reproducibility
 // property, UpsertSummary's idempotence, and ClearProjections' match-scoped
 // isolation, none of which a mocked DBTX could actually prove.
-
-// openProjectionsStore migrates the real production migration set against a
-// fresh database and opens a *Store against the same DSN — the same shape
-// as orders_integration_test.go's openOrderStore.
-func openProjectionsStore(t *testing.T) *Store {
-	t.Helper()
-	dsn := startPostgres(t)
-	fsys := sub(t, migrationsFS, "migrations")
-
-	migrateDB := openDedicated(t, dsn)
-	if err := migrate(context.Background(), migrateDB, fsys); err != nil {
-		t.Fatalf("migrate() against the production migration set: %v", err)
-	}
-
-	s, err := Open(context.Background(), Config{DSN: dsn})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(s.Close)
-	return s
-}
+//
+// Every test below gets its *store.Store from storetest.Container (#325,
+// D46) — one documented entry point, a transaction against the shared work
+// database rolled back in t.Cleanup, rather than this file starting its own
+// container.
 
 // seedProjectionsMatch inserts one user and one matches row and returns the
 // match's id. events/match_summary's own FK is to matches(id) alone
 // (migration 00001) — neither table needs a match_players row to write
 // against, unlike orders'.
-func seedProjectionsMatch(t *testing.T, s *Store) game.MatchID {
+func seedProjectionsMatch(t *testing.T, s *store.Store) game.MatchID {
 	t.Helper()
 	ctx := context.Background()
 
 	var userID pgtype.UUID
-	if err := s.pool.QueryRow(ctx,
+	if err := s.Pool().QueryRow(ctx,
 		`INSERT INTO users (display_name) VALUES ('seed') RETURNING id`,
 	).Scan(&userID); err != nil {
 		t.Fatalf("seed user: %v", err)
 	}
 
-	match, err := New(s.pool).CreateMatch(ctx, CreateMatchParams{
+	match, err := store.New(s.Pool()).CreateMatch(ctx, store.CreateMatchParams{
 		Config:    []byte(`{}`),
 		Seed:      make([]byte, 32),
 		CreatedBy: userID,
@@ -85,9 +71,9 @@ type eventRow struct {
 	Payload []byte
 }
 
-func queryEventRows(t *testing.T, s *Store, matchID game.MatchID, round game.RoundNumber) []eventRow {
+func queryEventRows(t *testing.T, s *store.Store, matchID game.MatchID, round game.RoundNumber) []eventRow {
 	t.Helper()
-	rows, err := s.pool.Query(context.Background(),
+	rows, err := s.Pool().Query(context.Background(),
 		`SELECT seq, kind, payload FROM events WHERE match_id = $1 AND round = $2 ORDER BY seq`,
 		matchID, round)
 	if err != nil {
@@ -109,14 +95,14 @@ func queryEventRows(t *testing.T, s *Store, matchID game.MatchID, round game.Rou
 	return got
 }
 
-// TestWriteEventsSeqMatchesResolveOrderAndKindIsBareOrdinal is #321's own
-// acceptance criterion: "WriteEvents inserts a round's events in Resolve's
-// own order with seq derived from that order, not from a sequence
+// TestIntegrationWriteEventsSeqMatchesResolveOrderAndKindIsBareOrdinal is
+// #321's own acceptance criterion: "WriteEvents inserts a round's events in
+// Resolve's own order with seq derived from that order, not from a sequence
 // generator" — asserted by checking seq == the event's own index in the
 // slice passed in, in order — plus events.kind's own encoding: the bare
 // EventKind ordinal, not its String() name.
-func TestWriteEventsSeqMatchesResolveOrderAndKindIsBareOrdinal(t *testing.T) {
-	s := openProjectionsStore(t)
+func TestIntegrationWriteEventsSeqMatchesResolveOrderAndKindIsBareOrdinal(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	matchID := seedProjectionsMatch(t, s)
 
@@ -147,11 +133,11 @@ func TestWriteEventsSeqMatchesResolveOrderAndKindIsBareOrdinal(t *testing.T) {
 	}
 }
 
-// TestWriteEventsSeqReproducibleAfterClearProjections is #321's byte-
-// identical-rebuild acceptance criterion: "re-running it for the same round
-// after ClearProjections reproduces identical seq values."
-func TestWriteEventsSeqReproducibleAfterClearProjections(t *testing.T) {
-	s := openProjectionsStore(t)
+// TestIntegrationWriteEventsSeqReproducibleAfterClearProjections is #321's
+// byte-identical-rebuild acceptance criterion: "re-running it for the same
+// round after ClearProjections reproduces identical seq values."
+func TestIntegrationWriteEventsSeqReproducibleAfterClearProjections(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	matchID := seedProjectionsMatch(t, s)
 	events := fixtureEvents(1)
@@ -183,9 +169,9 @@ func TestWriteEventsSeqReproducibleAfterClearProjections(t *testing.T) {
 	}
 }
 
-func queryMatchSummaryRow(t *testing.T, s *Store, matchID game.MatchID, round game.RoundNumber) (submitted []game.SeatID, updatedAt time.Time, found bool) {
+func queryMatchSummaryRow(t *testing.T, s *store.Store, matchID game.MatchID, round game.RoundNumber) (submitted []game.SeatID, updatedAt time.Time, found bool) {
 	t.Helper()
-	err := s.pool.QueryRow(context.Background(),
+	err := s.Pool().QueryRow(context.Background(),
 		`SELECT submitted_seats, updated_at FROM match_summary WHERE match_id = $1 AND round = $2`,
 		matchID, round,
 	).Scan(&submitted, &updatedAt)
@@ -198,13 +184,26 @@ func queryMatchSummaryRow(t *testing.T, s *Store, matchID game.MatchID, round ga
 	return submitted, updatedAt, true
 }
 
-// TestUpsertSummaryIdempotentUpdatesTimestamp is #321's own acceptance
-// criterion: "UpsertSummary is idempotent for a (match_id, round) and
-// updates updated_at" — a second call for the same pair replaces the row's
-// submitted_seats rather than adding a row, and updated_at strictly
-// advances.
-func TestUpsertSummaryIdempotentUpdatesTimestamp(t *testing.T) {
-	s := openProjectionsStore(t)
+// TestIntegrationUpsertSummaryIdempotentUpdatesTimestamp is #321's own
+// acceptance criterion: "UpsertSummary is idempotent for a (match_id,
+// round) and updates updated_at" — a second call for the same pair
+// replaces the row's submitted_seats rather than adding a row, and
+// updated_at strictly advances.
+//
+// This needs storetest.FreshDatabase, not storetest.Container: updated_at's
+// DEFAULT is now(), and Postgres pins now() to the enclosing transaction's
+// start time (unlike clock_timestamp(), which ratelimit.go's own SQL uses
+// deliberately for exactly this reason — see ratelimit_integration_test.go).
+// Two UpsertSummary calls sharing Container's one ambient transaction would
+// both see the identical now(), regardless of the real time.Sleep between
+// them, and this test would pass or fail for the wrong reason.
+func TestIntegrationUpsertSummaryIdempotentUpdatesTimestamp(t *testing.T) {
+	dsn := storetest.FreshDatabase(t)
+	s, err := store.Open(context.Background(), store.Config{DSN: dsn})
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(s.Close)
 	ctx := context.Background()
 	matchID := seedProjectionsMatch(t, s)
 
@@ -226,7 +225,7 @@ func TestUpsertSummaryIdempotentUpdatesTimestamp(t *testing.T) {
 	}
 
 	var count int
-	if err := s.pool.QueryRow(ctx,
+	if err := s.Pool().QueryRow(ctx,
 		`SELECT count(*) FROM match_summary WHERE match_id = $1 AND round = 1`, matchID,
 	).Scan(&count); err != nil {
 		t.Fatalf("count match_summary: %v", err)
@@ -247,11 +246,12 @@ func TestUpsertSummaryIdempotentUpdatesTimestamp(t *testing.T) {
 	}
 }
 
-// TestClearProjectionsTouchesOnlyItsOwnMatch is #321's own acceptance
-// criterion: "ClearProjections removes both tables' rows for one match and
-// touches nothing else — asserted against a database holding two matches."
-func TestClearProjectionsTouchesOnlyItsOwnMatch(t *testing.T) {
-	s := openProjectionsStore(t)
+// TestIntegrationClearProjectionsTouchesOnlyItsOwnMatch is #321's own
+// acceptance criterion: "ClearProjections removes both tables' rows for one
+// match and touches nothing else — asserted against a database holding two
+// matches."
+func TestIntegrationClearProjectionsTouchesOnlyItsOwnMatch(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	matchA := seedProjectionsMatch(t, s)
 	matchB := seedProjectionsMatch(t, s)

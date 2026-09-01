@@ -23,7 +23,7 @@ SHELL := bash
 .SHELLFLAGS := -o pipefail -c
 
 .DEFAULT_GOAL := help
-.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check generate-check-selftest packages purity purity-selftest fog debug-isolation secrets vuln bots-isolation bots-isolation-selftest simulate-deps replay-deps replay-deps-selftest check check-nosecrets replay clean
+.PHONY: help dev prod test bench bench-baseline bench-compare bench-regression-selftest lint generate generate-check generate-check-selftest packages purity purity-selftest fog debug-isolation secrets vuln bots-isolation bots-isolation-selftest simulate-deps replay-deps replay-deps-selftest integration integration-list integration-coverage-selftest check check-nosecrets replay clean
 
 ## help      list these targets
 help:
@@ -239,6 +239,61 @@ replay-deps:
 replay-deps-selftest:
 	./scripts/check-replay-deps_test.sh
 
+# INTEGRATION_PKGS names exactly the packages D46/D54 (#325) allow to hold
+# //go:build integration files — internal/store (and its storetest child),
+# internal/match, cmd/replay — reused by both targets below so growing the
+# suite into a fourth package (internal/web, once M5 builds it, per D46's
+# own stated expectation) means editing this one line, not two.
+INTEGRATION_PKGS := ./internal/store/... ./internal/match/... ./cmd/replay/...
+
+## integration  Postgres-backed Integration/Concurrency tests (issue #325, D46/D54)
+#
+# Docker-required: storetest.Container's own lazy setup calls testcontainers-go,
+# which needs a reachable Docker daemon, and fails every test in the package
+# with t.Fatal — never t.Skip — when it isn't (storetest's own doc comment,
+# D46's "Fail-closed guard on the guard"). require-docker (the existing
+# require-% pattern rule) fails this target the same way before a single
+# test even starts, for a clearer message than a wall of individual
+# container-start failures would give.
+#
+# -race matches `test`'s own flag — internal/store's own goroutine-racing
+# Concurrency tests (e.g. TestConcurrencyRateLimitAdmitsExactlyCapacity) are
+# exactly the shape -race exists to catch a data race in, same as anywhere
+# else in this codebase.
+#
+# This is never part of check/check-nosecrets — see that target's own
+# comment block below for D46/D54's reasoning: Docker must never become a
+# prerequisite for editing internal/rules, the package edited most.
+integration: require-docker
+	$(GO) test -tags integration -race $(INTEGRATION_PKGS)
+
+## integration-list  Docker-free: confirms the tagged suite hasn't shrunk (D46/D54)
+#
+# `-list`, never a full run — compiles every //go:build integration file
+# without executing a single test body, which is what keeps this Docker-free
+# even though it still touches storetest's own testcontainers-go import (see
+# check-integration-coverage.sh's own header and storetest's doc comment on
+# why lazy, per-test-body container startup is what makes that safe).
+#
+# env -u strips the selftest's own environment overrides for the same
+# reason replay-deps' own comment gives: an ambient copy in the caller's
+# shell must never silently redirect this away from the real repo and its
+# real floor.
+integration-list:
+	env -u INTEGRATION_COVERAGE_TEST_ROOT -u INTEGRATION_COVERAGE_TEST_PKGS -u INTEGRATION_COVERAGE_TEST_FLOOR ./scripts/check-integration-coverage.sh
+
+## integration-coverage-selftest  fixture coverage for check-integration-coverage.sh (issue #325)
+#
+# Deterministic and fast — a synthetic fixture module, nothing about the
+# real internal/store/cmd/replay involved — so like replay-deps-selftest
+# this needs no Docker and carries none of the noise that would keep it out
+# of `check` on cost grounds alone. It stays off that line anyway: see
+# check-integration-coverage.sh's own header on why compiling storetest's
+# testcontainers-go import is still too heavy for check-nosecrets even
+# without Docker (D54's identical reasoning for integration-list itself).
+integration-coverage-selftest:
+	./scripts/check-integration-coverage_test.sh
+
 # Paths holding generated output, named explicitly rather than as a
 # directory wildcard: sqlc's output (issue #315) lands directly in
 # internal/store, package store, alongside hand-written repository code
@@ -348,6 +403,25 @@ generate-check-selftest:
 # deliberately not a gate". bench-regression-selftest is not the same script
 # and carries none of that noise — see its own comment above — so it is
 # listed rather than kept out alongside it.
+#
+# integration and integration-list (issue #325, D46/D54) are absent for two
+# different reasons, neither of which is "cannot run yet": integration needs
+# a reachable Docker daemon, which CONTRIBUTING.md's Requirements section
+# already promises `make check` will never require, for internal/rules'
+# sake — the package edited most, and one D01 keeps free of every
+# dependency including this one. integration-list needs no Docker (it only
+# ever compiles under -list, never executes a test body), but D46 first put
+# it here anyway and D54 corrected that: compiling storetest's own
+# testcontainers-go import is a first-time module fetch and a heavier build
+# than anything else on this line pays, a cost this aggregate has not
+# previously charged a contributor editing an unrelated package. Both get
+# their own required CI job instead (.github/workflows/ci.yml), path-gated
+# with the identical broad list check/replay already share — required in
+# CI, never a local check build input. See D46/D54's own decision documents
+# for the full reasoning; check-integration-coverage.sh is what actually
+# catches the suite silently shrinking, the same role bots-isolation's
+# allow-list and check-bench-regression.sh's threshold play for their own
+# gates.
 #
 # If check-nosecrets and the CI workflow ever disagree, the workflow is
 # wrong: it calls these targets rather than restating them, so there is one

@@ -9,9 +9,8 @@ import (
 
 	"github.com/garnizeh/cinzal/internal/game"
 	"github.com/garnizeh/cinzal/internal/store"
+	"github.com/garnizeh/cinzal/internal/store/storetest"
 	"github.com/jackc/pgx/v5/pgtype"
-	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
 // This file is issue #317's real-Postgres acceptance criteria for the
@@ -24,60 +23,10 @@ import (
 // here instead. orderlog_test.go (no build tag) covers the pure
 // decode/grouping/gap logic with no database at all.
 //
-// postgresImage is the same pinned digest D46 (#309) already decided for
-// the persistence layer's test suite, duplicated rather than shared:
-// migrate_integration_test.go's own comment states this is deliberate,
-// ad hoc, package-local scaffolding until #325's storetest package lands
-// and "these helpers... are expected to be lifted into storetest largely
-// unchanged once #325 lands" — this package's copy is written to be
-// trivially replaceable then, not to invent its own convention now.
-const postgresImage = "postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280"
-
-// startPostgres starts one pinned-digest Postgres container for a single
-// test and returns a DSN naming an explicit host.
-func startPostgres(t *testing.T) string {
-	t.Helper()
-	ctx := context.Background()
-
-	ctr, err := postgres.Run(ctx, postgresImage,
-		postgres.WithDatabase("cinzal_test"),
-		postgres.WithUsername("cinzal"),
-		postgres.WithPassword("cinzal"),
-		postgres.BasicWaitStrategies(),
-	)
-	if err != nil {
-		t.Fatalf("start postgres container: %v", err)
-	}
-	testcontainers.CleanupContainer(t, ctr)
-
-	dsn, err := ctr.ConnectionString(ctx, "sslmode=disable")
-	if err != nil {
-		t.Fatalf("postgres connection string: %v", err)
-	}
-	return dsn
-}
-
-// openOrderLogStore starts a fresh container, applies the real production
-// migration set via the exported store.Migrate (migrate.go), and opens a
-// *store.Store against the same DSN — the production path, not a
-// low-level *sql.DB the way internal/store's own migrate_integration_test.go
-// exercises Migrate's internals.
-func openOrderLogStore(t *testing.T) *store.Store {
-	t.Helper()
-	ctx := context.Background()
-	dsn := startPostgres(t)
-
-	if err := store.Migrate(ctx, dsn); err != nil {
-		t.Fatalf("store.Migrate: %v", err)
-	}
-
-	s, err := store.Open(ctx, store.Config{DSN: dsn})
-	if err != nil {
-		t.Fatalf("store.Open: %v", err)
-	}
-	t.Cleanup(s.Close)
-	return s
-}
+// Every test below gets its *store.Store from storetest.Container (#325,
+// D46) — one documented entry point, a transaction against the shared work
+// database rolled back in t.Cleanup, rather than this package starting its
+// own container.
 
 // seedMatchWithSeats inserts one user (as the match's creator), one
 // matches row, and one match_players row per seat in [0, numSeats) —
@@ -162,8 +111,8 @@ func randomIntegrationOrder(gen *mathrand.Rand, round game.RoundNumber) game.Ord
 // rounds and seats, read the whole log back through Load, and assert deep
 // equality — issue #317's acceptance criteria call this "asserted against
 // real Postgres."
-func TestAppendOrderThenLoadRoundTripArbitrary(t *testing.T) {
-	s := openOrderLogStore(t)
+func TestIntegrationAppendOrderThenLoadRoundTripArbitrary(t *testing.T) {
+	s := storetest.Container(t)
 	q := store.New(s.Pool())
 	ctx := context.Background()
 
@@ -210,8 +159,8 @@ func TestAppendOrderThenLoadRoundTripArbitrary(t *testing.T) {
 // acceptance criterion, exercised end to end: a match whose orders skip a
 // round (round 2 has no rows at all, round 3 does) must fail Load rather
 // than fold short silently.
-func TestLoadRejectsRoundGapAgainstRealPostgres(t *testing.T) {
-	s := openOrderLogStore(t)
+func TestIntegrationLoadRejectsRoundGapAgainstRealPostgres(t *testing.T) {
+	s := storetest.Container(t)
 	q := store.New(s.Pool())
 	ctx := context.Background()
 	matchID := seedMatchWithSeats(t, s, q, 1)
@@ -231,8 +180,8 @@ func TestLoadRejectsRoundGapAgainstRealPostgres(t *testing.T) {
 
 // TestLoadFreshMatchIsEmptyNoError asserts a match with no orders yet (a
 // fresh lobby) is not itself a gap.
-func TestLoadFreshMatchIsEmptyNoError(t *testing.T) {
-	s := openOrderLogStore(t)
+func TestIntegrationLoadFreshMatchIsEmptyNoError(t *testing.T) {
+	s := storetest.Container(t)
 	q := store.New(s.Pool())
 	ctx := context.Background()
 	matchID := seedMatchWithSeats(t, s, q, 1)

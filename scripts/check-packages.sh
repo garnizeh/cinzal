@@ -24,8 +24,23 @@ command -v go >/dev/null 2>&1 || fail "the go toolchain is not on PATH"
 expected="$(grep -vE '^\s*(#|$)' "$EXPECTED_FILE" | sort)"
 [ -n "$expected" ] || fail "$EXPECTED_FILE declares no packages"
 
-actual="$(cd "$ROOT" && go list ./... | sort)" || fail "go list ./... did not succeed"
-[ -n "$actual" ] || fail "go list ./... reported no packages"
+# Two configurations, unioned, the same reasoning check-fog-boundary.sh's own
+# BUILD_TAG_SETS already applies (D54): internal/store/storetest (#325) is
+# every file //go:build integration, on purpose, so testcontainers-go never
+# reaches the default `go build ./...`/`make check`. A plain `go list ./...`
+# never sees a directory whose files are entirely tagged out — not even as
+# ignored — so checking only the default configuration would make this gate
+# blind to that package's existence or disappearance either way. Each
+# configuration still fails closed independently: neither may be silently
+# empty.
+actual_default="$(cd "$ROOT" && go list ./...)" || fail "go list ./... did not succeed"
+[ -n "$actual_default" ] || fail "go list ./... reported no packages"
+
+actual_integration="$(cd "$ROOT" && go list -tags integration ./...)" \
+    || fail "go list -tags integration ./... did not succeed"
+[ -n "$actual_integration" ] || fail "go list -tags integration ./... reported no packages"
+
+actual="$(printf '%s\n%s\n' "$actual_default" "$actual_integration" | sort -u)"
 
 if ! diff_out="$(diff <(printf '%s\n' "$expected") <(printf '%s\n' "$actual"))"; then
     echo "check-packages: the package graph does not match $EXPECTED_FILE" >&2

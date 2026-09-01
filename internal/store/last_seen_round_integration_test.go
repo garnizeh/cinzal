@@ -1,12 +1,14 @@
 //go:build integration
 
-package store
+package store_test
 
 import (
 	"context"
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/store"
+	"github.com/garnizeh/cinzal/internal/store/storetest"
 )
 
 // This file is issue #409's real-Postgres acceptance criteria for
@@ -19,9 +21,9 @@ import (
 // queryAllLastSeenRounds reads back every seat's last_seen_round for
 // matchID, ordered by seat — the deterministic shape these tests compare
 // against.
-func queryAllLastSeenRounds(t *testing.T, s *Store, matchID game.MatchID) map[game.SeatID]int32 {
+func queryAllLastSeenRounds(t *testing.T, s *store.Store, matchID game.MatchID) map[game.SeatID]int32 {
 	t.Helper()
-	rows, err := s.pool.Query(context.Background(),
+	rows, err := s.Pool().Query(context.Background(),
 		`SELECT seat, last_seen_round FROM match_players WHERE match_id = $1 ORDER BY seat`, matchID)
 	if err != nil {
 		t.Fatalf("query last_seen_round rows: %v", err)
@@ -43,10 +45,11 @@ func queryAllLastSeenRounds(t *testing.T, s *Store, matchID game.MatchID) map[ga
 	return got
 }
 
-// TestRebuildLastSeenRoundsWritesEverySeat is RebuildLastSeenRounds' own
-// happy path: every seat named in bySeat lands with exactly that value.
-func TestRebuildLastSeenRoundsWritesEverySeat(t *testing.T) {
-	s := openMatchStore(t)
+// TestIntegrationRebuildLastSeenRoundsWritesEverySeat is
+// RebuildLastSeenRounds' own happy path: every seat named in bySeat lands
+// with exactly that value.
+func TestIntegrationRebuildLastSeenRoundsWritesEverySeat(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
@@ -68,12 +71,13 @@ func TestRebuildLastSeenRoundsWritesEverySeat(t *testing.T) {
 	}
 }
 
-// TestRebuildLastSeenRoundsOverwritesStaleValue is RebuildLastSeenRounds'
-// own doc comment made concrete: unlike events/match_summary, this table is
-// never cleared first — a rebuild must overwrite whatever value is already
-// on the row, not merely agree with a fresh row's own default.
-func TestRebuildLastSeenRoundsOverwritesStaleValue(t *testing.T) {
-	s := openMatchStore(t)
+// TestIntegrationRebuildLastSeenRoundsOverwritesStaleValue is
+// RebuildLastSeenRounds' own doc comment made concrete: unlike
+// events/match_summary, this table is never cleared first — a rebuild must
+// overwrite whatever value is already on the row, not merely agree with a
+// fresh row's own default.
+func TestIntegrationRebuildLastSeenRoundsOverwritesStaleValue(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
@@ -82,7 +86,7 @@ func TestRebuildLastSeenRoundsOverwritesStaleValue(t *testing.T) {
 		t.Fatalf("CreateMatch: %v", err)
 	}
 
-	if _, err := s.pool.Exec(ctx,
+	if _, err := s.Pool().Exec(ctx,
 		`UPDATE match_players SET last_seen_round = 999 WHERE match_id = $1 AND seat = 0`, matchID,
 	); err != nil {
 		t.Fatalf("corrupt last_seen_round: %v", err)
@@ -98,13 +102,13 @@ func TestRebuildLastSeenRoundsOverwritesStaleValue(t *testing.T) {
 	}
 }
 
-// TestRebuildLastSeenRoundsIsAtomicOnInjectedFailure asserts a failure
-// partway through the per-seat update loop leaves every seat's row exactly
-// as it was — the same "point-in-time, all-or-nothing" guarantee
+// TestIntegrationRebuildLastSeenRoundsIsAtomicOnInjectedFailure asserts a
+// failure partway through the per-seat update loop leaves every seat's row
+// exactly as it was — the same "point-in-time, all-or-nothing" guarantee
 // RebuildProjections gives its own delete-then-rewrite, applied here to a
 // row-by-row overwrite instead.
-func TestRebuildLastSeenRoundsIsAtomicOnInjectedFailure(t *testing.T) {
-	s := openMatchStore(t)
+func TestIntegrationRebuildLastSeenRoundsIsAtomicOnInjectedFailure(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 

@@ -110,8 +110,30 @@ type Config struct {
 // task rather than to #315's sqlc query set, so those two methods land here
 // directly, hand-written, ahead of sqlc — not a game concept either, and
 // generic across any future (scope, key) rather than auth-specific.
+//
+// pool is typed as poolLike, not the concrete *pgxpool.Pool, so a *Store can
+// also be built around an already-open pgx.Tx (NewFromTx, below) — see that
+// function's own comment for why storetest (#325, D46 tier 1) needs exactly
+// this.
 type Store struct {
-	pool *pgxpool.Pool
+	pool poolLike
+}
+
+// poolLike is the pool surface every *Store method needs: the DBTX shape
+// sqlc's generated Queries accept, plus Begin, which CreateMatch/WriteEvents/
+// UpsertSummary/RebuildProjections/RebuildLastSeenRounds each call to open
+// their own transaction. Both *pgxpool.Pool (Open, below) and pgx.Tx
+// (NewFromTx) satisfy it — pgx.Tx's own Begin opens a savepoint nested
+// inside whatever transaction it belongs to, which is exactly what makes
+// NewFromTx's use case work: a *Store built on a test's outer transaction
+// commits only savepoints, so rolling that outer transaction back at the
+// test's end undoes every commit the *Store itself believed was final. The
+// same substitutability already exists, undocumented as a named interface,
+// in ratelimit.go's dbtx and orders.go's Pool() — this gives it one name
+// Store's own field can use.
+type poolLike interface {
+	DBTX
+	Begin(ctx context.Context) (pgx.Tx, error)
 }
 
 // Open parses cfg, verifies connectivity, and returns a ready Store. A
@@ -259,14 +281,39 @@ func sessionTimeoutStatements(cfg Config) ([]string, error) {
 // a nil *Store and safe to call more than once — pgxpool.Pool.Close is
 // itself documented idempotent, and a caller that unconditionally defers
 // Close after a failed Open (which returns a nil *Store) must not panic.
+//
+// A *Store built by NewFromTx has no pool of its own to close — the caller
+// that opened the transaction owns its lifecycle (storetest's own
+// t.Cleanup, for the tests NewFromTx exists for), so Close is a deliberate
+// no-op in that case rather than an error.
 func (s *Store) Close() {
 	if s == nil || s.pool == nil {
 		return
 	}
-	s.pool.Close()
+	if p, ok := s.pool.(*pgxpool.Pool); ok {
+		p.Close()
+	}
 }
 
-// Ping verifies the pool can still reach the database.
+// Ping verifies the pool can still reach the database. Like Close, this is a
+// no-op (nil error) on a *Store built by NewFromTx — a transaction has no
+// separate connectivity check apart from the queries already running
+// through it.
 func (s *Store) Ping(ctx context.Context) error {
-	return s.pool.Ping(ctx)
+	if p, ok := s.pool.(*pgxpool.Pool); ok {
+		return p.Ping(ctx)
+	}
+	return nil
+}
+
+// NewFromTx returns a Store backed by an already-open transaction rather
+// than a connection pool. Test-support surface for storetest (D46 tier 1,
+// issue #325): every *Store method keeps working unchanged, since poolLike
+// is Store's entire internal surface and pgx.Tx satisfies it — the only
+// visible difference is that a transaction opened this way must be
+// committed or rolled back by the caller that began it, which is exactly
+// what lets storetest.Container roll every test's changes back in
+// t.Cleanup regardless of what the *Store under test itself commits.
+func NewFromTx(tx pgx.Tx) *Store {
+	return &Store{pool: tx}
 }

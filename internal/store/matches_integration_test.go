@@ -1,6 +1,6 @@
 //go:build integration
 
-package store
+package store_test
 
 import (
 	"context"
@@ -11,6 +11,8 @@ import (
 	"testing"
 
 	"github.com/garnizeh/cinzal/internal/game"
+	"github.com/garnizeh/cinzal/internal/store"
+	"github.com/garnizeh/cinzal/internal/store/storetest"
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
@@ -19,35 +21,19 @@ import (
 // failure, the seed/config round trip, D44's missing-field policy exercised
 // against a real row, and the seat-gap-on-reload rejection. matches_test.go
 // covers everything that doesn't need a live connection.
-
-// openMatchStore migrates the real production migration set against a
-// fresh database and opens a *Store against the same DSN — the same shape
-// orders_integration_test.go's openOrderStore already uses.
-func openMatchStore(t *testing.T) *Store {
-	t.Helper()
-	dsn := startPostgres(t)
-	fsys := sub(t, migrationsFS, "migrations")
-
-	migrateDB := openDedicated(t, dsn)
-	if err := migrate(context.Background(), migrateDB, fsys); err != nil {
-		t.Fatalf("migrate() against the production migration set: %v", err)
-	}
-
-	s, err := Open(context.Background(), Config{DSN: dsn})
-	if err != nil {
-		t.Fatalf("Open: %v", err)
-	}
-	t.Cleanup(s.Close)
-	return s
-}
+//
+// Every test below gets its *store.Store from storetest.Container (#325,
+// D46) — one documented entry point, a transaction against the shared work
+// database rolled back in t.Cleanup, rather than this file starting its own
+// container.
 
 // seedUser inserts one users row and returns its id — CreateMatch's
 // createdBy and, optionally, a seat's UserID both need a real users.id to
 // satisfy matches.created_by/match_players.user_id's own FK.
-func seedUser(t *testing.T, s *Store) pgtype.UUID {
+func seedUser(t *testing.T, s *store.Store) pgtype.UUID {
 	t.Helper()
 	var id pgtype.UUID
-	if err := s.pool.QueryRow(context.Background(),
+	if err := s.Pool().QueryRow(context.Background(),
 		`INSERT INTO users (display_name) VALUES ('seed') RETURNING id`,
 	).Scan(&id); err != nil {
 		t.Fatalf("seed user: %v", err)
@@ -55,19 +41,19 @@ func seedUser(t *testing.T, s *Store) pgtype.UUID {
 	return id
 }
 
-func mustSeats(n int) []SeatSpec {
-	seats := make([]SeatSpec, n)
+func mustSeats(n int) []store.SeatSpec {
+	seats := make([]store.SeatSpec, n)
 	for i := range seats {
-		seats[i] = SeatSpec{Faction: "test"}
+		seats[i] = store.SeatSpec{Faction: "test"}
 	}
 	return seats
 }
 
-// TestCreateMatchWritesMatchAndEverySeatRow is #318's own acceptance
-// criterion: "CreateMatch writes the match row and every match_players row
-// in one transaction."
-func TestCreateMatchWritesMatchAndEverySeatRow(t *testing.T) {
-	s := openMatchStore(t)
+// TestIntegrationCreateMatchWritesMatchAndEverySeatRow is #318's own
+// acceptance criterion: "CreateMatch writes the match row and every
+// match_players row in one transaction."
+func TestIntegrationCreateMatchWritesMatchAndEverySeatRow(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
@@ -77,7 +63,7 @@ func TestCreateMatchWritesMatchAndEverySeatRow(t *testing.T) {
 	}
 
 	var matchCount int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM matches WHERE id = $1`, matchID).Scan(&matchCount); err != nil {
+	if err := s.Pool().QueryRow(ctx, `SELECT count(*) FROM matches WHERE id = $1`, matchID).Scan(&matchCount); err != nil {
 		t.Fatalf("count matches: %v", err)
 	}
 	if matchCount != 1 {
@@ -85,7 +71,7 @@ func TestCreateMatchWritesMatchAndEverySeatRow(t *testing.T) {
 	}
 
 	var seatCount int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM match_players WHERE match_id = $1`, matchID).Scan(&seatCount); err != nil {
+	if err := s.Pool().QueryRow(ctx, `SELECT count(*) FROM match_players WHERE match_id = $1`, matchID).Scan(&seatCount); err != nil {
 		t.Fatalf("count match_players: %v", err)
 	}
 	if seatCount != 4 {
@@ -93,16 +79,17 @@ func TestCreateMatchWritesMatchAndEverySeatRow(t *testing.T) {
 	}
 }
 
-// TestCreateMatchReturnsTokensMatchingStoredHashes is the CodeRabbit finding
-// on PR #394: newUnsubscribeTokenHash minted a hash from bytes nobody kept,
-// so no unsubscribe link CreateMatch's caller could construct would ever
-// match what got stored. This asserts the actual fix — CreateMatch now
-// returns the raw per-seat tokens, one per seat, in seat order — round-trips
-// against a real row: sha256(returned raw token) must equal the seat's
-// stored unsubscribe_token_hash, for every seat, per D17's "raw-token
-// handoff at creation" (the only moment the raw value exists is right here).
-func TestCreateMatchReturnsTokensMatchingStoredHashes(t *testing.T) {
-	s := openMatchStore(t)
+// TestIntegrationCreateMatchReturnsTokensMatchingStoredHashes is the
+// CodeRabbit finding on PR #394: newUnsubscribeTokenHash minted a hash from
+// bytes nobody kept, so no unsubscribe link CreateMatch's caller could
+// construct would ever match what got stored. This asserts the actual fix
+// — CreateMatch now returns the raw per-seat tokens, one per seat, in seat
+// order — round-trips against a real row: sha256(returned raw token) must
+// equal the seat's stored unsubscribe_token_hash, for every seat, per D17's
+// "raw-token handoff at creation" (the only moment the raw value exists is
+// right here).
+func TestIntegrationCreateMatchReturnsTokensMatchingStoredHashes(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
@@ -118,7 +105,7 @@ func TestCreateMatchReturnsTokensMatchingStoredHashes(t *testing.T) {
 	// among match_players.sql's needs elsewhere), so this reads the raw
 	// column directly — the same shape seedUser already uses for a query
 	// this package has no generated method for.
-	rows, err := s.pool.Query(ctx,
+	rows, err := s.Pool().Query(ctx,
 		`SELECT seat, unsubscribe_token_hash FROM match_players WHERE match_id = $1 ORDER BY seat`, matchID)
 	if err != nil {
 		t.Fatalf("query unsubscribe_token_hash: %v", err)
@@ -153,21 +140,21 @@ func TestCreateMatchReturnsTokensMatchingStoredHashes(t *testing.T) {
 	}
 }
 
-// TestCreateMatchFailurePartWayLeavesNoMatch is the other half of the same
-// acceptance criterion: a failure partway through the seat loop must leave
-// no match row at all, not a match with fewer seats than it claims. The
-// failure is forced with a UserID naming a users row that does not exist —
-// match_players.user_id's own FK (migration 00001) rejects it, and that
-// rejection has to happen after the matches row insert already succeeded
-// inside the same transaction for this test to actually exercise the
-// rollback rather than a pre-flight check.
-func TestCreateMatchFailurePartWayLeavesNoMatch(t *testing.T) {
-	s := openMatchStore(t)
+// TestIntegrationCreateMatchFailurePartWayLeavesNoMatch is the other half of
+// the same acceptance criterion: a failure partway through the seat loop
+// must leave no match row at all, not a match with fewer seats than it
+// claims. The failure is forced with a UserID naming a users row that does
+// not exist — match_players.user_id's own FK (migration 00001) rejects it,
+// and that rejection has to happen after the matches row insert already
+// succeeded inside the same transaction for this test to actually exercise
+// the rollback rather than a pre-flight check.
+func TestIntegrationCreateMatchFailurePartWayLeavesNoMatch(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
 	ghostUser := pgtype.UUID{Bytes: [16]byte{0xff}, Valid: true}
-	seats := []SeatSpec{
+	seats := []store.SeatSpec{
 		{Faction: "ok"},
 		{Faction: "bad", UserID: &ghostUser},
 	}
@@ -178,7 +165,7 @@ func TestCreateMatchFailurePartWayLeavesNoMatch(t *testing.T) {
 	}
 
 	var matchCount int
-	if err := s.pool.QueryRow(ctx, `SELECT count(*) FROM matches`).Scan(&matchCount); err != nil {
+	if err := s.Pool().QueryRow(ctx, `SELECT count(*) FROM matches`).Scan(&matchCount); err != nil {
 		t.Fatalf("count matches: %v", err)
 	}
 	if matchCount != 0 {
@@ -186,14 +173,14 @@ func TestCreateMatchFailurePartWayLeavesNoMatch(t *testing.T) {
 	}
 }
 
-// TestCreateMatchThenLoadMatchSeedRoundTripsArbitrary is #318's own
-// property test: "a property test over arbitrary 32-byte seeds asserts
+// TestIntegrationCreateMatchThenLoadMatchSeedRoundTripsArbitrary is #318's
+// own property test: "a property test over arbitrary 32-byte seeds asserts
 // byte equality on reload." Iteration count is smaller than the pure
 // game-package property tests (5000, e.g. order_codec_test.go) because
 // every iteration here is a real transaction against a live Postgres
 // container, not an in-memory json.Marshal/Unmarshal round trip.
-func TestCreateMatchThenLoadMatchSeedRoundTripsArbitrary(t *testing.T) {
-	s := openMatchStore(t)
+func TestIntegrationCreateMatchThenLoadMatchSeedRoundTripsArbitrary(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 	gen := mathrand.New(mathrand.NewPCG(7, 11))
@@ -220,13 +207,13 @@ func TestCreateMatchThenLoadMatchSeedRoundTripsArbitrary(t *testing.T) {
 	}
 }
 
-// TestCreateMatchThenLoadMatchConfigRoundTripsExactly is #318's config
-// half of the same property: "The config round-trips to a value that is
-// reflect.DeepEqual to the input" — checked against a config that is
-// neither the zero value nor DefaultConfig(), per the fails-closed
+// TestIntegrationCreateMatchThenLoadMatchConfigRoundTripsExactly is #318's
+// config half of the same property: "The config round-trips to a value
+// that is reflect.DeepEqual to the input" — checked against a config that
+// is neither the zero value nor DefaultConfig(), per the fails-closed
 // acceptance criterion.
-func TestCreateMatchThenLoadMatchConfigRoundTripsExactly(t *testing.T) {
-	s := openMatchStore(t)
+func TestIntegrationCreateMatchThenLoadMatchConfigRoundTripsExactly(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
@@ -257,14 +244,14 @@ func TestCreateMatchThenLoadMatchConfigRoundTripsExactly(t *testing.T) {
 	}
 }
 
-// TestLoadMatchReturnsMetaAndValidatesAgainstSeatCount confirms LoadMatch's
-// own acceptance criterion: "LoadMatch calls cfg.Validate(players) and
-// returns its error rather than handing back a partially-valid config" —
+// TestIntegrationLoadMatchReturnsMetaAndValidatesAgainstSeatCount confirms
+// LoadMatch's own acceptance criterion: "LoadMatch calls cfg.Validate(players)
+// and returns its error rather than handing back a partially-valid config" —
 // exercised on the success path here (5 players is out of DefaultConfig()'s
 // supported range {2,3,4,5}... actually within range) alongside the meta
 // fields a caller needs.
-func TestLoadMatchReturnsMetaAndValidatesAgainstSeatCount(t *testing.T) {
-	s := openMatchStore(t)
+func TestIntegrationLoadMatchReturnsMetaAndValidatesAgainstSeatCount(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
@@ -292,20 +279,20 @@ func TestLoadMatchReturnsMetaAndValidatesAgainstSeatCount(t *testing.T) {
 	}
 }
 
-// TestLoadMatchRejectsConfigMissingField is D44's own required exercise:
-// "D44's missing-field policy is exercised with a real row: a config JSONB
-// written without a field the current game.Config declares behaves exactly
-// as D44 specified — including the failure case if D44 chose to reject."
-// The row is written directly, bypassing EncodeConfig entirely, since the
-// point is to prove LoadMatch itself refuses a malformed row regardless of
-// how it got there — a corrupted write, a hand-run migration, or a future
-// bug in EncodeConfig.
-func TestLoadMatchRejectsConfigMissingField(t *testing.T) {
-	s := openMatchStore(t)
+// TestIntegrationLoadMatchRejectsConfigMissingField is D44's own required
+// exercise: "D44's missing-field policy is exercised with a real row: a
+// config JSONB written without a field the current game.Config declares
+// behaves exactly as D44 specified — including the failure case if D44
+// chose to reject." The row is written directly, bypassing EncodeConfig
+// entirely, since the point is to prove LoadMatch itself refuses a
+// malformed row regardless of how it got there — a corrupted write, a
+// hand-run migration, or a future bug in EncodeConfig.
+func TestIntegrationLoadMatchRejectsConfigMissingField(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
-	full, err := EncodeConfig(game.DefaultConfig())
+	full, err := store.EncodeConfig(game.DefaultConfig())
 	if err != nil {
 		t.Fatalf("EncodeConfig: %v", err)
 	}
@@ -329,14 +316,14 @@ func TestLoadMatchRejectsConfigMissingField(t *testing.T) {
 	}
 
 	var matchID game.MatchID
-	if err := s.pool.QueryRow(ctx,
+	if err := s.Pool().QueryRow(ctx,
 		`INSERT INTO matches (config, seed, created_by) VALUES ($1, $2, $3) RETURNING id`,
 		broken, make([]byte, 32), createdBy,
 	).Scan(&matchID); err != nil {
 		t.Fatalf("insert broken match row: %v", err)
 	}
 	for seat := 0; seat < 2; seat++ {
-		if _, err := New(s.pool).CreateMatchPlayer(ctx, CreateMatchPlayerParams{
+		if _, err := store.New(s.Pool()).CreateMatchPlayer(ctx, store.CreateMatchPlayerParams{
 			MatchID:              matchID,
 			Seat:                 game.SeatID(seat),
 			Faction:              "test",
@@ -351,31 +338,31 @@ func TestLoadMatchRejectsConfigMissingField(t *testing.T) {
 	}
 }
 
-// TestLoadMatchRejectsSeatGap writes match_players rows for seats 0 and 2,
-// skipping 1, directly — again bypassing CreateMatch, which would never
-// itself produce a gap, to prove LoadMatch refuses a corrupted roster
-// regardless of how it arose. This is #318's "the players argument to
-// rules.NewMatch and the match_players row count are checked to agree on
-// reload; a disagreement is an error, not a fold," exercised against a
+// TestIntegrationLoadMatchRejectsSeatGap writes match_players rows for
+// seats 0 and 2, skipping 1, directly — again bypassing CreateMatch, which
+// would never itself produce a gap, to prove LoadMatch refuses a corrupted
+// roster regardless of how it arose. This is #318's "the players argument
+// to rules.NewMatch and the match_players row count are checked to agree
+// on reload; a disagreement is an error, not a fold," exercised against a
 // real row rather than only the pure seatsFromRows unit test.
-func TestLoadMatchRejectsSeatGap(t *testing.T) {
-	s := openMatchStore(t)
+func TestIntegrationLoadMatchRejectsSeatGap(t *testing.T) {
+	s := storetest.Container(t)
 	ctx := context.Background()
 	createdBy := seedUser(t, s)
 
-	encoded, err := EncodeConfig(game.DefaultConfig())
+	encoded, err := store.EncodeConfig(game.DefaultConfig())
 	if err != nil {
 		t.Fatalf("EncodeConfig: %v", err)
 	}
 	var matchID game.MatchID
-	if err := s.pool.QueryRow(ctx,
+	if err := s.Pool().QueryRow(ctx,
 		`INSERT INTO matches (config, seed, created_by) VALUES ($1, $2, $3) RETURNING id`,
 		encoded, make([]byte, 32), createdBy,
 	).Scan(&matchID); err != nil {
 		t.Fatalf("insert match row: %v", err)
 	}
 	for _, seat := range []game.SeatID{0, 2} {
-		if _, err := New(s.pool).CreateMatchPlayer(ctx, CreateMatchPlayerParams{
+		if _, err := store.New(s.Pool()).CreateMatchPlayer(ctx, store.CreateMatchPlayerParams{
 			MatchID:              matchID,
 			Seat:                 seat,
 			Faction:              "test",
