@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r51 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r52 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -281,6 +281,10 @@
 > **Changelog r50 → r51** — no `id` column had a stated generation rule (issue [#379](https://github.com/garnizeh/cinzal/issues/379), [D56](../decisions/D56-uuidv7-surrogate-keys.md))
 > - **§7.2 gains a stated surrogate-key convention.** Every `id` column defaults to `uuidv7()` — Postgres 18 native, no extension — never `gen_random_uuid()` (UUID v4) or a serial/bigserial type. v7's leading timestamp bits keep newly-inserted rows index-local in a btree, unlike v4's fully random layout, while staying exactly as non-enumerable: no `id` value discloses a row count or insertion sequence the way a serial key would. Governs `id` columns only — the composite-keyed tables (`match_players`, `orders`, `events`, `match_summary`, `rate_limits`) have no surrogate `id` and are unaffected.
 > - No GDD text change: this is a persistence implementation detail with no game-rule content. Companion doc stays at v2.32.
+>
+> **Changelog r51 → r52** — the replay bundle's literal `{seed, config, orderLog}` never named where a reader gets `players`, a genuinely separate required `internal/match/fold.Fold` parameter (issue [#407](https://github.com/garnizeh/cinzal/issues/407), [D57](../decisions/D57-replay-bundle-player-count-field.md))
+> - **§10.4 and §15.4's bundle shape both become `{seed, config, players, orderLog}`.** An explicit, stored player count, validated at read time against the order log's own highest seat index, catches a truncated bundle — every order-log row for the highest seat lost — that pure derivation would otherwise silently reinterpret as a smaller, complete match. `cmd/replay/bundle.go` already ships this shape (PR #404); this closes the gap CodeRabbit's pre-merge "Linked Issues" check flagged between that code and the RFC's literal text, in the code's favor.
+> - No GDD text change: player count is not a game rule, and every match participant already sees it on the board. Companion doc stays at v2.32.
 
 ---
 
@@ -1233,7 +1237,7 @@ Two obligations follow:
 
 ### 10.4 Replay runs entirely client-side
 
-A finished match's replay bundle is `{seed, config, orderLog}` — a few kilobytes. The browser folds it with the same WASM binary and scrubs through rounds locally. No replay endpoints, no server-side rendering of past states, no load from someone sharing a match on social media.
+A finished match's replay bundle is `{seed, config, players, orderLog}` — a few kilobytes. The browser folds it with the same WASM binary and scrubs through rounds locally. No replay endpoints, no server-side rendering of past states, no load from someone sharing a match on social media.
 
 This only works *after* the match ends, because folding requires the full state. During a live match the client folds nothing.
 
@@ -1279,7 +1283,7 @@ GET  /m/{id}/board-panel        fragment: log, attribution, heat map, pins (D18)
 POST /m/{id}/note/{slot}        write/replace a pinned note in that slot (D18)
 POST /m/{id}/note/{slot}/delete delete a pinned note (D18)
 GET  /m/{id}/events             SSE stream
-GET  /m/{id}/replay             finished only: {seed, config, log} bundle
+GET  /m/{id}/replay             finished only: {seed, config, players, log} bundle
 GET  /m/{id}/unsubscribe        validates seat+token, renders a confirmation — never mutates (D19)
 POST /m/{id}/unsubscribe        same seat+token in the query string; sets email_pref='none' — the
                                  List-Unsubscribe-Post target as well as the confirm page's own button (D19).
@@ -1695,7 +1699,7 @@ The inspector renders every seat's `PlayerView` side by side against the true `M
 
 Two things survive into the production build because they are diagnostics, not god views:
 
-- **Match export.** `{seed, config, orderLog}` for a *finished* match, downloadable by its players. It is the replay bundle (§10.4), and it is also the perfect bug report: attach it to an issue and `cmd/replay` reproduces the exact match. `board_notes` is excluded by construction — the bundle is shared with every player in the match, and a seat's notes are not ([D18](../decisions/D18-board-notes-storage.md)).
+- **Match export.** `{seed, config, players, orderLog}` for a *finished* match, downloadable by its players. It is the replay bundle (§10.4), and it is also the perfect bug report: attach it to an issue and `cmd/replay` reproduces the exact match. `players` is stored explicitly and validated against the order log's own highest seat index at read time, rather than derived alone — a bundle truncated to one seat short is rejected as corrupted, never silently reinterpreted as a smaller match ([D57](../decisions/D57-replay-bundle-player-count-field.md)). `board_notes` is excluded by construction — the bundle is shared with every player in the match, and a seat's notes are not ([D18](../decisions/D18-board-notes-storage.md)).
 - **Determinism check.** After each tick, in a sampled fraction of matches, refold from scratch and compare to the incrementally computed state. A mismatch is logged loudly with the match ID and round. This is how a map-iteration bug (§6.3) gets caught in days instead of months.
 
 ---
@@ -1895,7 +1899,7 @@ Everything below is deliberately absent from launch and belongs to RFC-002:
 | Attribution cones | Anchor table with candidate seats listed |
 | Client-side rules (WASM) | Server-side evaluation per click (§10) |
 | Touch, 380px layouts | Desktop-first; mobile usable but unpolished |
-| Replay viewer | Downloadable `{seed, config, log}` bundle |
+| Replay viewer | Downloadable `{seed, config, players, log}` bundle |
 
 **The former milestone 5 was scaffolding; it is now the product.**
 

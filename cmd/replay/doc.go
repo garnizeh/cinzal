@@ -13,12 +13,15 @@
 //
 // Two input paths (issue #322). --match reads a finished match straight out
 // of the database. --bundle reads RFC §15.4's own replay bundle instead —
-// {seed, config, orderLog}, downloadable by a match's players and "the
-// perfect bug report: attach it to an issue and cmd/replay reproduces the
-// exact match" — so a bug can be reproduced on a machine with no database
-// at all. --export-bundle writes that same bundle from a database match,
-// straight from its rows with no re-encoding step, so the two input paths
-// agree by construction.
+// {seed, config, players, orderLog}, downloadable by a match's players and
+// "the perfect bug report: attach it to an issue and cmd/replay reproduces
+// the exact match" — so a bug can be reproduced on a machine with no
+// database at all. players is stored explicitly and validated against the
+// order log's own highest seat index, catching a truncated bundle that pure
+// derivation would silently reinterpret as a smaller match
+// (docs/decisions/D57-replay-bundle-player-count-field.md). --export-bundle
+// writes that same bundle from a database match, straight from its rows
+// with no re-encoding step, so the two input paths agree by construction.
 //
 // Two dump shapes. The default prints the full rules.MatchState — a
 // developer's view, and deliberately not behind //go:build debug: D49

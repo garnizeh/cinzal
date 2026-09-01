@@ -73,9 +73,9 @@
 // influences game state, and RFC §6.3's purity/determinism requirement does
 // not reach it. FoldStats' reservoir sampling (once its duration buffer
 // exceeds capacity) uses the standard library's unseeded math/rand with no
-// determinism concern — replaying the same {seed, config, orderLog} still
-// reproduces byte-identical game state; it may simply land in a different
-// slot of an ops-metrics reservoir that no replay ever inspects.
+// determinism concern — replaying the same {seed, config, players, orderLog}
+// still reproduces byte-identical game state; it may simply land in a
+// different slot of an ops-metrics reservoir that no replay ever inspects.
 //
 // [D45]: docs/decisions/D45-fold-metrics-emitter-and-dashboard.md
 // [D49]: docs/decisions/D49-fold-package-boundary.md (moved FoldMeasured to
