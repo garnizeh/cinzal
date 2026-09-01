@@ -233,7 +233,7 @@ This bars a **required** check, not the tool. An advisory job — one that annot
 
 ## Reporting a bug in a match
 
-Once matches exist, the best bug report is a **match export** — `{seed, config, order log}`, a few kilobytes, downloadable by any player of a finished match. Attach it to the issue and `cmd/replay` reproduces your exact match. No description of what went wrong will ever be as useful.
+Once matches exist, the best bug report is a **match export** — `{seed, config, players, order log}`, a few kilobytes, downloadable by any player of a finished match. Attach it to the issue and `cmd/replay` reproduces your exact match. No description of what went wrong will ever be as useful.
 
 ## Licence
 
