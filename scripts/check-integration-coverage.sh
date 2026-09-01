@@ -71,7 +71,7 @@ if [ "$count" -eq 0 ]; then
 fi
 
 if [ "$count" -lt "$FLOOR" ]; then
-    fail "$count Integration/Concurrency tests found, want at least $FLOOR — the suite shrank. If a test was deliberately removed or renamed, lower FLOOR in this script in the same reviewed PR that explains why; otherwise this is the regression the gate exists to catch."
+    fail "$count Integration/Concurrency tests found, want at least $FLOOR — the suite shrank. FLOOR is bumped upward only (see this script's own header): a deliberately removed test gets replaced by an equivalent one so the count is preserved, not compensated for by lowering FLOOR. If this drop is genuinely intended, that is itself a decision for a reviewed PR to make explicitly — not a case this script accommodates on its own."
 fi
 
 echo "check-integration-coverage: OK - $count Integration/Concurrency test(s) found across $PKGS (floor $FLOOR)"
