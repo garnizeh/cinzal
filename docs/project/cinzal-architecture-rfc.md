@@ -1237,7 +1237,7 @@ Two obligations follow:
 
 ### 10.4 Replay runs entirely client-side
 
-A finished match's replay bundle is `{seed, config, players, orderLog}` — a few kilobytes. This names the bundle's four logical inputs, not literal JSON keys; the actual wire encoding is `cmd/replay/bundle.go`'s own `Bundle` struct tags (`seed`, `config`, `players`, `order_log` — snake_case for the fourth, matching Go's JSON convention for a multi-word field), which is what `readBundle`'s `DisallowUnknownFields()` check enforces. The browser folds it with the same WASM binary and scrubs through rounds locally. No replay endpoints, no server-side rendering of past states, no load from someone sharing a match on social media.
+A finished match's replay bundle is `{seed, config, players, orderLog}` — a few kilobytes. This names the bundle's four logical inputs, not literal JSON keys; the actual wire encoding is whatever `cmd/replay/bundle.go`'s own `Bundle` struct explicitly tags each field as (`seed`, `config`, `players`, and `order_log` for the fourth — Go's `encoding/json` has no automatic snake_case convention of its own, so `order_log` is a deliberate tag choice, not an inferred one), and `readBundle`'s `DisallowUnknownFields()` check validates strictly against those tagged names. The browser folds it with the same WASM binary and scrubs through rounds locally. No replay endpoints, no server-side rendering of past states, no load from someone sharing a match on social media.
 
 This only works *after* the match ends, because folding requires the full state. During a live match the client folds nothing.
 
