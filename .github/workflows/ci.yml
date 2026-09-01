@@ -469,6 +469,18 @@ jobs:
             exit 1
           fi
 
+      # `go test ./internal/store/...` compiles and runs every test in that
+      # package, tagged or not — including sqlc_generate_test.go
+      # (TestSqlcGenerateFailsOnUnknownColumn, issue #315), which shells out
+      # to the real sqlc binary. `make integration`'s own command has no
+      # narrower a scope than that, so this job needs sqlc even though
+      # nothing about the Integration/Concurrency suite itself touches it —
+      # the same tool `check`'s own "Install pinned tools" step installs,
+      # just this one, not the other three that step also installs.
+      - name: Install sqlc
+        if: steps.changed.outputs.touched == 'true'
+        run: go install "github.com/sqlc-dev/sqlc/cmd/sqlc@${SQLC_VERSION}"
+
       - name: make integration
         if: steps.changed.outputs.touched == 'true'
         run: make integration
