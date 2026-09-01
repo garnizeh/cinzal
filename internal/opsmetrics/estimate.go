@@ -10,10 +10,13 @@ package opsmetrics
 // issue #352 — these bytes are a fact about one build, not portable across
 // GOARCH): a deterministic, GC-disabled measurement (debug.SetGCPercent(-1),
 // runtime.MemStats.TotalAlloc before/after) of one fixed match — players=4,
-// seed=[32]byte{1}, game.DefaultConfig() — rather than a timing benchmark.
-// Allocation byte count is exact given deterministic code on that one build,
-// unlike wall-clock time, so this needs no bench-compare-style noise
-// tolerance.
+// seed=[32]byte{1}, resolveBenchConfig()'s own pinned literal (not a live
+// game.DefaultConfig() read, for the reason that function's own doc comment
+// states) — rather than a timing benchmark. Allocation byte count is exact
+// given deterministic code on that one build, unlike wall-clock time, so
+// this needs no bench-compare-style noise tolerance; that test file's own
+// self-check (assertWithinTenPercent) still permits a 10% acceptance band
+// around these constants, justified there, for real drift, not for noise.
 //
 // BytesPerInitialCall is dominated by map generation (Generate's own retry
 // loop for node-type assignment can run 1-66 tries per topology, per
