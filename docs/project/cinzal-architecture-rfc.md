@@ -1283,7 +1283,7 @@ GET  /m/{id}/board-panel        fragment: log, attribution, heat map, pins (D18)
 POST /m/{id}/note/{slot}        write/replace a pinned note in that slot (D18)
 POST /m/{id}/note/{slot}/delete delete a pinned note (D18)
 GET  /m/{id}/events             SSE stream
-GET  /m/{id}/replay             finished only: {seed, config, players, log} bundle
+GET  /m/{id}/replay             finished only: {seed, config, players, orderLog} bundle
 GET  /m/{id}/unsubscribe        validates seat+token, renders a confirmation — never mutates (D19)
 POST /m/{id}/unsubscribe        same seat+token in the query string; sets email_pref='none' — the
                                  List-Unsubscribe-Post target as well as the confirm page's own button (D19).
@@ -1899,7 +1899,7 @@ Everything below is deliberately absent from launch and belongs to RFC-002:
 | Attribution cones | Anchor table with candidate seats listed |
 | Client-side rules (WASM) | Server-side evaluation per click (§10) |
 | Touch, 380px layouts | Desktop-first; mobile usable but unpolished |
-| Replay viewer | Downloadable `{seed, config, players, log}` bundle |
+| Replay viewer | Downloadable `{seed, config, players, orderLog}` bundle |
 
 **The former milestone 5 was scaffolding; it is now the product.**
 
