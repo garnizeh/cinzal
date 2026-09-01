@@ -1,6 +1,6 @@
 # CINZAL — Architecture RFC
 ## RFC-001 · Game server, client, and tooling
-**Status:** draft for review · **Revision:** r52 · **Companion doc:** `cinzal-gdd.md` **v2.32**
+**Status:** draft for review · **Revision:** r53 · **Companion doc:** `cinzal-gdd.md` **v2.32**
 
 *(The two documents advance independently. Pair them by changelog rather than by version number — each entry records what moved and why.)*
 
@@ -285,6 +285,13 @@
 > **Changelog r51 → r52** — the replay bundle's literal `{seed, config, orderLog}` never named where a reader gets `players`, a genuinely separate required `internal/match/fold.Fold` parameter (issue [#407](https://github.com/garnizeh/cinzal/issues/407), [D57](../decisions/D57-replay-bundle-player-count-field.md))
 > - **§10.4 and §15.4's bundle shape both become `{seed, config, players, orderLog}`.** An explicit, stored player count, validated at read time against the order log's own highest seat index, catches a truncated bundle — every order-log row for the highest seat lost — that pure derivation would otherwise silently reinterpret as a smaller, complete match. `cmd/replay/bundle.go` already ships this shape (PR #404); this closes the gap CodeRabbit's pre-merge "Linked Issues" check flagged between that code and the RFC's literal text, in the code's favor.
 > - No GDD text change: player count is not a game rule, and every match participant already sees it on the board. Companion doc stays at v2.32.
+>
+> **Changelog r52 → r53** — D44, D45 and D46 land the RFC edits their own decisions never reached (issue [#353](https://github.com/garnizeh/cinzal/issues/353))
+> - **§7.1/§7.2 state D44's wire encoding** where `matches.config` and `orders.payload` are introduced: `config` carries an explicit version and decodes through a recursive exact-key-set check against a frozen per-version shape before a hard, no-fallback rejection; `payload` carries no version and treats a missing field as the ordinary case, since replay means rereading old rows under newer `Resolve` code; every `iota`-enum reachable from `Order` gets a wire-name table frozen independently of `String()`; `seed` gets a hard `len != 32` decode error. See [D44](../decisions/D44-config-order-jsonb-encoding.md).
+> - **§17 states D45's emitter, the allocation-share computation, and what "a dashboard" means before `internal/web` exists.** A new leaf package, `internal/opsmetrics`, times folds and derives the allocation share as an offline-measured per-call byte constant times an exact call count — never an in-situ heap-delta sample, which concurrent folds make structurally wrong rather than merely noisy — and renders duration plus its §7.3 threshold to a static HTML artefact `cmd/simulate`/`cmd/replay` emit, since no HTTP server exists before M5. See [D45](../decisions/D45-fold-metrics-emitter-and-dashboard.md). The allocation share itself is stated per [D51](../decisions/D51-fold-allocation-share-denominator-scope.md)'s later correction — two labeled, unverdicted reference measurements in M3, not one number against the 20% line — since that correction directly supersedes what D45 alone would have had this section say.
+> - **§16.1's Integration and Concurrency rows state D46's mechanism** (testcontainers-go, pinned to an exact digest), its build tag (`//go:build integration`, never compiled by `make check`), its fail-closed policy (`make integration` hard-fails on unreachable Docker, never `t.Skip`), and that M3's own Integration tests sit one level below the HTTP layer the row otherwise describes, since `internal/web` is `doc.go` until M5. See [D46](../decisions/D46-postgres-backed-test-layer.md), corrected in placement by [D54](../decisions/D54-integration-tag-fog-gate-and-check-scope.md).
+> - **CONTRIBUTING.md's Requirements section needed no further edit** — D54's own PR already corrected the "no Docker" promise to name `make integration`/`make integration-list` and state why neither joins `make check`.
+> - No GDD text change: all three decisions are persistence, observability and testing-infrastructure concerns with no game-rule content. Companion doc stays at v2.32.
 
 ---
 
@@ -760,6 +767,8 @@ state = fold(Resolve, initial(seed, cfg), orderLog)
 
 This falls out of the determinism requirement rather than being an independent choice, and it hands us four things for free: asynchronous resume, shareable replays, time-travel debugging, and the ability to answer "what sequence produced this?" when a player disputes an outcome.
 
+`cfg` and `orderLog` are not stored as whatever `encoding/json` would do by default with either struct's exported fields — [D44](../decisions/D44-config-order-jsonb-encoding.md) fixes the wire format for both, asymmetrically, because they mean different things: `cfg` is a frozen snapshot that must never be silently reinterpreted under a later shape, `orderLog` is designed to be reread by newer `Resolve` code forever. §7.2 states the mechanism where the two JSONB columns are introduced.
+
 ### 7.2 Schema
 
 Every `id` column below defaults to `uuidv7()` — Postgres 18 native, no
@@ -789,8 +798,9 @@ rate_limits(
 -- matches
 matches(
   id, status,                 -- lobby | active | finished | abandoned
-  config JSONB,               -- the frozen Config (§6.2)
-  seed BYTEA,
+  config JSONB,               -- the frozen Config (§6.2); versioned, recursively exact-key-set
+                               -- checked before decode, never defaulted on a missing field (D44)
+  seed BYTEA,                 -- len(seed) != 32 is a hard decode error, never padded/truncated (D44)
   round INT,
   timer_seconds INT,          -- sync tables
   deadline_seconds INT,       -- async tables
@@ -823,7 +833,9 @@ invite_links(
 -- THE LOG
 orders(
   match_id, round, seat,
-  payload JSONB, submitted_at, source,   -- human | bot | default
+  payload JSONB,               -- no version; append-only — a field missing from an old row is
+                                -- the ordinary case, never defaulted-and-silent (D44)
+  submitted_at, source,        -- human | bot | default
   PRIMARY KEY (match_id, round, seat)
 )
 
@@ -853,6 +865,8 @@ outbox(id, to_email, template, payload JSONB, attempts,
 ```
 
 `orders` has a primary key on `(match_id, round, seat)`, so resubmission during an open round is an `ON CONFLICT DO UPDATE` — which is exactly the GDD §18 rule that the last submission stands.
+
+`matches.config` and `orders.payload` are the two columns [D44](../decisions/D44-config-order-jsonb-encoding.md) fixes the wire encoding for — everything else in this schema is rebuildable from them and `seed`; they are rebuildable from nothing. `internal/game` carries `json:"..."` tags on `Config`, `Order` and their nested types directly, plus a `MarshalJSON`/`UnmarshalJSON` pair backed by a dedicated wire-name table — frozen independently of `String()` — for every `iota`-based enum type `Order` can reach (`ActionKind`, `Stance`, `ItemID`, `Sector`); `NodeID`, `SeatID`, `RoundNumber` and `ContractID` stay bare integers, since they are match-scoped indices rather than `iota` blocks. `internal/store` owns trust and versioning on top of that vocabulary, and the two columns get different policies because a `Config` and an `Order` mean different things: `config` carries an explicit version field and decodes through a two-step check — an exact key-set match against that version's frozen shape, recursively into every nested object, then a `DisallowUnknownFields` decode into that version's own frozen struct type — rejecting outright on any mismatch at any depth, with no fallback, the same way §7.3's snapshot argument already refused one. `payload` carries no version at all: the order log is meant to be reread by newer `Resolve` code forever, so a field missing from an old row is the ordinary case, not an error — its zero value must already be a legal historical meaning — and every future `Order` field addition ships with a frozen pre-existing fixture proving old rows still fold to their original result. `seed` gets its own decode-time length check: `len(seed) != 32` is a hard error, never padded or truncated, before the bytes ever become a `[32]byte`.
 
 `board_notes` follows the same shape on its own primary key, `(match_id, seat, slot)`: `INSERT ... ON CONFLICT (match_id, seat, slot) DO UPDATE SET node_id = EXCLUDED.node_id, round = EXCLUDED.round, body = EXCLUDED.body, updated_at = now()`. `updated_at` has to be named explicitly in that `SET` clause — its column default only fires on `INSERT`, so a conflict that reaches `DO UPDATE` without restating it would leave the timestamp stuck at the note's original creation time on every edit after the first.
 
@@ -1714,8 +1728,8 @@ Two things survive into the production build because they are diagnostics, not g
 | `rules` property | Randomised orders; assert invariants hold for every reachable state. |
 | Golden replays | Recorded `{seed, config, log}` fixtures with expected final state. Any unintended rule change fails these. |
 | Fog | Negative assertions (§16.3 below), plus one positive and one negative test per row of the sixteen-writer anchor table (§9.1); for Decoy, explicitly test planter Infamy 2 as anonymous and Infamy 3 as planter-named, with sight and no-sight views, and include the Decoy-vs-real-pickup indistinguishability test ([D12](../decisions/D12-decoy-fog-writer.md)). |
-| Integration | Real Postgres in a container. Full match through the HTTP layer. |
-| Concurrency | Two goroutines submitting the last order of a round; assert exactly one resolution. Submit at `deadline_at ± 1ms` against a real Postgres clock; assert the reject/accept boundary is exact and that Autopilot engages on the correct round (§8.1, §8.2). |
+| Integration | Real Postgres in a container via testcontainers-go, pinned to an exact manifest digest — never a floating tag ([D46](../decisions/D46-postgres-backed-test-layer.md)). Every file carries `//go:build integration`; `go test ./...` never compiles them, so `make check` has no code path to mistake for having run this layer. `make integration` runs them with `-race` and fails hard, unconditionally, the moment Docker is unreachable — never `t.Skip`. Full match through the HTTP layer is the row's target shape, but **M3 has no HTTP layer to route through** (`internal/web`/`cmd/server` stay `doc.go` until M5) — M3's own Integration tests exercise `internal/store` and `internal/match` directly, one level below where this row lands once M5 builds the surface it describes. |
+| Concurrency | Two goroutines submitting the last order of a round; assert exactly one resolution. Submit at `deadline_at ± 1ms` against a real Postgres clock; assert the reject/accept boundary is exact and that Autopilot engages on the correct round (§8.1, §8.2). Runs against `storetest.FreshDatabase` — a per-test database cloned from the same migrated template, since two independently-contending connections can't be expressed inside one rolled-back transaction — under the same build tag and fail-closed discipline as the row above (D46). |
 | Effects | **Fold a finished match ten times; assert `outbox` gains zero rows.** The single most valuable regression test in the suite (§7.4). |
 | Cross-round state | One test per row of §6.6, asserting the rule **fires on the correct round** — not merely that the counter advances. These fail silently otherwise. |
 | Archive | A node watched 6 rounds with traffic in 4 reports 4/6; a node watched with *no* traffic reports 0/N, not absence (§9.2). Plus four D13 cases: a non-fresh-tracks entry (confrontation, cargo taken, …) at a node during a Rain round is unaffected and reports normally; a node with genuinely no traffic during a Rain or Blackout round reports an honest zero, not an exclusion; a node whose only would-be entry is erased by Rain or Blackout is absent from `Sight`, present in `Obscured`, and excluded from `ObservedRounds` for that round; a node where Vanish/Distracted Guard/Festival suppressed the *acting* player's own entry reports an ordinary honest zero to every other watching seat, never `Obscured` ([D13](../decisions/D13-observation-denominator.md)). |
@@ -1734,6 +1748,8 @@ Two things survive into the production build because they are diagnostics, not g
 | Adversarial | Hand-crafted illegal payloads with the client bypassed, one per row of GDD §15.0. |
 | Bot determinism | A bot-populated match replays byte-identically from `{seed, order log}` on a second machine, and its per-round `consumed map[Purpose]int` matches the §6.4 table prediction **unchanged by bot population** — including the Autopilot handover case, where a seat switches from human to bot mid-match and the match stream's index count must not move (§6.4, [D32](../decisions/D32-bot-rng-stream.md)). |
 | Bots see only the view | `internal/bots` may not name `MatchState`, `Graph`, `Node` or the seed, at the type level rather than the import level — `bots` legitimately imports `rules` for `BotRNG`, so an import-graph check like §5's cannot express this one (§14.5). |
+
+A Docker-free companion, `make integration-list`, guards against the Integration/Concurrency layer silently shrinking: it compiles every `//go:build integration` file and lists test names matching `TestIntegration*`/`TestConcurrency*` without executing any body, checked against a floor count that only rises (D46, corrected by [D54](../decisions/D54-integration-tag-fog-gate-and-check-scope.md) into its own required CI job rather than `make check`'s aggregate).
 
 ### 16.2 Invariants for property tests
 
@@ -1807,6 +1823,8 @@ handler := slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
 **Metrics that matter operationally:** tick duration, **fold duration (p50/p99)**, **fold allocation as a share of heap churn**, outbox depth and age, deadline sweeper lag, **sweeper pool saturation and lock-timeout count**, SSE subscriber count, determinism-check mismatches.
 
 The two fold metrics exist to make §7.3's no-cache decision falsifiable rather than permanent — they are the trigger, and without them the question would be reopened on vibes every few months.
+
+**What emits the two fold metrics, and what closes "reopened on vibes."** A new leaf package, `internal/opsmetrics` ([D45](../decisions/D45-fold-metrics-emitter-and-dashboard.md)), stdlib-only — no exposition format, no exporter, no scrape target, matching §18's one-binary-one-Postgres topology rather than standing up a third piece of infrastructure for two numbers. `internal/match.FoldMeasured`, a thin wrapper timing the whole `Fold` call, feeds it in production and via `cmd/replay`; `cmd/simulate` calls the aggregator directly, once per simulated match, since the simulate-dependency gate bars it from importing `internal/match`. Duration is ordinary in-situ timing. Allocation share is not, because a shared heap makes any before/after delta noisy the moment two matches fold concurrently — the production-normal case — so it is instead `Σ estimatedFoldBytes(log) ⁄ Δ(/gc/heap/allocs:bytes)` over a window: the numerator is `BytesPerInitialCall + len(log) × BytesPerResolveCall`, two constants sourced from a deterministic, GC-disabled, single-goroutine measurement in `internal/rules` — never a timing benchmark — with `len(log)` known exactly by the caller; the denominator is `runtime/metrics`'s own cumulative, process-wide counter. Neither side depends on attributing bytes to one goroutine among several. **"A dashboard" in a topology with no HTTP server yet** is `FoldSnapshot.WriteHTML` — a pure `html/template` renderer, never wired to an alert. It shows p50/p99 duration beside its §7.3 threshold with a pass/fail mark; the allocation share is reported as two labeled reference measurements instead of one verdicted number in M3 — `cmd/replay`'s ("fold-only") and `cmd/simulate`'s ("bot+telemetry-diluted") — since a two-process milestone has no run whose denominator is the production topology §7.3's 20% figure was chosen against ([D51](../decisions/D51-fold-allocation-share-denominator-scope.md)). `cmd/simulate` and `cmd/replay` each render one via a flag; M3's exit demonstration commits that static artefact, and the command that produced it, to the evidence directory. No live HTTP surface exists in M3 — M5's `internal/web` reaches the same `FoldSnapshot` behind an operator-only bearer token (`OPS_METRICS_TOKEN`) this decision already specifies, at a path carrying only the two aggregate numbers, never a `match_id` or a seat.
 
 **Metrics that matter for design** are the GDD §22 set, computed by `internal/telemetry.Match(s rules.MatchState, log rules.OrderLog, events []game.Event, cfg game.Config) (MatchSummary, error)` and written to an analytics table on match completion. Computed from the event stream, the match's final state (including every seat's private `SeatArchive`), and its order log — not the event stream alone: [D33](../decisions/D33-telemetry-event-stream-coverage.md)'s row-by-row audit found six of §22's twenty rows need a final-state read and one needs order-log access, since `haltMovement` clears a route from memory without ever having recorded that it was submitted. The same computation runs in `cmd/simulate` and the debug panel, so bot data and human data are directly comparable — "one computation, three sinks," now named. `internal/telemetry` imports `internal/rules` deliberately, and is never imported by `render`/`web` — the fog gate treats it exactly like `internal/rules` itself ([D34](../decisions/D34-telemetry-package-placement.md)).
 
