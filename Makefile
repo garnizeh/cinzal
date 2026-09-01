@@ -134,8 +134,17 @@ packages:
 	./scripts/check-packages.sh
 
 ## purity    assert internal/rules, internal/telemetry, internal/bots do no I/O, read no clock, draw no randomness
+#
+# The PURITY_TEST_ROOT/_DIR/_SELF/_ALLOWED overrides check-rules-purity.sh
+# honours exist solely for purity-selftest, below, to point the check at a
+# synthetic fixture module (see the script's own header). `env -u` strips all
+# four here so an ambient copy of any of them in the caller's shell can never
+# silently redirect `make purity` away from the real internal/rules,
+# internal/telemetry and internal/bots trees — a false green on the one gate
+# this whole file's header warns against (issue #418, same shape as
+# replay-deps below, from CodeRabbit's review on PR #417/issue #324).
 purity:
-	./scripts/check-rules-purity.sh
+	env -u PURITY_TEST_ROOT -u PURITY_TEST_DIR -u PURITY_TEST_SELF -u PURITY_TEST_ALLOWED ./scripts/check-rules-purity.sh
 
 ## purity-selftest  fixture coverage for check-rules-purity.sh and check-fmt-purity.go (issue #297)
 #
