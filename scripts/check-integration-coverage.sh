@@ -51,8 +51,10 @@ PKGS="${INTEGRATION_COVERAGE_TEST_PKGS:-./internal/store/... ./internal/match/..
 # Bumped upward only, by hand, as the suite grows — never automatically, and
 # never lowered to make a shrinking suite pass. 66 is the exact count this
 # repository's Integration/Concurrency suite held the day #325 landed the
-# naming convention across every file that predates it.
-DEFAULT_FLOOR=66
+# naming convention across every file that predates it; 68 is the count as
+# of #328, which added TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture
+# and TestIntegrationFoldDivergesWhenOrderCorrupted to cmd/replay.
+DEFAULT_FLOOR=68
 FLOOR="${INTEGRATION_COVERAGE_TEST_FLOOR:-$DEFAULT_FLOOR}"
 
 fail() { echo "check-integration-coverage: FAIL: $*" >&2; exit 1; }
