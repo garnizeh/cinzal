@@ -153,44 +153,99 @@ func TestFoldMeasuredNoObserveOnError(t *testing.T) {
 // it would read as approximately equal to this inner sum; since the timer
 // must also cover initial()'s own non-zero cost, the recorded duration has
 // to be at least that much.
+//
+// A first version of this test compared a single sample of each side
+// directly, with only NewMatch's own cost — for a 2-player match, the
+// cheapest map-generation case in the game (GDD §6.1) — as margin. That
+// margin was microseconds wide, comparable to ordinary run-to-run scheduling
+// noise between two independently-timed sequences on a shared CI runner, and
+// the test failed on an unrelated PR as a result (#423). Two changes fix
+// that without weakening the property being tested:
+//
+//  1. Every quantity below is the minimum across `trials` independent
+//     replays, not a single sample. Scheduling interference (GC pauses,
+//     runner contention, cache effects) can only inflate an observed
+//     duration, never deflate it below the code's true cost, so the minimum
+//     across many trials converges toward that true cost — the same
+//     noise-resistant technique Go's own benchmarking tools rely on.
+//  2. The assertion requires the recorded duration to exceed the
+//     Resolve-only sum by at least half of NewMatch's own (minimized) cost,
+//     not merely by more than zero. A correct FoldMeasured clears this by a
+//     wide margin (it pays ~all of initOnly on top of resolveOnly); the D45
+//     regression clears it by ~none (its recorded duration is just
+//     resolveOnly again) — so this stays a decisive, reliable check rather
+//     than one two noisy minimums could tip either way by chance.
 func TestFoldMeasuredTimerCoversInitialAndResolve(t *testing.T) {
-	scoped := withIsolatedDefault(t)
+	withIsolatedDefault(t)
 
 	cfg := game.DefaultConfig()
 	seed := [32]byte{10}
 	players := 2
 	log := idleFullLog(cfg, players)
 
-	s, err := rules.NewMatch(seed, cfg, players)
-	if err != nil {
-		t.Fatalf("NewMatch() = %v", err)
-	}
-	var resolveOnly time.Duration
-	for round := 1; round <= cfg.Rounds; round++ {
-		start := time.Now()
-		next, _, err := rules.Resolve(s, log[game.RoundNumber(round)], cfg, rules.NewRNG(seed, round))
-		resolveOnly += time.Since(start)
+	const trials = 40
+
+	// Each trial takes both measurements back to back — the manual
+	// init+resolve timing, then FoldMeasured's own — rather than running all
+	// of one kind first and all of the other second. Interleaving keeps
+	// environmental drift over the test's run (CPU frequency scaling, cache
+	// warm-up, background load) from biasing one side's minimum more than
+	// the other's; measuring in two separate blocks let exactly that kind of
+	// drift produce an occasional false negative during verification of this
+	// fix (the corrected test failing to flag a deliberately reintroduced
+	// D45 regression).
+	var initOnlyMin, resolveOnlyMin, recordedMin time.Duration
+	for trial := range trials {
+		initStart := time.Now()
+		s, err := rules.NewMatch(seed, cfg, players)
+		initDur := time.Since(initStart)
 		if err != nil {
-			t.Fatalf("Resolve() round %d: %v", round, err)
+			t.Fatalf("NewMatch() = %v", err)
 		}
-		s = next
+
+		var resolveOnly time.Duration
+		for round := 1; round <= cfg.Rounds; round++ {
+			start := time.Now()
+			next, _, err := rules.Resolve(s, log[game.RoundNumber(round)], cfg, rules.NewRNG(seed, round))
+			resolveOnly += time.Since(start)
+			if err != nil {
+				t.Fatalf("Resolve() round %d: %v", round, err)
+			}
+			s = next
+		}
+
+		// recorded is FoldMeasured's own internally-recorded duration for
+		// the identical {seed, cfg, players, log}, read from a fresh,
+		// isolated aggregator so its Snapshot holds exactly this trial's one
+		// sample — the same reasoning withIsolatedDefault's own doc comment
+		// gives for why this suite never reads Default directly.
+		trialStats := opsmetrics.NewFoldStats()
+		restore := opsmetrics.SetDefault(trialStats)
+		_, _, err = FoldMeasured(seed, cfg, players, log)
+		restore()
+		if err != nil {
+			t.Fatalf("FoldMeasured() = %v", err)
+		}
+		snap := trialStats.Snapshot()
+		if snap.Count != 1 {
+			t.Fatalf("Snapshot().Count = %d, want 1", snap.Count)
+		}
+		recorded := snap.P99
+
+		if trial == 0 || initDur < initOnlyMin {
+			initOnlyMin = initDur
+		}
+		if trial == 0 || resolveOnly < resolveOnlyMin {
+			resolveOnlyMin = resolveOnly
+		}
+		if trial == 0 || recorded < recordedMin {
+			recordedMin = recorded
+		}
 	}
 
-	if _, _, err := FoldMeasured(seed, cfg, players, log); err != nil {
-		t.Fatalf("FoldMeasured() = %v", err)
-	}
-
-	// scoped holds exactly this one sample: withIsolatedDefault started it
-	// empty and this is the only FoldMeasured call in this test, so
-	// Snapshot's P99 (and P50) is exactly this call's own recorded duration
-	// — a single-element reservoir's every percentile is its one element.
-	snap := scoped.Snapshot()
-	if snap.Count != 1 {
-		t.Fatalf("Snapshot().Count = %d, want 1", snap.Count)
-	}
-	recorded := snap.P99
-
-	if recorded < resolveOnly {
-		t.Errorf("FoldMeasured recorded duration %v, want at least the separately-timed Resolve-only sum %v — the timer must cover initial() (NewMatch) as well as every Resolve call, not Resolve alone (D45)", recorded, resolveOnly)
+	margin := recordedMin - resolveOnlyMin
+	wantMargin := initOnlyMin / 2
+	if margin < wantMargin {
+		t.Errorf("FoldMeasured recorded duration exceeds the Resolve-only sum by %v (recorded %v, resolve-only %v), want at least %v (half of NewMatch's own minimized %v cost) — the timer must cover initial() (NewMatch) as well as every Resolve call, not Resolve alone (D45)", margin, recordedMin, resolveOnlyMin, wantMargin, initOnlyMin)
 	}
 }
