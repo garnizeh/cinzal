@@ -1,5 +1,5 @@
 === RUN   TestIntegrationMigrateBootRaceAppliesEachMigrationExactlyOnce
-2026/09/01 23:26:35 github.com/testcontainers/testcontainers-go - Connected to docker: 
+2026/09/02 00:13:28 github.com/testcontainers/testcontainers-go - Connected to docker: 
   Server Version: 29.7.2
   API Version: 1.55
   Operating System: Docker Desktop
@@ -9,128 +9,120 @@
   Testcontainers for Go Version: v0.44.0
   Resolved Docker Host: unix:///home/user/.docker/desktop/docker.sock
   Resolved Docker Socket Path: /var/run/docker.sock
-  Test SessionID: 90a910102e02ea1239631ebf6736ea9257dcb40bd626e9a6b0cc48d8503b31a1
-  Test ProcessID: 5e23c351-47e1-4d81-ab49-cff34d7b5dc9
-2026/09/01 23:26:35 🐳 Creating container for image postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
-2026/09/01 23:26:36 🐳 Creating container for image testcontainers/ryuk:0.14.0
-2026/09/01 23:26:36 ✅ Container created: 408ecae62b72
-2026/09/01 23:26:36 🐳 Starting container: 408ecae62b72
-2026/09/01 23:26:36 ✅ Container started: 408ecae62b72
-2026/09/01 23:26:36 ⏳ Waiting for container id 408ecae62b72 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
-2026/09/01 23:26:36 Shell not found in container
-2026/09/01 23:26:36 🔔 Container is ready: 408ecae62b72
-2026/09/01 23:26:36 ✅ Container created: 994092885de7
-2026/09/01 23:26:36 🐳 Starting container: 994092885de7
-2026/09/01 23:26:37 ✅ Container started: 994092885de7
-2026/09/01 23:26:37 ⏳ Waiting for container id 994092885de7 image: postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
-2026/09/01 23:26:38 🔔 Container is ready: 994092885de7
-    migrate_boot_race_integration_test.go:260: attempt 1: both processes exited 0, 5/5 migrations applied, 77 contention snapshot(s) observed
-    migrate_boot_race_integration_test.go:275: contention captured on attempt 1/10:
-        [2026-09-01T23:26:39.928203439-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.929466206-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.930860084-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.93205898-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.933522909-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.934904406-03:00] pid=93 granted=true state="active" wait_event_type="IO" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.936218917-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.9376415-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.93932618-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.940752741-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.942144157-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.943468407-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.944801686-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.946293575-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.947742579-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.949358226-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.951072076-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.952598425-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.954363863-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.955786617-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.957689801-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.959432609-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.961050166-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.962539275-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.963973604-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.965476437-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.966715473-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.968550521-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.970559461-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.972115257-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.973770831-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.975796301-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.97747888-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.979238002-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.981072138-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.982710483-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.984510128-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.986379316-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.988565207-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.990605859-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.992572611-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.994759435-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.996471811-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:39.998420884-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.000084756-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.002114636-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.003743889-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.005240575-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.00671195-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.008474277-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.010057219-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.011774863-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.013461114-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.015129651-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.01676138-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.018563427-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.020725725-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.022914386-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.02474063-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.027315635-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.030202345-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.032841913-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.035276596-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.037402152-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.038823471-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.040192909-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.04152165-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.043163114-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.044661992-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.046087594-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.047519433-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.049192239-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.051088324-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.052581332-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.054178619-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.055621045-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
-        [2026-09-01T23:26:40.057386641-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type=""
-    migrate_boot_race_integration_test.go:276: process 1 stdout: cmd/migrate: applied 5 migration(s) (5 total)
-    migrate_boot_race_integration_test.go:277: process 2 stdout: cmd/migrate: applied 5 migration(s) (5 total)
-2026/09/01 23:26:40 🐳 Stopping container: 994092885de7
-2026/09/01 23:26:40 ✅ Container stopped: 994092885de7
-2026/09/01 23:26:40 🐳 Terminating container: 994092885de7
-2026/09/01 23:26:40 🚫 Container terminated: 994092885de7
---- PASS: TestIntegrationMigrateBootRaceAppliesEachMigrationExactlyOnce (4.72s)
+  Test SessionID: 03ae9b38f2d49dff69cc369b44f2f38d1bad9346b49166264cd6785b79ce686e
+  Test ProcessID: 3b3cab9e-7449-4454-9f56-cca8bde65e06
+2026/09/02 00:13:28 🐳 Creating container for image postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+2026/09/02 00:13:39 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/09/02 00:13:39 ✅ Container created: 73b4e8e893ac
+2026/09/02 00:13:39 🐳 Starting container: 73b4e8e893ac
+2026/09/02 00:13:39 ✅ Container started: 73b4e8e893ac
+2026/09/02 00:13:39 ⏳ Waiting for container id 73b4e8e893ac image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/09/02 00:13:40 Shell not found in container
+2026/09/02 00:13:40 🔔 Container is ready: 73b4e8e893ac
+2026/09/02 00:13:40 ✅ Container created: ad5d15595c7d
+2026/09/02 00:13:40 🐳 Starting container: ad5d15595c7d
+2026/09/02 00:13:40 ✅ Container started: ad5d15595c7d
+2026/09/02 00:13:40 ⏳ Waiting for container id ad5d15595c7d image: postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/09/02 00:13:42 🔔 Container is ready: ad5d15595c7d
+    migrate_boot_race_integration_test.go:273: attempt 1: both processes exited 0, 5/5 migrations applied, 70 contention snapshot(s) observed
+    migrate_boot_race_integration_test.go:288: contention captured on attempt 1/10:
+        [2026-09-02T00:13:44.024828242-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.026676609-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.028131501-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.029584046-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.03101116-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.032733528-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.034605805-03:00] pid=93 granted=true state="active" wait_event_type="IO" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.036158301-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.037687188-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.039149128-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.040707064-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.042431181-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.044101378-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.045675081-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.046812099-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.048071519-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.04935475-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.050707681-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.051816262-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.053031621-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.054051058-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.055097521-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.056260348-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.057592295-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.059073217-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.060672208-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.06225955-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.063840289-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.065566389-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.067087981-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.068889058-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.070729148-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.072596564-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.074309964-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.076102765-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.07793659-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.079814787-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.081747244-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.08352358-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.085325327-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.087061876-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.088821071-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.090694661-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.092485455-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.09404058-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.09587678-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.097938846-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.099742897-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.101426641-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.103206965-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.105105014-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.106980865-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.108850995-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.110941567-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.112850429-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.114498771-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.116075792-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.117822348-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.119699231-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.121691769-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.123460544-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.125298098-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.12691116-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.128731462-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.130382772-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.131917667-03:00] pid=93 granted=true state="active" wait_event_type="" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.133391735-03:00] pid=93 granted=true state="idle in transaction" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.134776755-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.136029749-03:00] pid=93 granted=true state="active" wait_event_type="IO" | pid=94 granted=false state="active" wait_event_type="Lock"
+        [2026-09-02T00:13:44.137384978-03:00] pid=93 granted=true state="idle" wait_event_type="Client" | pid=94 granted=false state="active" wait_event_type="Lock"
+    migrate_boot_race_integration_test.go:289: process 1 stdout: cmd/migrate: applied 5 migration(s) (5 total)
+    migrate_boot_race_integration_test.go:290: process 2 stdout: cmd/migrate: applied 5 migration(s) (5 total)
+2026/09/02 00:13:44 🐳 Stopping container: ad5d15595c7d
+2026/09/02 00:13:44 ✅ Container stopped: ad5d15595c7d
+2026/09/02 00:13:44 🐳 Terminating container: ad5d15595c7d
+2026/09/02 00:13:44 🚫 Container terminated: ad5d15595c7d
+--- PASS: TestIntegrationMigrateBootRaceAppliesEachMigrationExactlyOnce (16.06s)
 === RUN   TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled
-2026/09/01 23:26:40 🐳 Creating container for image postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
-2026/09/01 23:26:40 ✅ Container created: b6ba9181411c
-2026/09/01 23:26:40 🐳 Starting container: b6ba9181411c
-2026/09/01 23:26:40 ✅ Container started: b6ba9181411c
-2026/09/01 23:26:40 ⏳ Waiting for container id b6ba9181411c image: postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
-2026/09/01 23:26:42 🔔 Container is ready: b6ba9181411c
-    migrate_boot_race_integration_test.go:370: process A killed at 2026-09-01T23:26:43.859501239-03:00 while holding the lock
-    migrate_boot_race_integration_test.go:371: lock observed released at 2026-09-01T23:26:43.863066612-03:00 (0.004s after kill)
-    migrate_boot_race_integration_test.go:372: process B started 2026-09-01T23:26:43.863066972-03:00, completed in 209.733184ms: cmd/migrate: applied 5 migration(s) (5 total)
-    migrate_boot_race_integration_test.go:373: process A stdout before it was killed: 
-    migrate_boot_race_integration_test.go:374: final goose_db_version count: 5/5
-2026/09/01 23:26:44 🐳 Stopping container: b6ba9181411c
-2026/09/01 23:26:44 ✅ Container stopped: b6ba9181411c
-2026/09/01 23:26:44 🐳 Terminating container: b6ba9181411c
-2026/09/01 23:26:44 🚫 Container terminated: b6ba9181411c
---- PASS: TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled (4.03s)
+2026/09/02 00:13:44 🐳 Creating container for image postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+2026/09/02 00:13:44 ✅ Container created: 51169d305b56
+2026/09/02 00:13:44 🐳 Starting container: 51169d305b56
+2026/09/02 00:13:45 ✅ Container started: 51169d305b56
+2026/09/02 00:13:45 ⏳ Waiting for container id 51169d305b56 image: postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/09/02 00:13:47 🔔 Container is ready: 51169d305b56
+    migrate_boot_race_integration_test.go:437: attempt 1/15: process A killed at 2026-09-02T00:13:48.170845292-03:00 with 1/5 migrations already committed
+    migrate_boot_race_integration_test.go:439: lock observed released at 2026-09-02T00:13:48.175972714-03:00 (0.005s after kill)
+    migrate_boot_race_integration_test.go:440: process B started 2026-09-02T00:13:48.175972993-03:00, completed in 123.188404ms: cmd/migrate: applied 4 migration(s) (5 total)
+    migrate_boot_race_integration_test.go:441: final goose_db_version count: 5/5
+2026/09/02 00:13:48 🐳 Stopping container: 51169d305b56
+2026/09/02 00:13:48 ✅ Container stopped: 51169d305b56
+2026/09/02 00:13:48 🐳 Terminating container: 51169d305b56
+2026/09/02 00:13:48 🚫 Container terminated: 51169d305b56
+--- PASS: TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled (4.13s)
 PASS
-ok  	github.com/garnizeh/cinzal/internal/store	9.895s
+ok  	github.com/garnizeh/cinzal/internal/store	21.333s
 testing: warning: no tests to run
 PASS
-ok  	github.com/garnizeh/cinzal/internal/store/orderlog	1.136s [no tests to run]
+ok  	github.com/garnizeh/cinzal/internal/store/orderlog	1.134s [no tests to run]
 ?   	github.com/garnizeh/cinzal/internal/store/pgimage	[no test files]
 ?   	github.com/garnizeh/cinzal/internal/store/storetest	[no test files]

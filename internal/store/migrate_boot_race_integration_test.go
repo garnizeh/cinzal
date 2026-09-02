@@ -113,6 +113,15 @@ type procResult struct {
 	exitCode       int
 }
 
+// processTimeout bounds every migration child process this file execs.
+// Without it, a genuine regression — a migration that deadlocks, or an
+// advisory lock that is acquired but never released — would block
+// cmd.Wait/cmd.Run until the surrounding go test binary's own default
+// 10-minute timeout, which kills the whole binary with a stack dump rather
+// than failing this one test with a readable message. 30s is generous
+// against the ~100-200ms an unblocked run actually takes.
+const processTimeout = 30 * time.Second
+
 // runTwoProcessesBarrier execs bin --db dsn as two independent OS
 // processes, released together off one closed channel (a barrier, not a
 // sleep — issue #329's own requirement) so they start close enough together
@@ -161,8 +170,12 @@ func runTwoProcessesBarrier(t *testing.T, bin, dsn string) (procResult, procResu
 		}
 	}()
 
-	cmd1 := exec.Command(bin, "--db", dsn)
-	cmd2 := exec.Command(bin, "--db", dsn)
+	ctx1, cancel1 := context.WithTimeout(context.Background(), processTimeout)
+	defer cancel1()
+	ctx2, cancel2 := context.WithTimeout(context.Background(), processTimeout)
+	defer cancel2()
+	cmd1 := exec.CommandContext(ctx1, bin, "--db", dsn)
+	cmd2 := exec.CommandContext(ctx2, bin, "--db", dsn)
 	var out1, err1, out2, err2 bytes.Buffer
 	cmd1.Stdout, cmd1.Stderr = &out1, &err1
 	cmd2.Stdout, cmd2.Stderr = &out2, &err2
@@ -279,97 +292,151 @@ func TestIntegrationMigrateBootRaceAppliesEachMigrationExactlyOnce(t *testing.T)
 
 // TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled is
 // #329's third case: a process crashing while it holds RFC-001 §7.5's
-// advisory lock, and a second process afterward acquiring it rather than
-// hanging. §7.5 itself never names this case, but it is what an operator
-// actually meets — a deploy killed mid-rollout, an OOM, a node eviction —
-// and the property under test is Postgres's own guarantee, not application
-// code: a session-scoped advisory lock is released automatically when its
-// session ends, including an unclean SIGKILL that runs no defer and sends
-// no message. TestIntegrationMigrateReleasesLockOnMidMigrationFailure
+// advisory lock — with at least one migration already committed and at
+// least one still pending, the genuine partial-history state an operator
+// meets — and a second process afterward resuming to completion rather than
+// hanging or redoing already-applied work. §7.5 itself never names this
+// case, but it is what an operator actually meets: a deploy killed
+// mid-rollout, an OOM, a node eviction. The property under test is
+// Postgres's own guarantee, not application code: a session-scoped advisory
+// lock is released automatically when its session ends, including an
+// unclean SIGKILL that runs no defer and sends no message.
+// TestIntegrationMigrateReleasesLockOnMidMigrationFailure
 // (migrate_integration_test.go) already proves the graceful-error release
-// path at the unit level; this proves the ungraceful-death path, and does
-// so with a real second OS process rather than a second call in the same
-// binary.
+// path, and that goose commits each migration independently rather than as
+// one all-or-nothing batch, at the unit level; this proves the
+// ungraceful-death path against a real, partially-applied database, with a
+// real second OS process rather than a second call in the same binary.
+//
+// Catching process A mid-batch needs deterministic synchronization, not a
+// fixed sleep: it is killed the instant goose_db_version's applied count is
+// observed strictly between 0 and the full migration count, polled as
+// tightly as this test binary can query it. An attempt that never observes
+// that window — process A finishes before it's caught, or never starts in
+// time — retries against a fresh sibling database rather than accepting a
+// weaker (all-or-nothing) proof of recovery.
 func TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled(t *testing.T) {
-	dsn := startPostgres(t)
+	baseDSN := startPostgres(t)
 	bin := buildMigrateBinary(t)
 	want := countProductionMigrations(t)
 
-	observer := openDedicated(t, dsn)
+	const maxPartialAttempts = 15
+	var (
+		partialCaptured bool
+		partialApplied  int
+		killedAt        time.Time
+		releasedAt      time.Time
+		startB          time.Time
+		elapsedB        time.Duration
+		outBFinal       string
+		attemptUsed     int
+	)
 
-	cmdA := exec.Command(bin, "--db", dsn)
-	var outA, errA bytes.Buffer
-	cmdA.Stdout, cmdA.Stderr = &outA, &errA
-	if err := cmdA.Start(); err != nil {
-		t.Fatalf("start process A: %v", err)
-	}
-
-	holdDeadline := time.Now().Add(10 * time.Second)
-	held := false
-	for time.Now().Before(holdDeadline) {
-		var n int
-		if err := observer.QueryRowContext(context.Background(),
-			"SELECT count(*) FROM pg_locks WHERE locktype = 'advisory' AND granted").Scan(&n); err == nil && n == 1 {
-			held = true
-			break
+	for attempt := 1; attempt <= maxPartialAttempts; attempt++ {
+		dsn := baseDSN
+		if attempt > 1 {
+			dsn = createFreshUnmigratedDatabase(t, baseDSN, fmt.Sprintf("cinzal_recover_%d", attempt))
 		}
-	}
-	if !held {
-		_ = cmdA.Process.Kill()
-		_ = cmdA.Wait()
-		t.Fatal("process A was never observed holding the advisory lock")
-	}
+		observer := openDedicated(t, dsn)
 
-	killedAt := time.Now()
-	if err := cmdA.Process.Kill(); err != nil { // SIGKILL: no defer, no graceful unlock — the crash this test simulates
-		t.Fatalf("kill process A: %v", err)
-	}
-	_ = cmdA.Wait() // expected to report a signal-kill error; not asserted on
-
-	releaseDeadline := time.Now().Add(10 * time.Second)
-	released := false
-	var releasedAt time.Time
-	for time.Now().Before(releaseDeadline) {
-		var n int
-		if err := observer.QueryRowContext(context.Background(),
-			"SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'").Scan(&n); err == nil && n == 0 {
-			released = true
-			releasedAt = time.Now()
-			break
+		ctxA, cancelA := context.WithTimeout(context.Background(), processTimeout)
+		cmdA := exec.CommandContext(ctxA, bin, "--db", dsn)
+		var outA, errA bytes.Buffer
+		cmdA.Stdout, cmdA.Stderr = &outA, &errA
+		if err := cmdA.Start(); err != nil {
+			cancelA()
+			t.Fatalf("attempt %d: start process A: %v", attempt, err)
 		}
-	}
-	if !released {
-		t.Fatal("advisory lock still held 10s after the holding process was killed — " +
-			"Postgres should release a session-scoped lock when its session ends")
+
+		partialDeadline := time.Now().Add(5 * time.Second)
+		var applied int
+		gotPartial := false
+		for time.Now().Before(partialDeadline) {
+			if err := observer.QueryRowContext(context.Background(),
+				"SELECT count(*) FROM goose_db_version WHERE is_applied AND version_id > 0").Scan(&applied); err == nil {
+				if applied > 0 && applied < want {
+					gotPartial = true
+					break
+				}
+				if applied >= want {
+					break // process A finished before this attempt caught it mid-flight
+				}
+			}
+		}
+
+		if !gotPartial {
+			_ = cmdA.Process.Kill()
+			_ = cmdA.Wait()
+			cancelA()
+			t.Logf("attempt %d: never observed a genuine partial-application window (last seen %d/%d applied) — retrying", attempt, applied, want)
+			continue
+		}
+
+		killedAt = time.Now()
+		if err := cmdA.Process.Kill(); err != nil { // SIGKILL: no defer, no graceful unlock — the crash this test simulates
+			cancelA()
+			t.Fatalf("attempt %d: kill process A: %v", attempt, err)
+		}
+		_ = cmdA.Wait() // expected to report a signal-kill error; not asserted on
+		cancelA()
+
+		releaseDeadline := time.Now().Add(10 * time.Second)
+		released := false
+		for time.Now().Before(releaseDeadline) {
+			var n int
+			if err := observer.QueryRowContext(context.Background(),
+				"SELECT count(*) FROM pg_locks WHERE locktype = 'advisory'").Scan(&n); err == nil && n == 0 {
+				released = true
+				releasedAt = time.Now()
+				break
+			}
+		}
+		if !released {
+			t.Fatalf("attempt %d: advisory lock still held 10s after the holding process was killed — "+
+				"Postgres should release a session-scoped lock when its session ends", attempt)
+		}
+
+		startB = time.Now()
+		ctxB, cancelB := context.WithTimeout(context.Background(), processTimeout)
+		cmdB := exec.CommandContext(ctxB, bin, "--db", dsn)
+		var outB, errB bytes.Buffer
+		cmdB.Stdout, cmdB.Stderr = &outB, &errB
+		runErrB := cmdB.Run()
+		elapsedB = time.Since(startB)
+		cancelB()
+
+		if runErrB != nil {
+			t.Fatalf("attempt %d: process B failed: %v\nstdout: %s\nstderr: %s", attempt, runErrB, outB.String(), errB.String())
+		}
+		if elapsedB > 5*time.Second {
+			t.Fatalf("attempt %d: process B took %s to complete — looks like it blocked rather than acquiring the freed lock", attempt, elapsedB)
+		}
+
+		db := openDedicated(t, dsn)
+		var finalApplied int
+		if err := db.QueryRowContext(context.Background(),
+			"SELECT count(*) FROM goose_db_version WHERE is_applied AND version_id > 0").Scan(&finalApplied); err != nil {
+			t.Fatalf("attempt %d: query goose_db_version: %v", attempt, err)
+		}
+		if finalApplied != want {
+			t.Fatalf("attempt %d: goose_db_version shows %d applied migrations after recovery, want exactly %d", attempt, finalApplied, want)
+		}
+
+		partialCaptured = true
+		partialApplied = applied
+		outBFinal = outB.String()
+		attemptUsed = attempt
+		break
 	}
 
-	startB := time.Now()
-	cmdB := exec.Command(bin, "--db", dsn)
-	var outB, errB bytes.Buffer
-	cmdB.Stdout, cmdB.Stderr = &outB, &errB
-	runErrB := cmdB.Run()
-	elapsedB := time.Since(startB)
-
-	if runErrB != nil {
-		t.Fatalf("process B failed: %v\nstdout: %s\nstderr: %s", runErrB, outB.String(), errB.String())
-	}
-	if elapsedB > 5*time.Second {
-		t.Fatalf("process B took %s to complete — looks like it blocked rather than acquiring the freed lock", elapsedB)
+	if !partialCaptured {
+		t.Fatalf("never observed process A holding the lock with a genuine partial application in progress "+
+			"(0 < applied < %d) across %d attempts", want, maxPartialAttempts)
 	}
 
-	db := openDedicated(t, dsn)
-	var applied int
-	if err := db.QueryRowContext(context.Background(),
-		"SELECT count(*) FROM goose_db_version WHERE is_applied AND version_id > 0").Scan(&applied); err != nil {
-		t.Fatalf("query goose_db_version: %v", err)
-	}
-	if applied != want {
-		t.Fatalf("goose_db_version shows %d applied migrations after recovery, want exactly %d", applied, want)
-	}
-
-	t.Logf("process A killed at %s while holding the lock", killedAt.Format(time.RFC3339Nano))
+	t.Logf("attempt %d/%d: process A killed at %s with %d/%d migrations already committed",
+		attemptUsed, maxPartialAttempts, killedAt.Format(time.RFC3339Nano), partialApplied, want)
 	t.Logf("lock observed released at %s (%.3fs after kill)", releasedAt.Format(time.RFC3339Nano), releasedAt.Sub(killedAt).Seconds())
-	t.Logf("process B started %s, completed in %s: %s", startB.Format(time.RFC3339Nano), elapsedB, strings.TrimSpace(outB.String()))
-	t.Logf("process A stdout before it was killed: %s", strings.TrimSpace(outA.String()))
-	t.Logf("final goose_db_version count: %d/%d", applied, want)
+	t.Logf("process B started %s, completed in %s: %s", startB.Format(time.RFC3339Nano), elapsedB, strings.TrimSpace(outBFinal))
+	t.Logf("final goose_db_version count: %d/%d", want, want)
 }
