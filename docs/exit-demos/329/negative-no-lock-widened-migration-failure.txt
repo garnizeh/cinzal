@@ -1,0 +1,49 @@
+=== RUN   TestIntegrationMigrateBootRaceAppliesEachMigrationExactlyOnce
+2026/09/01 23:26:02 github.com/testcontainers/testcontainers-go - Connected to docker: 
+  Server Version: 29.7.2
+  API Version: 1.55
+  Operating System: Docker Desktop
+  Total Memory: 7931 MB
+  Labels:
+    com.docker.desktop.address=unix:///home/user/.docker/desktop/docker-cli.sock
+  Testcontainers for Go Version: v0.44.0
+  Resolved Docker Host: unix:///home/user/.docker/desktop/docker.sock
+  Resolved Docker Socket Path: /var/run/docker.sock
+  Test SessionID: ceb1ccd285914bcf789bfe4c50c95bd01e5fa1fe74a64da1d1dad5059c1884f3
+  Test ProcessID: ff4bfab4-f067-4fcb-b853-c142b6978739
+2026/09/01 23:26:02 🐳 Creating container for image postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+2026/09/01 23:26:02 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/09/01 23:26:02 ✅ Container created: 90df233a3f6f
+2026/09/01 23:26:02 🐳 Starting container: 90df233a3f6f
+2026/09/01 23:26:02 ✅ Container started: 90df233a3f6f
+2026/09/01 23:26:02 ⏳ Waiting for container id 90df233a3f6f image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/09/01 23:26:03 Shell not found in container
+2026/09/01 23:26:03 🔔 Container is ready: 90df233a3f6f
+2026/09/01 23:26:03 ✅ Container created: 9bdc605d4295
+2026/09/01 23:26:03 🐳 Starting container: 9bdc605d4295
+2026/09/01 23:26:03 ✅ Container started: 9bdc605d4295
+2026/09/01 23:26:03 ⏳ Waiting for container id 9bdc605d4295 image: postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/09/01 23:26:05 🔔 Container is ready: 9bdc605d4295
+    migrate_boot_race_integration_test.go:260: attempt 1: both processes exited 0, 6/6 migrations applied, 0 contention snapshot(s) observed
+    migrate_boot_race_integration_test.go:260: attempt 2: both processes exited 0, 6/6 migrations applied, 0 contention snapshot(s) observed
+    migrate_boot_race_integration_test.go:260: attempt 3: both processes exited 0, 6/6 migrations applied, 0 contention snapshot(s) observed
+    migrate_boot_race_integration_test.go:260: attempt 4: both processes exited 0, 6/6 migrations applied, 0 contention snapshot(s) observed
+    migrate_boot_race_integration_test.go:260: attempt 5: both processes exited 0, 6/6 migrations applied, 0 contention snapshot(s) observed
+    migrate_boot_race_integration_test.go:260: attempt 6: both processes exited 0, 6/6 migrations applied, 0 contention snapshot(s) observed
+    migrate_boot_race_integration_test.go:260: attempt 7: both processes exited 0, 6/6 migrations applied, 0 contention snapshot(s) observed
+    migrate_boot_race_integration_test.go:246: attempt 8: process 2 exited 1
+        stdout: 
+        stderr: cmd/migrate: store: apply migrations: partial migration error (type:sql,version:1): ERROR: duplicate key value violates unique constraint "pg_type_typname_nsp_index" (SQLSTATE 23505)
+2026/09/01 23:26:15 🐳 Stopping container: 9bdc605d4295
+2026/09/01 23:26:16 ✅ Container stopped: 9bdc605d4295
+2026/09/01 23:26:16 🐳 Terminating container: 9bdc605d4295
+2026/09/01 23:26:16 🚫 Container terminated: 9bdc605d4295
+--- FAIL: TestIntegrationMigrateBootRaceAppliesEachMigrationExactlyOnce (14.30s)
+FAIL
+FAIL	github.com/garnizeh/cinzal/internal/store	14.442s
+testing: warning: no tests to run
+PASS
+ok  	github.com/garnizeh/cinzal/internal/store/orderlog	1.142s [no tests to run]
+?   	github.com/garnizeh/cinzal/internal/store/pgimage	[no test files]
+?   	github.com/garnizeh/cinzal/internal/store/storetest	[no test files]
+FAIL

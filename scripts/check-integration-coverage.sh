@@ -53,8 +53,12 @@ PKGS="${INTEGRATION_COVERAGE_TEST_PKGS:-./internal/store/... ./internal/match/..
 # repository's Integration/Concurrency suite held the day #325 landed the
 # naming convention across every file that predates it; 68 is the count as
 # of #328, which added TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture
-# and TestIntegrationFoldDivergesWhenOrderCorrupted to cmd/replay.
-DEFAULT_FLOOR=68
+# and TestIntegrationFoldDivergesWhenOrderCorrupted to cmd/replay; 70 is the
+# count as of #329, which added
+# TestIntegrationMigrateBootRaceAppliesEachMigrationExactlyOnce and
+# TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled to
+# internal/store.
+DEFAULT_FLOOR=70
 FLOOR="${INTEGRATION_COVERAGE_TEST_FLOOR:-$DEFAULT_FLOOR}"
 
 fail() { echo "check-integration-coverage: FAIL: $*" >&2; exit 1; }

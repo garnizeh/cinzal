@@ -1,0 +1,21 @@
+Applied to internal/store/migrate.go, run against, then reverted in the
+same turn — never committed. See 329-boot-race.md's Method section.
+
+--- a/internal/store/migrate.go
++++ b/internal/store/migrate.go
+@@ -114,10 +114,12 @@
+ // state.
+ func migrate(ctx context.Context, db *sql.DB, fsys fs.FS) error {
+-	if _, err := db.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationLockID); err != nil {
+-		return fmt.Errorf("store: acquire migration lock: %w", err)
+-	}
+-	defer releaseMigrationLock(db)
++	// DELIBERATELY DISABLED for issue #329's negative exit demonstration —
++	// must never reach main. Reverted in the same turn that captured the
++	// failure this produces.
++	// if _, err := db.ExecContext(ctx, "SELECT pg_advisory_lock($1)", migrationLockID); err != nil {
++	// 	return fmt.Errorf("store: acquire migration lock: %w", err)
++	// }
++	// defer releaseMigrationLock(db)
+
+ 	provider, err := goose.NewProvider(goose.DialectPostgres, db, fsys)
