@@ -415,6 +415,20 @@ func TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled(t *te
 			continue
 		}
 
+		// The applied count observed by the poll loop above is from just
+		// *before* the kill, not from the moment process A actually died —
+		// re-querying now, after a confirmed signal death, is what makes
+		// "process A was interrupted mid-batch" a checked fact about the
+		// database rather than an inference from a possibly-stale read.
+		if err := observer.QueryRowContext(context.Background(),
+			"SELECT count(*) FROM goose_db_version WHERE is_applied AND version_id > 0").Scan(&applied); err != nil {
+			t.Fatalf("attempt %d: query goose_db_version after kill: %v", attempt, err)
+		}
+		if applied <= 0 || applied >= want {
+			t.Logf("attempt %d: post-kill applied count was %d/%d, not a genuine partial state — retrying", attempt, applied, want)
+			continue
+		}
+
 		releaseDeadline := time.Now().Add(10 * time.Second)
 		released := false
 		for time.Now().Before(releaseDeadline) {
