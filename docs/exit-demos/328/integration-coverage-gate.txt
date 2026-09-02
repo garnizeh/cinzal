@@ -1,0 +1,1 @@
+check-integration-coverage: OK - 68 Integration/Concurrency test(s) found across ./internal/store/... ./internal/match/... ./cmd/replay/... (floor 68)
