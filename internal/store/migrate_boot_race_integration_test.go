@@ -205,6 +205,9 @@ func runTwoProcessesBarrier(t *testing.T, bin, dsn string) (procResult, procResu
 	return r1, r2, evidence
 }
 
+// exitCodeOf reads cmd's real exit code from ProcessState once Wait has
+// returned; a non-nil waitErr with no ProcessState means the process never
+// started cleanly, reported as -1 rather than a false 0.
 func exitCodeOf(cmd *exec.Cmd, waitErr error) int {
 	if cmd.ProcessState != nil {
 		return cmd.ProcessState.ExitCode()
@@ -362,6 +365,7 @@ func TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled(t *te
 					break // process A finished before this attempt caught it mid-flight
 				}
 			}
+			time.Sleep(time.Millisecond)
 		}
 
 		if !gotPartial {
@@ -373,12 +377,18 @@ func TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled(t *te
 		}
 
 		killedAt = time.Now()
-		if err := cmdA.Process.Kill(); err != nil { // SIGKILL: no defer, no graceful unlock — the crash this test simulates
-			cancelA()
-			t.Fatalf("attempt %d: kill process A: %v", attempt, err)
-		}
-		_ = cmdA.Wait() // expected to report a signal-kill error; not asserted on
+		killErr := cmdA.Process.Kill() // SIGKILL: no defer, no graceful unlock — the crash this test simulates
+		_ = cmdA.Wait()
 		cancelA()
+		if killErr != nil {
+			// The partial window can close between the count observation above and
+			// this Kill call — process A finished the remaining migrations on its
+			// own in that gap. This attempt can no longer prove anything about a
+			// killed-mid-batch process, so it retries rather than failing the test
+			// over a race it lost, the same as the !gotPartial branch above.
+			t.Logf("attempt %d: process A had already exited before the kill (%v) — the partial window closed first, retrying", attempt, killErr)
+			continue
+		}
 
 		releaseDeadline := time.Now().Add(10 * time.Second)
 		released := false
@@ -390,6 +400,7 @@ func TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled(t *te
 				releasedAt = time.Now()
 				break
 			}
+			time.Sleep(5 * time.Millisecond)
 		}
 		if !released {
 			t.Fatalf("attempt %d: advisory lock still held 10s after the holding process was killed — "+
