@@ -49,15 +49,15 @@ TestIntegrationSchemaUsersEmailSuppressedAtDefaultsNull
 TestIntegrationSchemaRateLimitsColumnsAndPrimaryKey
 TestIntegrationSchemaEventsTableCommentPresent
 TestIntegrationSchemaMatchSummaryTableCommentPresent
-ok  	github.com/garnizeh/cinzal/internal/store	0.065s
+ok  	github.com/garnizeh/cinzal/internal/store	0.063s
 TestIntegrationAppendOrderThenLoadRoundTripArbitrary
 TestIntegrationLoadRejectsRoundGapAgainstRealPostgres
 TestIntegrationLoadFreshMatchIsEmptyNoError
-ok  	github.com/garnizeh/cinzal/internal/store/orderlog	0.061s
+ok  	github.com/garnizeh/cinzal/internal/store/orderlog	0.063s
 ?   	github.com/garnizeh/cinzal/internal/store/pgimage	[no test files]
 ?   	github.com/garnizeh/cinzal/internal/store/storetest	[no test files]
 ?   	github.com/garnizeh/cinzal/internal/match	[no test files]
-ok  	github.com/garnizeh/cinzal/internal/match/fold	0.003s
+ok  	github.com/garnizeh/cinzal/internal/match/fold	0.004s
 TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture
 TestIntegrationFoldDivergesWhenOrderCorrupted
 TestIntegrationRunRebuildMatchPopulatesEventsAndMatchSummary
@@ -72,4 +72,4 @@ TestIntegrationReplayMatchAndBundleProduceByteIdenticalOutput
 TestIntegrationExportBundleFromDBEqualsAssembledFromRows
 TestIntegrationReplayByteIdenticalAcrossRunsRealMatch
 TestIntegrationReplayRoundBeyondLastRoundOnRealMatch
-ok  	github.com/garnizeh/cinzal/cmd/replay	0.061s
+ok  	github.com/garnizeh/cinzal/cmd/replay	0.066s

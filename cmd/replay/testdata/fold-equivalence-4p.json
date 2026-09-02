@@ -1,1 +1,3620 @@
-{"Round":15,"Graph":{"Nodes":[{"ID":0,"Name":"","Type":3,"Sector":4,"X":750,"Y":925,"Edges":[8,13,27],"Post":null,"Market":"BQQB","SinkholeRounds":0,"FenceWindfallActive":false},{"ID":1,"Name":"","Type":2,"Sector":2,"X":575,"Y":250,"Edges":[16],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":2,"Name":"","Type":4,"Sector":3,"X":425,"Y":575,"Edges":[4,15,19,25],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":3,"Name":"","Type":4,"Sector":1,"X":250,"Y":425,"Edges":[5,14,18],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":4,"Name":"","Type":1,"Sector":3,"X":425,"Y":750,"Edges":[2,12,15,21],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":5,"Name":"","Type":2,"Sector":1,"X":250,"Y":75,"Edges":[3,6],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":6,"Name":"","Type":2,"Sector":1,"X":425,"Y":425,"Edges":[5,23],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":7,"Name":"","Type":3,"Sector":2,"X":750,"Y":75,"Edges":[17],"Post":null,"Market":"AwYC","SinkholeRounds":0,"FenceWindfallActive":false},{"ID":8,"Name":"","Type":2,"Sector":4,"X":925,"Y":750,"Edges":[0,12,13,27],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":9,"Name":"","Type":1,"Sector":3,"X":75,"Y":925,"Edges":[10,15,16,25],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":10,"Name":"","Type":4,"Sector":3,"X":425,"Y":925,"Edges":[9,18,19,24],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":11,"Name":"","Type":2,"Sector":1,"X":250,"Y":250,"Edges":[14,26],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":12,"Name":"","Type":4,"Sector":4,"X":575,"Y":575,"Edges":[4,8,27],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":13,"Name":"","Type":4,"Sector":4,"X":750,"Y":575,"Edges":[0,8,22],"Post":null,"Market":null,"SinkholeRounds":1,"FenceWindfallActive":false},{"ID":14,"Name":"","Type":3,"Sector":1,"X":425,"Y":250,"Edges":[3,11,26],"Post":null,"Market":"BggB","SinkholeRounds":0,"FenceWindfallActive":true},{"ID":15,"Name":"","Type":1,"Sector":3,"X":250,"Y":750,"Edges":[2,4,9,19],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":16,"Name":"","Type":4,"Sector":2,"X":750,"Y":425,"Edges":[1,9],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":17,"Name":"","Type":1,"Sector":2,"X":575,"Y":75,"Edges":[7,20],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":18,"Name":"","Type":1,"Sector":3,"X":75,"Y":750,"Edges":[3,10,23,26],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":19,"Name":"","Type":4,"Sector":4,"X":925,"Y":925,"Edges":[2,10,15,22],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":20,"Name":"","Type":1,"Sector":2,"X":925,"Y":425,"Edges":[17,24],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":21,"Name":"","Type":1,"Sector":3,"X":250,"Y":575,"Edges":[4,23,25,26],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":22,"Name":"","Type":2,"Sector":4,"X":575,"Y":750,"Edges":[13,19,27],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":23,"Name":"","Type":3,"Sector":1,"X":425,"Y":75,"Edges":[6,18,21],"Post":null,"Market":"AgUH","SinkholeRounds":0,"FenceWindfallActive":false},{"ID":24,"Name":"","Type":4,"Sector":2,"X":575,"Y":425,"Edges":[10,20,25],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":25,"Name":"","Type":4,"Sector":2,"X":925,"Y":75,"Edges":[2,9,21,24],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false},{"ID":26,"Name":"","Type":3,"Sector":1,"X":75,"Y":75,"Edges":[11,14,18,21],"Post":null,"Market":"BAMC","SinkholeRounds":0,"FenceWindfallActive":false},{"ID":27,"Name":"","Type":2,"Sector":4,"X":750,"Y":750,"Edges":[0,8,12,22],"Post":null,"Market":null,"SinkholeRounds":0,"FenceWindfallActive":false}],"Cargo":[{"Node":26,"Bound":true,"Origin":18,"Destination":27,"SpilledLoad":false},{"Node":3,"Bound":true,"Origin":4,"Destination":6,"SpilledLoad":false},{"Node":1,"Bound":false,"Origin":0,"Destination":0,"SpilledLoad":true}],"EventDeck":"DRMXAgoPDBIBAxQL","IncidentDeck":"BQcLDwQDDBABDQYJCA=="},"Players":[{"Seat":0,"Balance":17,"Infamy":3,"RP":2,"Position":8,"ContractsDelivered":1,"Cargo":null,"Contracts":[{"ID":0,"Origin":21,"Destination":1,"Tier":1,"ExpiresRound":20,"DeadlinePauseUsed":false}],"Items":null,"Posts":null,"Fog":"BAEDAwMDAwEEAwMDBAQDAwEBAwMBAwMDAwMDBA==","Archive":{"Sight":{"0":24576,"10":4170,"11":5012,"12":24576,"13":18432,"14":5012,"15":1024,"18":5087,"19":7200,"2":1024,"21":5013,"22":10240,"23":4171,"24":4096,"26":5086,"27":26624,"3":4170,"4":1024,"5":4096,"6":4097,"8":24576,"9":5120},"Obscured":null,"Trail":[{"Kind":2,"Node":6,"Actor":null,"Target":null,"Item":null,"Round":1},{"Kind":1,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":2},{"Kind":2,"Node":23,"Actor":null,"Target":null,"Item":null,"Round":2},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":2,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":1,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":4},{"Kind":2,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":4},{"Kind":2,"Node":23,"Actor":null,"Target":null,"Item":null,"Round":4},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":10,"Actor":null,"Target":null,"Item":null,"Round":7},{"Kind":1,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":7},{"Kind":2,"Node":26,"Actor":null,"Target":null,"Item":null,"Round":7},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":9},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":9},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":9},{"Kind":5,"Node":26,"Actor":null,"Target":null,"Item":null,"Round":9},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":10},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":10},{"Kind":2,"Node":9,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":2,"Node":19,"Actor":null,"Target":null,"Item":null,"Round":12},{"Kind":1,"Node":9,"Actor":3,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":10,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":1,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":19,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":22,"Actor":null,"Target":null,"Item":null,"Round":14},{"Kind":2,"Node":0,"Actor":null,"Target":null,"Item":null,"Round":15},{"Kind":2,"Node":27,"Actor":null,"Target":null,"Item":null,"Round":15}]},"LastEndNode":8,"LoiteringStreak":0,"LooseCrateHeldRounds":0,"Flagged":false,"EvasiveStepPenalty":false,"LastOfferRound":15,"ConsecutiveDefaults":0,"Ledger":null,"MarketSurgeActive":false,"DistractedGuard":false,"StreetsBlocked":false,"LocalInformant":false,"PendingOffer":null},{"Seat":1,"Balance":15,"Infamy":1,"RP":0,"Position":26,"ContractsDelivered":0,"Cargo":null,"Contracts":[],"Items":null,"Posts":null,"Fog":"AQMDAwMDAwMBAwMEAwEEAwMBBAMBBAEDAwMEAQ==","Archive":{"Sight":{"1":52,"10":3,"11":29696,"12":128,"14":29696,"15":139,"16":23,"18":29696,"19":8,"2":200,"21":31936,"23":2048,"24":64,"25":2115,"26":31744,"3":768,"4":2184,"5":768,"6":768,"7":20,"9":75},"Obscured":null,"Trail":[{"Kind":2,"Node":16,"Actor":null,"Target":null,"Item":null,"Round":1},{"Kind":1,"Node":9,"Actor":null,"Target":null,"Item":null,"Round":2},{"Kind":2,"Node":16,"Actor":null,"Target":null,"Item":null,"Round":2},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":2,"Node":16,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":1,"Node":4,"Actor":null,"Target":null,"Item":null,"Round":4},{"Kind":2,"Node":9,"Actor":null,"Target":null,"Item":null,"Round":4},{"Kind":2,"Node":1,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":16,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":9,"Actor":null,"Target":null,"Item":null,"Round":7},{"Kind":1,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":7},{"Kind":2,"Node":2,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":1,"Node":4,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":4,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":12,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":6,"Actor":null,"Target":null,"Item":null,"Round":9},{"Kind":2,"Node":3,"Actor":null,"Target":null,"Item":null,"Round":10},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":2,"Node":26,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":1,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":12},{"Kind":2,"Node":26,"Actor":null,"Target":null,"Item":null,"Round":12},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":1,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":14},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":14},{"Kind":2,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":14},{"Kind":5,"Node":26,"Actor":null,"Target":null,"Item":null,"Round":14},{"Kind":2,"Node":11,"Actor":null,"Target":null,"Item":null,"Round":15},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":15},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":15}]},"LastEndNode":26,"LoiteringStreak":3,"LooseCrateHeldRounds":0,"Flagged":false,"EvasiveStepPenalty":false,"LastOfferRound":11,"ConsecutiveDefaults":0,"Ledger":null,"MarketSurgeActive":false,"DistractedGuard":false,"StreetsBlocked":false,"LocalInformant":false,"PendingOffer":null},{"Seat":2,"Balance":6,"Infamy":1,"RP":0,"Position":18,"ContractsDelivered":0,"Cargo":null,"Contracts":[{"ID":1,"Origin":9,"Destination":6,"Tier":0,"ExpiresRound":18,"DeadlinePauseUsed":false}],"Items":null,"Posts":null,"Fog":"AQMBBAEBAwMBAwQBAQEBAQMDBAEDAwEEAwEEAQ==","Archive":{"Sight":{"1":1,"10":16384,"16":1,"17":16350,"18":16384,"20":16350,"23":16384,"24":2,"26":16384,"3":16384,"7":16348,"9":1},"Obscured":{"17":32},"Trail":[{"Kind":2,"Node":1,"Actor":null,"Target":null,"Item":null,"Round":1},{"Kind":2,"Node":16,"Actor":null,"Target":null,"Item":null,"Round":1},{"Kind":2,"Node":17,"Actor":null,"Target":null,"Item":null,"Round":2},{"Kind":1,"Node":20,"Actor":null,"Target":null,"Item":null,"Round":2},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":2,"Node":20,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":4},{"Kind":3,"Node":7,"Actor":2,"Target":1,"Item":null,"Round":4},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":7},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":9},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":10},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":2,"Node":17,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":3,"Node":17,"Actor":3,"Target":2,"Item":null,"Round":11},{"Kind":2,"Node":20,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":3,"Node":20,"Actor":3,"Target":2,"Item":null,"Round":11},{"Kind":1,"Node":17,"Actor":null,"Target":null,"Item":null,"Round":12},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":10,"Actor":null,"Target":null,"Item":null,"Round":15},{"Kind":3,"Node":23,"Actor":3,"Target":2,"Item":null,"Round":15}]},"LastEndNode":18,"LoiteringStreak":0,"LooseCrateHeldRounds":0,"Flagged":false,"EvasiveStepPenalty":false,"LastOfferRound":14,"ConsecutiveDefaults":0,"Ledger":null,"MarketSurgeActive":false,"DistractedGuard":false,"StreetsBlocked":false,"LocalInformant":false,"PendingOffer":null},{"Seat":3,"Balance":19,"Infamy":5,"RP":2,"Position":23,"ContractsDelivered":1,"Cargo":{"Bound":true,"Contract":0,"SpilledLoad":false},"Contracts":[{"ID":0,"Origin":9,"Destination":6,"Tier":0,"ExpiresRound":16,"DeadlinePauseUsed":true},{"ID":1,"Origin":21,"Destination":1,"Tier":1,"ExpiresRound":20,"DeadlinePauseUsed":false}],"Items":null,"Posts":null,"Fog":"AwMDAwMDBAMDAwMDAwMDAwMDBAMDBAMEAwMDAw==","Archive":{"Sight":{"0":128,"1":512,"10":7425,"12":138,"14":52,"15":14603,"16":6144,"17":512,"18":17428,"19":9473,"2":8459,"21":16458,"22":385,"23":16448,"24":1024,"25":14400,"26":64,"27":128,"3":20,"4":8266,"5":20,"6":16384,"7":512,"8":128,"9":7168},"Obscured":null,"Trail":[{"Kind":2,"Node":22,"Actor":null,"Target":null,"Item":null,"Round":1},{"Kind":2,"Node":2,"Actor":null,"Target":null,"Item":null,"Round":2},{"Kind":1,"Node":4,"Actor":null,"Target":null,"Item":null,"Round":2},{"Kind":2,"Node":3,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":2,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":3},{"Kind":1,"Node":4,"Actor":null,"Target":null,"Item":null,"Round":4},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":4},{"Kind":2,"Node":3,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":5,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":14,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":2,"Node":18,"Actor":null,"Target":null,"Item":null,"Round":5},{"Kind":1,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":7},{"Kind":2,"Node":26,"Actor":null,"Target":null,"Item":null,"Round":7},{"Kind":2,"Node":12,"Actor":null,"Target":null,"Item":null,"Round":8},{"Kind":2,"Node":2,"Actor":null,"Target":null,"Item":null,"Round":9},{"Kind":2,"Node":10,"Actor":null,"Target":null,"Item":null,"Round":9},{"Kind":2,"Node":15,"Actor":null,"Target":null,"Item":null,"Round":9},{"Kind":2,"Node":1,"Actor":null,"Target":null,"Item":null,"Round":10},{"Kind":2,"Node":7,"Actor":null,"Target":null,"Item":null,"Round":10},{"Kind":2,"Node":9,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":2,"Node":24,"Actor":null,"Target":null,"Item":null,"Round":11},{"Kind":1,"Node":9,"Actor":3,"Target":null,"Item":null,"Round":12},{"Kind":2,"Node":10,"Actor":null,"Target":null,"Item":null,"Round":12},{"Kind":3,"Node":10,"Actor":3,"Target":0,"Item":null,"Round":12},{"Kind":1,"Node":9,"Actor":3,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":10,"Actor":null,"Target":null,"Item":null,"Round":13},{"Kind":2,"Node":15,"Actor":null,"Target":null,"Item":null,"Round":14},{"Kind":2,"Node":19,"Actor":null,"Target":null,"Item":null,"Round":14},{"Kind":2,"Node":21,"Actor":null,"Target":null,"Item":null,"Round":15},{"Kind":3,"Node":23,"Actor":3,"Target":2,"Item":null,"Round":15}]},"LastEndNode":23,"LoiteringStreak":0,"LooseCrateHeldRounds":0,"Flagged":false,"EvasiveStepPenalty":false,"LastOfferRound":15,"ConsecutiveDefaults":0,"Ledger":null,"MarketSurgeActive":false,"DistractedGuard":false,"StreetsBlocked":false,"LocalInformant":false,"PendingOffer":null}],"NextRound":{"Scaffolding":null,"Retainer":false,"Blackout":false,"DockersStrike":false},"UnstableSector":null,"RoundAnchors":[{"Kind":20,"Round":15,"Node":14,"Actor":null,"Tier":0}]}
+{
+  "Seed": [
+    42,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0,
+    0
+  ],
+  "Config": {
+    "rounds": 15,
+    "steps_by_tier": [
+      4,
+      4,
+      3,
+      2
+    ],
+    "cooldown_by_tier": [
+      4,
+      3,
+      2,
+      1
+    ],
+    "post_cap_by_players": {
+      "2": 4,
+      "3": 4,
+      "4": 4,
+      "5": 3
+    },
+    "lease_cost_per_block": 3,
+    "lease_block_rounds": 3,
+    "shakedown_cost": 4,
+    "ledger_cost": 3,
+    "gate_fee": 1,
+    "starting_balance": 12,
+    "contracts": [
+      {
+        "infamy_required": 0,
+        "min_distance": 3,
+        "max_distance": 4,
+        "payment": 8,
+        "rp": 2,
+        "deadline": 4,
+        "penalty": 3,
+        "penalty_infamy": 0,
+        "offer_weight": 1
+      },
+      {
+        "infamy_required": 3,
+        "min_distance": 4,
+        "max_distance": 6,
+        "payment": 14,
+        "rp": 3,
+        "deadline": 5,
+        "penalty": 5,
+        "penalty_infamy": 0,
+        "offer_weight": 1
+      },
+      {
+        "infamy_required": 6,
+        "min_distance": 5,
+        "max_distance": 8,
+        "payment": 20,
+        "rp": 5,
+        "deadline": 5,
+        "penalty": 8,
+        "penalty_infamy": 0,
+        "offer_weight": 1
+      },
+      {
+        "infamy_required": 9,
+        "min_distance": 6,
+        "max_distance": 0,
+        "payment": 30,
+        "rp": 8,
+        "deadline": 6,
+        "penalty": 12,
+        "penalty_infamy": 2,
+        "offer_weight": 1
+      }
+    ],
+    "map_by_players": {
+      "2": {
+        "nodes": 15,
+        "min_edges": 21,
+        "max_edges": 23
+      },
+      "3": {
+        "nodes": 22,
+        "min_edges": 31,
+        "max_edges": 35
+      },
+      "4": {
+        "nodes": 28,
+        "min_edges": 41,
+        "max_edges": 45
+      },
+      "5": {
+        "nodes": 28,
+        "min_edges": 40,
+        "max_edges": 45
+      }
+    },
+    "max_gen_attempts": 1000,
+    "scavenging": {
+      "cash_roll": 4,
+      "cash_amount": 3,
+      "reveal_roll": 6
+    },
+    "pressure": {
+      "threshold": 2,
+      "cash_penalty": 5,
+      "infamy_penalty": 1
+    },
+    "suppress": {
+      "leases": false,
+      "incidents": false,
+      "events": false,
+      "infamy_tiers": false,
+      "items": false
+    }
+  },
+  "Players": 4,
+  "OrderLog": {
+    "1": {
+      "0": {
+        "round": 1,
+        "route": [
+          3,
+          14,
+          3,
+          5
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      },
+      "1": {
+        "round": 1,
+        "route": [
+          1,
+          16,
+          1,
+          7
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      },
+      "2": {
+        "round": 1,
+        "route": [
+          17,
+          20,
+          17,
+          7
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      },
+      "3": {
+        "round": 1,
+        "route": [
+          0,
+          8,
+          0,
+          13
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 1
+      }
+    },
+    "10": {
+      "0": {
+        "round": 10,
+        "route": [
+          11,
+          14,
+          11,
+          26
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 10,
+        "route": [
+          3,
+          5,
+          3,
+          5
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 10,
+        "route": [
+          7,
+          1,
+          7,
+          17
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 10,
+        "route": [
+          2,
+          15,
+          9,
+          16
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "11": {
+      "0": {
+        "round": 11,
+        "route": [
+          11,
+          26,
+          21,
+          25
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      },
+      "1": {
+        "round": 11,
+        "route": [
+          3,
+          5,
+          3,
+          14
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 1
+      },
+      "2": {
+        "round": 11,
+        "route": null,
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 11,
+        "route": [
+          1,
+          7,
+          17,
+          20
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      }
+    },
+    "12": {
+      "0": {
+        "round": 12,
+        "route": [
+          10,
+          18
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 12,
+        "route": [
+          21
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 12,
+        "route": null,
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 12,
+        "route": [
+          10,
+          9
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "13": {
+      "0": {
+        "round": 13,
+        "route": [
+          19,
+          10,
+          18
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 13,
+        "route": [
+          26,
+          11,
+          14,
+          26
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 13,
+        "route": [
+          7,
+          1,
+          7,
+          17
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 13,
+        "route": null,
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "14": {
+      "0": {
+        "round": 14,
+        "route": [
+          10,
+          19,
+          22,
+          27
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "deliver"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 14,
+        "route": [
+          11,
+          14,
+          11,
+          26
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 14,
+        "route": null,
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      },
+      "3": {
+        "round": 14,
+        "route": [
+          10,
+          18,
+          23,
+          6
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "deliver"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "15": {
+      "0": {
+        "round": 15,
+        "route": [
+          0,
+          8,
+          0,
+          8
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 1
+      },
+      "1": {
+        "round": 15,
+        "route": [
+          11,
+          14,
+          11,
+          26
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 15,
+        "route": [
+          20,
+          24,
+          10
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": "mist_heights"
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 15,
+        "route": [
+          4,
+          21,
+          23
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      }
+    },
+    "2": {
+      "0": {
+        "round": 2,
+        "route": [
+          18
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 2,
+        "route": null,
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 2,
+        "route": [
+          1,
+          7,
+          17,
+          20
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 2,
+        "route": [
+          2,
+          4
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "3": {
+      "0": {
+        "round": 3,
+        "route": [
+          3,
+          14,
+          11,
+          26
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 3,
+        "route": [
+          10,
+          9,
+          16,
+          1
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 3,
+        "route": [
+          17,
+          7,
+          17
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 3,
+        "route": [
+          2,
+          4,
+          21,
+          23
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "4": {
+      "0": {
+        "round": 4,
+        "route": null,
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 4,
+        "route": [
+          7,
+          1,
+          7,
+          1
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 4,
+        "route": [
+          7,
+          1,
+          7,
+          17
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 4,
+        "route": [
+          23,
+          21,
+          4
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "5": {
+      "0": {
+        "round": 5,
+        "route": [
+          3,
+          14,
+          11,
+          26
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 5,
+        "route": [
+          9,
+          16,
+          1
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 5,
+        "route": [
+          7,
+          1,
+          7,
+          17
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      },
+      "3": {
+        "round": 5,
+        "route": [
+          21,
+          23,
+          6
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "6": {
+      "0": {
+        "round": 6,
+        "route": [
+          11,
+          26,
+          21,
+          4
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      },
+      "1": {
+        "round": 6,
+        "route": [
+          7,
+          1,
+          7,
+          1
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 2
+      },
+      "2": {
+        "round": 6,
+        "route": null,
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 6,
+        "route": [
+          5,
+          3,
+          14,
+          11
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 0
+      }
+    },
+    "7": {
+      "0": {
+        "round": 7,
+        "route": [
+          10,
+          18
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 7,
+        "route": [
+          16,
+          9,
+          25
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 7,
+        "route": [
+          7,
+          17
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 7,
+        "route": [
+          26,
+          21
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "8": {
+      "0": {
+        "round": 8,
+        "route": [
+          3,
+          14,
+          11,
+          26
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 8,
+        "route": [
+          2,
+          4
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "pickup"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 8,
+        "route": [
+          7,
+          1,
+          7,
+          17
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "3": {
+        "round": 8,
+        "route": [
+          4,
+          12,
+          27
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "deliver"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    },
+    "9": {
+      "0": {
+        "round": 9,
+        "route": [
+          11,
+          14,
+          11,
+          26
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "1": {
+        "round": 9,
+        "route": [
+          2,
+          4,
+          21,
+          23
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      },
+      "2": {
+        "round": 9,
+        "route": [
+          7,
+          1,
+          7,
+          17
+        ],
+        "pushing_on": {
+          "steps": 0,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "evasive",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false,
+        "contract_choice": 2
+      },
+      "3": {
+        "round": 9,
+        "route": [
+          0,
+          8,
+          12,
+          4,
+          15,
+          9
+        ],
+        "pushing_on": {
+          "steps": 2,
+          "bias": null
+        },
+        "action": {
+          "kind": "nothing"
+        },
+        "stance": {
+          "stance": "neutral",
+          "stake": 0
+        },
+        "items": null,
+        "add_ons": {
+          "buy_ledger": false,
+          "renew_post": 0,
+          "renew_blocks": 0,
+          "open_doors_market": null
+        },
+        "abandon_cargo": false
+      }
+    }
+  },
+  "Final": {
+    "Round": 15,
+    "Graph": {
+      "Nodes": [
+        {
+          "ID": 0,
+          "Name": "",
+          "Type": 3,
+          "Sector": 4,
+          "X": 750,
+          "Y": 925,
+          "Edges": [
+            8,
+            13,
+            27
+          ],
+          "Post": null,
+          "Market": "BQQB",
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 1,
+          "Name": "",
+          "Type": 2,
+          "Sector": 2,
+          "X": 575,
+          "Y": 250,
+          "Edges": [
+            16
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 2,
+          "Name": "",
+          "Type": 4,
+          "Sector": 3,
+          "X": 425,
+          "Y": 575,
+          "Edges": [
+            4,
+            15,
+            19,
+            25
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 3,
+          "Name": "",
+          "Type": 4,
+          "Sector": 1,
+          "X": 250,
+          "Y": 425,
+          "Edges": [
+            5,
+            14,
+            18
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 4,
+          "Name": "",
+          "Type": 1,
+          "Sector": 3,
+          "X": 425,
+          "Y": 750,
+          "Edges": [
+            2,
+            12,
+            15,
+            21
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 5,
+          "Name": "",
+          "Type": 2,
+          "Sector": 1,
+          "X": 250,
+          "Y": 75,
+          "Edges": [
+            3,
+            6
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 6,
+          "Name": "",
+          "Type": 2,
+          "Sector": 1,
+          "X": 425,
+          "Y": 425,
+          "Edges": [
+            5,
+            23
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 7,
+          "Name": "",
+          "Type": 3,
+          "Sector": 2,
+          "X": 750,
+          "Y": 75,
+          "Edges": [
+            17
+          ],
+          "Post": null,
+          "Market": "AwYC",
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 8,
+          "Name": "",
+          "Type": 2,
+          "Sector": 4,
+          "X": 925,
+          "Y": 750,
+          "Edges": [
+            0,
+            12,
+            13,
+            27
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 9,
+          "Name": "",
+          "Type": 1,
+          "Sector": 3,
+          "X": 75,
+          "Y": 925,
+          "Edges": [
+            10,
+            15,
+            16,
+            25
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 10,
+          "Name": "",
+          "Type": 4,
+          "Sector": 3,
+          "X": 425,
+          "Y": 925,
+          "Edges": [
+            9,
+            18,
+            19,
+            24
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 11,
+          "Name": "",
+          "Type": 2,
+          "Sector": 1,
+          "X": 250,
+          "Y": 250,
+          "Edges": [
+            14,
+            26
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 12,
+          "Name": "",
+          "Type": 4,
+          "Sector": 4,
+          "X": 575,
+          "Y": 575,
+          "Edges": [
+            4,
+            8,
+            27
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 13,
+          "Name": "",
+          "Type": 4,
+          "Sector": 4,
+          "X": 750,
+          "Y": 575,
+          "Edges": [
+            0,
+            8,
+            22
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 1,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 14,
+          "Name": "",
+          "Type": 3,
+          "Sector": 1,
+          "X": 425,
+          "Y": 250,
+          "Edges": [
+            3,
+            11,
+            26
+          ],
+          "Post": null,
+          "Market": "BggB",
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": true
+        },
+        {
+          "ID": 15,
+          "Name": "",
+          "Type": 1,
+          "Sector": 3,
+          "X": 250,
+          "Y": 750,
+          "Edges": [
+            2,
+            4,
+            9,
+            19
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 16,
+          "Name": "",
+          "Type": 4,
+          "Sector": 2,
+          "X": 750,
+          "Y": 425,
+          "Edges": [
+            1,
+            9
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 17,
+          "Name": "",
+          "Type": 1,
+          "Sector": 2,
+          "X": 575,
+          "Y": 75,
+          "Edges": [
+            7,
+            20
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 18,
+          "Name": "",
+          "Type": 1,
+          "Sector": 3,
+          "X": 75,
+          "Y": 750,
+          "Edges": [
+            3,
+            10,
+            23,
+            26
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 19,
+          "Name": "",
+          "Type": 4,
+          "Sector": 4,
+          "X": 925,
+          "Y": 925,
+          "Edges": [
+            2,
+            10,
+            15,
+            22
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 20,
+          "Name": "",
+          "Type": 1,
+          "Sector": 2,
+          "X": 925,
+          "Y": 425,
+          "Edges": [
+            17,
+            24
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 21,
+          "Name": "",
+          "Type": 1,
+          "Sector": 3,
+          "X": 250,
+          "Y": 575,
+          "Edges": [
+            4,
+            23,
+            25,
+            26
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 22,
+          "Name": "",
+          "Type": 2,
+          "Sector": 4,
+          "X": 575,
+          "Y": 750,
+          "Edges": [
+            13,
+            19,
+            27
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 23,
+          "Name": "",
+          "Type": 3,
+          "Sector": 1,
+          "X": 425,
+          "Y": 75,
+          "Edges": [
+            6,
+            18,
+            21
+          ],
+          "Post": null,
+          "Market": "AgUH",
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 24,
+          "Name": "",
+          "Type": 4,
+          "Sector": 2,
+          "X": 575,
+          "Y": 425,
+          "Edges": [
+            10,
+            20,
+            25
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 25,
+          "Name": "",
+          "Type": 4,
+          "Sector": 2,
+          "X": 925,
+          "Y": 75,
+          "Edges": [
+            2,
+            9,
+            21,
+            24
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 26,
+          "Name": "",
+          "Type": 3,
+          "Sector": 1,
+          "X": 75,
+          "Y": 75,
+          "Edges": [
+            11,
+            14,
+            18,
+            21
+          ],
+          "Post": null,
+          "Market": "BAMC",
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        },
+        {
+          "ID": 27,
+          "Name": "",
+          "Type": 2,
+          "Sector": 4,
+          "X": 750,
+          "Y": 750,
+          "Edges": [
+            0,
+            8,
+            12,
+            22
+          ],
+          "Post": null,
+          "Market": null,
+          "SinkholeRounds": 0,
+          "FenceWindfallActive": false
+        }
+      ],
+      "Cargo": [
+        {
+          "Node": 26,
+          "Bound": true,
+          "Origin": 18,
+          "Destination": 27,
+          "SpilledLoad": false
+        },
+        {
+          "Node": 3,
+          "Bound": true,
+          "Origin": 4,
+          "Destination": 6,
+          "SpilledLoad": false
+        },
+        {
+          "Node": 1,
+          "Bound": false,
+          "Origin": 0,
+          "Destination": 0,
+          "SpilledLoad": true
+        }
+      ],
+      "EventDeck": "DRMXAgoPDBIBAxQL",
+      "IncidentDeck": "BQcLDwQDDBABDQYJCA=="
+    },
+    "Players": [
+      {
+        "Seat": 0,
+        "Balance": 17,
+        "Infamy": 3,
+        "RP": 2,
+        "Position": 8,
+        "ContractsDelivered": 1,
+        "Cargo": null,
+        "Contracts": [
+          {
+            "ID": 0,
+            "Origin": 21,
+            "Destination": 1,
+            "Tier": 1,
+            "ExpiresRound": 20,
+            "DeadlinePauseUsed": false
+          }
+        ],
+        "Items": null,
+        "Posts": null,
+        "Fog": "BAEDAwMDAwEEAwMDBAQDAwEBAwMBAwMDAwMDBA==",
+        "Archive": {
+          "Sight": {
+            "0": 24576,
+            "10": 4170,
+            "11": 5012,
+            "12": 24576,
+            "13": 18432,
+            "14": 5012,
+            "15": 1024,
+            "18": 5087,
+            "19": 7200,
+            "2": 1024,
+            "21": 5013,
+            "22": 10240,
+            "23": 4171,
+            "24": 4096,
+            "26": 5086,
+            "27": 26624,
+            "3": 4170,
+            "4": 1024,
+            "5": 4096,
+            "6": 4097,
+            "8": 24576,
+            "9": 5120
+          },
+          "Obscured": null,
+          "Trail": [
+            {
+              "Kind": 2,
+              "Node": 6,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 1
+            },
+            {
+              "Kind": 1,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 2
+            },
+            {
+              "Kind": 2,
+              "Node": 23,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 2
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 2,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 1,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 4
+            },
+            {
+              "Kind": 2,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 4
+            },
+            {
+              "Kind": 2,
+              "Node": 23,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 4
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 10,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 7
+            },
+            {
+              "Kind": 1,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 7
+            },
+            {
+              "Kind": 2,
+              "Node": 26,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 7
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 9
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 9
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 9
+            },
+            {
+              "Kind": 5,
+              "Node": 26,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 9
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 10
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 10
+            },
+            {
+              "Kind": 2,
+              "Node": 9,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 2,
+              "Node": 19,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 12
+            },
+            {
+              "Kind": 1,
+              "Node": 9,
+              "Actor": 3,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 10,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 1,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 19,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 22,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 14
+            },
+            {
+              "Kind": 2,
+              "Node": 0,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 15
+            },
+            {
+              "Kind": 2,
+              "Node": 27,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 15
+            }
+          ]
+        },
+        "LastEndNode": 8,
+        "LoiteringStreak": 0,
+        "LooseCrateHeldRounds": 0,
+        "Flagged": false,
+        "EvasiveStepPenalty": false,
+        "LastOfferRound": 15,
+        "ConsecutiveDefaults": 0,
+        "Ledger": null,
+        "MarketSurgeActive": false,
+        "DistractedGuard": false,
+        "StreetsBlocked": false,
+        "LocalInformant": false,
+        "PendingOffer": null
+      },
+      {
+        "Seat": 1,
+        "Balance": 15,
+        "Infamy": 1,
+        "RP": 0,
+        "Position": 26,
+        "ContractsDelivered": 0,
+        "Cargo": null,
+        "Contracts": [],
+        "Items": null,
+        "Posts": null,
+        "Fog": "AQMDAwMDAwMBAwMEAwEEAwMBBAMBBAEDAwMEAQ==",
+        "Archive": {
+          "Sight": {
+            "1": 52,
+            "10": 3,
+            "11": 29696,
+            "12": 128,
+            "14": 29696,
+            "15": 139,
+            "16": 23,
+            "18": 29696,
+            "19": 8,
+            "2": 200,
+            "21": 31936,
+            "23": 2048,
+            "24": 64,
+            "25": 2115,
+            "26": 31744,
+            "3": 768,
+            "4": 2184,
+            "5": 768,
+            "6": 768,
+            "7": 20,
+            "9": 75
+          },
+          "Obscured": null,
+          "Trail": [
+            {
+              "Kind": 2,
+              "Node": 16,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 1
+            },
+            {
+              "Kind": 1,
+              "Node": 9,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 2
+            },
+            {
+              "Kind": 2,
+              "Node": 16,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 2
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 2,
+              "Node": 16,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 1,
+              "Node": 4,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 4
+            },
+            {
+              "Kind": 2,
+              "Node": 9,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 4
+            },
+            {
+              "Kind": 2,
+              "Node": 1,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 16,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 9,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 7
+            },
+            {
+              "Kind": 1,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 7
+            },
+            {
+              "Kind": 2,
+              "Node": 2,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 1,
+              "Node": 4,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 4,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 12,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 6,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 9
+            },
+            {
+              "Kind": 2,
+              "Node": 3,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 10
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 2,
+              "Node": 26,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 1,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 12
+            },
+            {
+              "Kind": 2,
+              "Node": 26,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 12
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 1,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 14
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 14
+            },
+            {
+              "Kind": 2,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 14
+            },
+            {
+              "Kind": 5,
+              "Node": 26,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 14
+            },
+            {
+              "Kind": 2,
+              "Node": 11,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 15
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 15
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 15
+            }
+          ]
+        },
+        "LastEndNode": 26,
+        "LoiteringStreak": 3,
+        "LooseCrateHeldRounds": 0,
+        "Flagged": false,
+        "EvasiveStepPenalty": false,
+        "LastOfferRound": 11,
+        "ConsecutiveDefaults": 0,
+        "Ledger": null,
+        "MarketSurgeActive": false,
+        "DistractedGuard": false,
+        "StreetsBlocked": false,
+        "LocalInformant": false,
+        "PendingOffer": null
+      },
+      {
+        "Seat": 2,
+        "Balance": 6,
+        "Infamy": 1,
+        "RP": 0,
+        "Position": 18,
+        "ContractsDelivered": 0,
+        "Cargo": null,
+        "Contracts": [
+          {
+            "ID": 1,
+            "Origin": 9,
+            "Destination": 6,
+            "Tier": 0,
+            "ExpiresRound": 18,
+            "DeadlinePauseUsed": false
+          }
+        ],
+        "Items": null,
+        "Posts": null,
+        "Fog": "AQMBBAEBAwMBAwQBAQEBAQMDBAEDAwEEAwEEAQ==",
+        "Archive": {
+          "Sight": {
+            "1": 1,
+            "10": 16384,
+            "16": 1,
+            "17": 16350,
+            "18": 16384,
+            "20": 16350,
+            "23": 16384,
+            "24": 2,
+            "26": 16384,
+            "3": 16384,
+            "7": 16348,
+            "9": 1
+          },
+          "Obscured": {
+            "17": 32
+          },
+          "Trail": [
+            {
+              "Kind": 2,
+              "Node": 1,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 1
+            },
+            {
+              "Kind": 2,
+              "Node": 16,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 1
+            },
+            {
+              "Kind": 2,
+              "Node": 17,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 2
+            },
+            {
+              "Kind": 1,
+              "Node": 20,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 2
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 2,
+              "Node": 20,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 4
+            },
+            {
+              "Kind": 3,
+              "Node": 7,
+              "Actor": 2,
+              "Target": 1,
+              "Item": null,
+              "Round": 4
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 7
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 9
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 10
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 2,
+              "Node": 17,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 3,
+              "Node": 17,
+              "Actor": 3,
+              "Target": 2,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 2,
+              "Node": 20,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 3,
+              "Node": 20,
+              "Actor": 3,
+              "Target": 2,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 1,
+              "Node": 17,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 12
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 10,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 15
+            },
+            {
+              "Kind": 3,
+              "Node": 23,
+              "Actor": 3,
+              "Target": 2,
+              "Item": null,
+              "Round": 15
+            }
+          ]
+        },
+        "LastEndNode": 18,
+        "LoiteringStreak": 0,
+        "LooseCrateHeldRounds": 0,
+        "Flagged": false,
+        "EvasiveStepPenalty": false,
+        "LastOfferRound": 14,
+        "ConsecutiveDefaults": 0,
+        "Ledger": null,
+        "MarketSurgeActive": false,
+        "DistractedGuard": false,
+        "StreetsBlocked": false,
+        "LocalInformant": false,
+        "PendingOffer": null
+      },
+      {
+        "Seat": 3,
+        "Balance": 19,
+        "Infamy": 5,
+        "RP": 2,
+        "Position": 23,
+        "ContractsDelivered": 1,
+        "Cargo": {
+          "Bound": true,
+          "Contract": 0,
+          "SpilledLoad": false
+        },
+        "Contracts": [
+          {
+            "ID": 0,
+            "Origin": 9,
+            "Destination": 6,
+            "Tier": 0,
+            "ExpiresRound": 16,
+            "DeadlinePauseUsed": true
+          },
+          {
+            "ID": 1,
+            "Origin": 21,
+            "Destination": 1,
+            "Tier": 1,
+            "ExpiresRound": 20,
+            "DeadlinePauseUsed": false
+          }
+        ],
+        "Items": null,
+        "Posts": null,
+        "Fog": "AwMDAwMDBAMDAwMDAwMDAwMDBAMDBAMEAwMDAw==",
+        "Archive": {
+          "Sight": {
+            "0": 128,
+            "1": 512,
+            "10": 7425,
+            "12": 138,
+            "14": 52,
+            "15": 14603,
+            "16": 6144,
+            "17": 512,
+            "18": 17428,
+            "19": 9473,
+            "2": 8459,
+            "21": 16458,
+            "22": 385,
+            "23": 16448,
+            "24": 1024,
+            "25": 14400,
+            "26": 64,
+            "27": 128,
+            "3": 20,
+            "4": 8266,
+            "5": 20,
+            "6": 16384,
+            "7": 512,
+            "8": 128,
+            "9": 7168
+          },
+          "Obscured": null,
+          "Trail": [
+            {
+              "Kind": 2,
+              "Node": 22,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 1
+            },
+            {
+              "Kind": 2,
+              "Node": 2,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 2
+            },
+            {
+              "Kind": 1,
+              "Node": 4,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 2
+            },
+            {
+              "Kind": 2,
+              "Node": 3,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 2,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 3
+            },
+            {
+              "Kind": 1,
+              "Node": 4,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 4
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 4
+            },
+            {
+              "Kind": 2,
+              "Node": 3,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 5,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 14,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 2,
+              "Node": 18,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 5
+            },
+            {
+              "Kind": 1,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 7
+            },
+            {
+              "Kind": 2,
+              "Node": 26,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 7
+            },
+            {
+              "Kind": 2,
+              "Node": 12,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 8
+            },
+            {
+              "Kind": 2,
+              "Node": 2,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 9
+            },
+            {
+              "Kind": 2,
+              "Node": 10,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 9
+            },
+            {
+              "Kind": 2,
+              "Node": 15,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 9
+            },
+            {
+              "Kind": 2,
+              "Node": 1,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 10
+            },
+            {
+              "Kind": 2,
+              "Node": 7,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 10
+            },
+            {
+              "Kind": 2,
+              "Node": 9,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 2,
+              "Node": 24,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 11
+            },
+            {
+              "Kind": 1,
+              "Node": 9,
+              "Actor": 3,
+              "Target": null,
+              "Item": null,
+              "Round": 12
+            },
+            {
+              "Kind": 2,
+              "Node": 10,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 12
+            },
+            {
+              "Kind": 3,
+              "Node": 10,
+              "Actor": 3,
+              "Target": 0,
+              "Item": null,
+              "Round": 12
+            },
+            {
+              "Kind": 1,
+              "Node": 9,
+              "Actor": 3,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 10,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 13
+            },
+            {
+              "Kind": 2,
+              "Node": 15,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 14
+            },
+            {
+              "Kind": 2,
+              "Node": 19,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 14
+            },
+            {
+              "Kind": 2,
+              "Node": 21,
+              "Actor": null,
+              "Target": null,
+              "Item": null,
+              "Round": 15
+            },
+            {
+              "Kind": 3,
+              "Node": 23,
+              "Actor": 3,
+              "Target": 2,
+              "Item": null,
+              "Round": 15
+            }
+          ]
+        },
+        "LastEndNode": 23,
+        "LoiteringStreak": 0,
+        "LooseCrateHeldRounds": 0,
+        "Flagged": false,
+        "EvasiveStepPenalty": false,
+        "LastOfferRound": 15,
+        "ConsecutiveDefaults": 0,
+        "Ledger": null,
+        "MarketSurgeActive": false,
+        "DistractedGuard": false,
+        "StreetsBlocked": false,
+        "LocalInformant": false,
+        "PendingOffer": null
+      }
+    ],
+    "NextRound": {
+      "Scaffolding": null,
+      "Retainer": false,
+      "Blackout": false,
+      "DockersStrike": false
+    },
+    "UnstableSector": null,
+    "RoundAnchors": [
+      {
+        "Kind": 20,
+        "Round": 15,
+        "Node": 14,
+        "Actor": null,
+        "Tier": 0
+      }
+    ]
+  }
+}
