@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 )
@@ -205,6 +206,19 @@ func runTwoProcessesBarrier(t *testing.T, bin, dsn string) (procResult, procResu
 	return r1, r2, evidence
 }
 
+// exitedBySignal reports whether cmd (already Wait()ed) was terminated by a
+// signal rather than exiting on its own — the only authoritative proof that
+// a SIGKILL actually ended the process, since Process.Kill() returning nil
+// only means the syscall was accepted, not that it beat the process to the
+// finish line.
+func exitedBySignal(cmd *exec.Cmd) bool {
+	if cmd.ProcessState == nil {
+		return false
+	}
+	ws, ok := cmd.ProcessState.Sys().(syscall.WaitStatus)
+	return ok && ws.Signaled()
+}
+
 // exitCodeOf reads cmd's real exit code from ProcessState once Wait has
 // returned; a non-nil waitErr with no ProcessState means the process never
 // started cleanly, reported as -1 rather than a false 0.
@@ -378,7 +392,7 @@ func TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled(t *te
 
 		killedAt = time.Now()
 		killErr := cmdA.Process.Kill() // SIGKILL: no defer, no graceful unlock — the crash this test simulates
-		_ = cmdA.Wait()
+		waitErr := cmdA.Wait()
 		cancelA()
 		if killErr != nil {
 			// The partial window can close between the count observation above and
@@ -387,6 +401,17 @@ func TestIntegrationMigrateBootRaceSecondProcessRecoversAfterFirstIsKilled(t *te
 			// killed-mid-batch process, so it retries rather than failing the test
 			// over a race it lost, the same as the !gotPartial branch above.
 			t.Logf("attempt %d: process A had already exited before the kill (%v) — the partial window closed first, retrying", attempt, killErr)
+			continue
+		}
+		if !exitedBySignal(cmdA) {
+			// Kill() succeeding only proves the SIGKILL syscall was accepted, not
+			// that it was what actually ended the process — the same race as
+			// above, just resolved a step later: process A could have exited
+			// normally in the gap between Kill() being sent and Wait() returning.
+			// Only a confirmed signal death lets what follows be trusted as a
+			// genuine killed-mid-batch recovery rather than an ordinary
+			// already-finished run.
+			t.Logf("attempt %d: process A exited on its own (%v) rather than by our signal — the partial window closed first, retrying", attempt, waitErr)
 			continue
 		}
 
