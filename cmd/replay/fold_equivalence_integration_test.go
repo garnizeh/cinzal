@@ -52,6 +52,17 @@ type foldFixture struct {
 // repository.
 var updateGolden = flag.Bool("update", false, "regenerate cmd/replay's fold-equivalence golden fixtures")
 
+// wantFixtureRounds pins this demonstration to a full 15-round match,
+// independent of whatever fx.Config.Rounds a committed fixture happens to
+// carry. Checking only len(fx.OrderLog) != fx.Config.Rounds proves a
+// fixture is internally self-consistent, never that it is actually the
+// full match the issue's own acceptance criterion demands — a fixture
+// whose Config, OrderLog and Final were all edited down together (by hand,
+// or by a future generator with a different Rounds default) would pass
+// that check while no longer demonstrating anything close to "a full
+// 15-round match." A CodeRabbit review finding on this PR caught this.
+const wantFixtureRounds = 15
+
 // runIncremental replays log through rules.NewMatch + rules.Resolve, round
 // by round — the incremental path (RFC §7.1), applied to a log that already
 // exists rather than one decided live. This is the only place in this file
@@ -295,6 +306,14 @@ func TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture(t *testing.T) {
 			// Fails closed: a truncated or empty committed fixture proves
 			// nothing (the issue's own acceptance criterion — "two empty
 			// states are equal"), checked before anything below trusts it.
+			// fx.Config.Rounds is checked against the fixed wantFixtureRounds
+			// first — otherwise a fixture edited down to fewer rounds (Config,
+			// OrderLog and Final all shrunk together) would pass the length
+			// check below while no longer being the full match this
+			// demonstration claims to be.
+			if fx.Config.Rounds != wantFixtureRounds {
+				t.Fatalf("%s: committed fixture's Config.Rounds = %d, want %d — this demonstration is defined over a full match, not whatever a fixture happens to carry", tc.name, fx.Config.Rounds, wantFixtureRounds)
+			}
 			if len(fx.OrderLog) != fx.Config.Rounds {
 				t.Fatalf("%s: committed fixture's order log holds %d round(s), want %d", tc.name, len(fx.OrderLog), fx.Config.Rounds)
 			}
@@ -348,6 +367,12 @@ func TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture(t *testing.T) {
 // distinguishing this run from that one.
 func TestIntegrationFoldDivergesWhenOrderCorrupted(t *testing.T) {
 	fx := readFixture(t, "testdata/fold-equivalence-2p.json")
+	// Same fixed-round validation as the positive test above, so this test
+	// fails closed on its own committed fixture even when run independently
+	// (e.g. via -run TestIntegrationFoldDivergesWhenOrderCorrupted alone).
+	if fx.Config.Rounds != wantFixtureRounds {
+		t.Fatalf("committed fixture's Config.Rounds = %d, want %d — this demonstration is defined over a full match, not whatever a fixture happens to carry", fx.Config.Rounds, wantFixtureRounds)
+	}
 	if len(fx.OrderLog) != fx.Config.Rounds {
 		t.Fatalf("committed fixture's order log holds %d round(s), want %d", len(fx.OrderLog), fx.Config.Rounds)
 	}

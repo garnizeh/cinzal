@@ -54,13 +54,13 @@ Both new tests pass against a real, freshly-started Postgres container (command:
 === RUN   TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture
 === RUN   TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/2p
 === RUN   TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/4p
---- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture (14.92s)
-    --- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/2p (14.68s)
-    --- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/4p (0.24s)
+--- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture (15.86s)
+    --- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/2p (15.63s)
+    --- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/4p (0.23s)
 === RUN   TestIntegrationFoldDivergesWhenOrderCorrupted
---- PASS: TestIntegrationFoldDivergesWhenOrderCorrupted (0.08s)
+--- PASS: TestIntegrationFoldDivergesWhenOrderCorrupted (0.07s)
 PASS
-ok  	github.com/garnizeh/cinzal/cmd/replay	15.067s
+ok  	github.com/garnizeh/cinzal/cmd/replay	15.995s
 ```
 
 (Docker container bootstrap log lines between the two `2p`/`4p` sub-test starts are elided above; the full output, unedited, is in the linked file.)

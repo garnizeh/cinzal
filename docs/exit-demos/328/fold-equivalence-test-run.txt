@@ -1,6 +1,6 @@
 === RUN   TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture
 === RUN   TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/2p
-2026/09/01 21:07:15 github.com/testcontainers/testcontainers-go - Connected to docker: 
+2026/09/01 22:13:19 github.com/testcontainers/testcontainers-go - Connected to docker: 
   Server Version: 29.7.2
   API Version: 1.55
   Operating System: Docker Desktop
@@ -10,26 +10,26 @@
   Testcontainers for Go Version: v0.44.0
   Resolved Docker Host: unix:///home/user/.docker/desktop/docker.sock
   Resolved Docker Socket Path: /var/run/docker.sock
-  Test SessionID: 8013c90b0de491c767ff6eb2793c14103c1244476702a8317eab1beff0b2bf2e
-  Test ProcessID: bcede284-0810-418b-86c4-5f3e65f7c00b
-2026/09/01 21:07:15 🐳 Creating container for image postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
-2026/09/01 21:07:26 🐳 Creating container for image testcontainers/ryuk:0.14.0
-2026/09/01 21:07:26 ✅ Container created: 7d28ebe9138f
-2026/09/01 21:07:26 🐳 Starting container: 7d28ebe9138f
-2026/09/01 21:07:26 ✅ Container started: 7d28ebe9138f
-2026/09/01 21:07:26 ⏳ Waiting for container id 7d28ebe9138f image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
-2026/09/01 21:07:27 Shell not found in container
-2026/09/01 21:07:27 🔔 Container is ready: 7d28ebe9138f
-2026/09/01 21:07:27 ✅ Container created: 443d2fc2c794
-2026/09/01 21:07:27 🐳 Starting container: 443d2fc2c794
-2026/09/01 21:07:27 ✅ Container started: 443d2fc2c794
-2026/09/01 21:07:27 ⏳ Waiting for container id 443d2fc2c794 image: postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
-2026/09/01 21:07:29 🔔 Container is ready: 443d2fc2c794
+  Test SessionID: d61fe50287690cf7a869a66c3bf4fb8feab8b68af485ab4fdcbba4fec163e1d7
+  Test ProcessID: 0f12a9a8-b2e5-4149-9b0c-6f40c4716505
+2026/09/01 22:13:19 🐳 Creating container for image postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280
+2026/09/01 22:13:30 🐳 Creating container for image testcontainers/ryuk:0.14.0
+2026/09/01 22:13:31 ✅ Container created: af885255e621
+2026/09/01 22:13:31 🐳 Starting container: af885255e621
+2026/09/01 22:13:31 ✅ Container started: af885255e621
+2026/09/01 22:13:31 ⏳ Waiting for container id af885255e621 image: testcontainers/ryuk:0.14.0. Waiting for: all of: [log message "Started", port 8080/tcp to be listening]
+2026/09/01 22:13:31 Shell not found in container
+2026/09/01 22:13:31 🔔 Container is ready: af885255e621
+2026/09/01 22:13:31 ✅ Container created: 7470c6f8ac7c
+2026/09/01 22:13:31 🐳 Starting container: 7470c6f8ac7c
+2026/09/01 22:13:32 ✅ Container started: 7470c6f8ac7c
+2026/09/01 22:13:32 ⏳ Waiting for container id 7470c6f8ac7c image: postgres@sha256:4ef4dbc939d61acea57712655ddb4b4ab27419c913f94cca0cd57cb3ea3c2280. Waiting for: all of: [log message "database system is ready to accept connections" (occurrence: 2), port 5432/tcp to be listening]
+2026/09/01 22:13:34 🔔 Container is ready: 7470c6f8ac7c
 === RUN   TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/4p
---- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture (14.92s)
-    --- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/2p (14.68s)
-    --- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/4p (0.24s)
+--- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture (15.86s)
+    --- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/2p (15.63s)
+    --- PASS: TestIntegrationFoldEqualsIncrementalMatchesGoldenFixture/4p (0.23s)
 === RUN   TestIntegrationFoldDivergesWhenOrderCorrupted
---- PASS: TestIntegrationFoldDivergesWhenOrderCorrupted (0.08s)
+--- PASS: TestIntegrationFoldDivergesWhenOrderCorrupted (0.07s)
 PASS
-ok  	github.com/garnizeh/cinzal/cmd/replay	15.067s
+ok  	github.com/garnizeh/cinzal/cmd/replay	15.995s
